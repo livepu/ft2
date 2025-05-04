@@ -148,6 +148,67 @@ class AccountManager:
             raise ValueError(f"Invalid price {price} for {symbol} at {action_time}")
         return float(price)
 
+    def order_percent(
+        self, 
+        symbol: str, 
+        percent: float, 
+        price: float = None, 
+        order_time: datetime = None
+    ) -> str:
+        """
+        按总资产指定比例下单
+        :param symbol: 标的代码
+        :param percent: 下单比例，0-1 之间，正数买入，负数卖出
+        :param price: 指定价格（可选）
+        :param order_time: 交易时间（可选，默认使用current_time）
+        :return: 模拟订单ID
+        """
+        order_time = self._validate_time(order_time or self.current_time)
+        
+        if not -1 <= percent <= 1:
+            raise ValueError("Percent must be between -1 and 1")
+            
+        if percent == 0:
+            raise ValueError("Order percent cannot be zero")
+
+        # 获取当前总资产，使用 get_account 方法避免额外记录快照
+        account_info = self.get_account(order_time)
+        total_value = account_info['total_value']
+
+        # 计算下单金额
+        order_amount = total_value * abs(percent)
+
+        if percent > 0:  # 买入
+            # 考虑手续费，计算可购买的最大金额
+            available_amount = self.cash
+            if order_amount > available_amount:
+                # 若下单金额超过可用金额，使用全部可用金额下单
+                order_amount = available_amount
+
+        # 获取当前价格
+        price = price or self._get_market_price(symbol, order_time)
+        if price <= 0:
+            raise ValueError(f"Invalid price {price} for {symbol}")
+
+        # 计算下单数量
+        if percent > 0:  # 买入
+            # 考虑手续费，计算可购买的最大数量
+            commission = max(
+                round(order_amount * self.fee_config['commission_rate'], 2),
+                self.fee_config['min_commission']
+            )
+            available_amount = order_amount - commission
+            volume = int(available_amount / price)
+        else:  # 卖出
+            current_pos = self.positions.get(symbol, {'volume': 0})
+            volume = -int(current_pos['volume'] * abs(percent))
+
+        if volume == 0:
+            raise ValueError("Calculated order volume is zero")
+
+        # 调用按数量下单方法
+        return self.order_volume(symbol, volume, price, order_time)
+
     def order_volume(
         self, 
         symbol: str, 
@@ -203,12 +264,16 @@ class AccountManager:
         if volume > 0:
             total_cost = round(volume * price + total_fee, 2)
             if self.cash < total_cost:
+                error_msg = f"订单 {order_id} 买入 {symbol} 失败，资金不足。需要 {total_cost}，可用资金 {self.cash}"
+                print(error_msg)
                 return 0  # 资金不足
             self.cash = round(self.cash - total_cost, 2)
         # 卖出逻辑
         else:
             current_pos = self.positions.get(symbol, {'volume': 0})
             if current_pos['volume'] < abs(volume):
+                error_msg = f"订单 {order_id} 卖出 {symbol} 失败，持仓不足。需要 {abs(volume)}，当前持仓 {current_pos['volume']}"
+                print(error_msg)
                 return 0  # 持仓不足
             self.cash = round(self.cash + abs(volume) * price - total_fee, 2)
         
