@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Callable, Union, TypeVar, Any
 import pandas as pd
 import pytz
-from storage import context
+from .storage import context
 # 添加插件类型定义
 T = TypeVar('T')
 class Plugin:

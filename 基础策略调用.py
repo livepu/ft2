@@ -1,6 +1,16 @@
-from storage import context
-from account import account
-from engine import Engine
+import sys
+import os
+
+# 获取 ft2 包所在的目录路径。改造ft2包后，内部调用需要绝对路径
+ft2_parent_package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 将该目录添加到 sys.path 中
+sys.path.insert(0, ft2_parent_package_dir)
+'''
+from ft2.storage import context
+from ft2.account import account
+from ft2.engine import Engine
+'''
+from ft2 import context, account, Engine
 import pytz
 from gm.api import *
 set_serv_addr('192.168.88.100:7001') #设置本地服务器测试ok

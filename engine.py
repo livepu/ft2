@@ -1,6 +1,6 @@
 #这个是回测引擎，尽量精简导入的模块
-from storage import context  # 从data模块导入全局context
-from account import account #导入账户
+from .storage import context  # 从data模块导入全局context
+from .account import account #导入账户
 import pandas as pd
 
 #回测的数据驱动引擎
