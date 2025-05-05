@@ -1,3 +1,4 @@
+#这个类是带东八时区的，逐一其他数据要时区一致
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional, Callable, Union, TypeVar, Any
@@ -26,7 +27,7 @@ class PositionSnapshot:
 class AccountSnapshot:
     """账户快照（与掘金account()返回值兼容）"""
     cash: float              # 可用资金
-    total_value: float       # 总资产价值
+    total_assets: float       # 总资产价值
     created_at: datetime     # 快照时间（严格使用datetime）
     positions: Dict[str, PositionSnapshot] = field(default_factory=dict)
     
@@ -106,7 +107,7 @@ class AccountManager:
         created_at = self._validate_time(snapshot_time or self.current_time)
         
         pos_snapshots = {}
-        total_value = self.cash
+        total_assets = self.cash
         
         for symbol, pos in self.positions.items():
             price = self._get_market_price(symbol, snapshot_time)
@@ -118,12 +119,12 @@ class AccountManager:
                 created_at=created_at
             )
             pos_snapshots[symbol] = pos_snap
-            total_value += pos['volume'] * price
+            total_assets += pos['volume'] * price
 
-        total_value = round(total_value, 2)
+        total_assets = round(total_assets, 2)
         snapshot = AccountSnapshot(
             cash=self.cash,
-            total_value=total_value,
+            total_assets=total_assets,
             created_at=created_at,
             positions=pos_snapshots
         )
@@ -173,10 +174,10 @@ class AccountManager:
 
         # 获取当前总资产，使用 get_account 方法避免额外记录快照
         account_info = self.get_account(order_time)
-        total_value = account_info['total_value']
+        total_assets = account_info['total_assets']
 
         # 计算下单金额
-        order_amount = total_value * abs(percent)
+        order_amount = total_assets * abs(percent)
 
         if percent > 0:  # 买入
             # 考虑手续费，计算可购买的最大金额
@@ -316,7 +317,7 @@ class AccountManager:
         if not self.snapshots:
             return {
                 'cash': self.cash,
-                'total_value': self.cash,
+                'total_assets': self.cash,
                 'created_at': query_time
             }
             
@@ -329,25 +330,34 @@ class AccountManager:
         if snapshot is None:
             return {
                 'cash': self.cash,
-                'total_value': self.cash,
+                'total_assets': self.cash,
                 'created_at': query_time
             }
             
         return {
             'cash': snapshot.cash,
-            'total_value': snapshot.total_value,
+            'total_assets': snapshot.total_assets,
             'created_at': snapshot.created_at
         }
 
-    def get_positions(self, symbol: str = None, query_time: datetime = None) -> Dict:
+    def get_positions(self, symbol: str = None) -> Dict:
         """获取持仓"""
-        query_time = self._validate_time(query_time or self.current_time)
-        
+        if not self.snapshots:
+            # 若没有快照，返回当前持仓
+            positions = self.positions.copy()
+        else:
+            # 获取最后一次快照
+            last_snapshot = self.snapshots[-1]
+            # 从最后一次快照中提取持仓信息
+            positions = {
+                sym: {'volume': pos.volume, 'cost_price': pos.cost_price}
+                for sym, pos in last_snapshot.positions.items()
+            }
+
         if symbol:
-            pos = self.positions.get(symbol, {'volume': 0, 'cost_price': 0})
+            pos = positions.get(symbol, {'volume': 0, 'cost_price': 0})
             pos['cost_price'] = round(pos['cost_price'], 3)
             return pos
-        positions = self.positions.copy()
         for pos in positions.values():
             pos['cost_price'] = round(pos['cost_price'], 3)
         return positions
