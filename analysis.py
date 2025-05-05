@@ -53,14 +53,17 @@ def calculate_max_drawdown(daily_total_assets):
 
     return max_drawdown, start_date, end_date
 
-def get_start_date(daily_total_assets, time_interval):
+def get_start_end_date(daily_total_assets, time_interval):
     """
-    计算不同时间间隔对应的起始日期。
+    计算不同时间间隔对应的起始日期和结束日期。
 
     :param daily_total_assets: 一个字典，键为日期（datetime.date 对象），值为该日的总资产
     :param time_interval: 时间间隔，可选值为 'all', '1m', '3m', '6m', '1y', '2y', '3y', '5y'
-    :return: 起始日期，若时间跨度不满足要求则返回 None
+    :return: 起始日期和结束日期元组，若时间跨度不满足要求则返回 (None, None)
     """
+    if not daily_total_assets:
+        return None, None
+    
     dates = sorted(daily_total_assets.keys())
     end_date = dates[-1]
 
@@ -81,16 +84,16 @@ def get_start_date(daily_total_assets, time_interval):
         start_date = end_date - interval_mapping[time_interval]
         # 检查时间跨度是否满足要求
         if start_date < dates[0]:
-            return None
-        # 找到最接近 start_date 且大于等于它的日期
+            return None, None
+        # 找到小于start_date的最大值 。区间前一交易日作为基准
         closest_start_date = max((d for d in dates if d < start_date), default=None)
         if closest_start_date is None:
-            return None
+            return None, None
         start_date = closest_start_date
     else:
-        return None
+        return None, None
 
-    return start_date
+    return start_date, end_date
 
 def calculate_return_rate(daily_total_assets, time_interval=None):
     """
@@ -100,15 +103,9 @@ def calculate_return_rate(daily_total_assets, time_interval=None):
     :param time_interval: 时间间隔，可选值为 'all', '1m', '3m', '6m', '1y', '2y', '3y', '5y'，默认为 'all'
     :return: 对应时间间隔的收益率（小数形式），若时间跨度不满足要求则返回 None
     """
-    if not daily_total_assets:
+    start_date, end_date = get_start_end_date(daily_total_assets, time_interval)
+    if start_date is None or end_date is None:
         return None
-
-    start_date = get_start_date(daily_total_assets, time_interval)
-    if start_date is None:
-        return None
-
-    dates = sorted(daily_total_assets.keys())
-    end_date = dates[-1]
 
 
     start_value = daily_total_assets[start_date]
@@ -129,12 +126,9 @@ def calculate_annualized_return(daily_total_assets, time_interval=None):
     if interval_return is None:
         return None
 
-    start_date = get_start_date(daily_total_assets, time_interval)
-    if start_date is None:
+    start_date, end_date = get_start_end_date(daily_total_assets, time_interval)
+    if start_date is None or end_date is None:
         return None
-
-    dates = sorted(daily_total_assets.keys())
-    end_date = dates[-1]
 
     # 计算区间天数
     days = (end_date - start_date).days
@@ -169,15 +163,9 @@ def calculate_volatility(daily_total_assets, time_interval=None):
     :param time_interval: 时间间隔，可选值为 'all', '1m', '3m', '6m', '1y', '2y', '3y', '5y'，默认为 'all'
     :return: 对应时间间隔的波动率（小数形式），若时间跨度不满足要求则返回 None
     """
-    if not daily_total_assets:
+    start_date, end_date = get_start_end_date(daily_total_assets, time_interval)
+    if start_date is None or end_date is None:
         return None
-
-    start_date = get_start_date(daily_total_assets, time_interval)
-    if start_date is None:
-        return None
-
-    dates = sorted(daily_total_assets.keys())
-    end_date = dates[-1]
 
     # 筛选对应时间区间的资产数据
     interval_assets = {date: value for date, value in daily_total_assets.items() if date >= start_date}
@@ -193,7 +181,6 @@ def calculate_volatility(daily_total_assets, time_interval=None):
     # 计算标准差，即波动率
     volatility = math.sqrt(variance)
     return volatility
-
 
 
 def calculate_sharpe_ratio(daily_total_assets, risk_free_rate=0.02, time_interval=None):
