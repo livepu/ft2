@@ -107,6 +107,7 @@ def generate_backtest_report(net_value_data, transaction_data, metrics,\
         "volume": "数量",
         "side": "方向",
         "fee": "手续费",
+        "order_id":"成交单号",
     }
 
     def translate_keys(data):
@@ -137,6 +138,7 @@ def generate_backtest_report(net_value_data, transaction_data, metrics,\
         filename = f"{report_name}_{current_time}.html"
     else:
         filename = f"backtest_report_{current_time}.html"
+        report_name = "回测报告"
 
     output_path = os.path.join(output_dir, filename)
 
@@ -144,7 +146,8 @@ def generate_backtest_report(net_value_data, transaction_data, metrics,\
     html_content = template.render(
         net_value_data=net_value_data_json,
         transaction_data=transaction_data_json,
-        metrics=metrics
+        metrics=metrics,
+        title=f"{report_name}_{current_time}", #修订标题
     )
 
     with open(output_path, 'w', encoding='utf-8') as f:

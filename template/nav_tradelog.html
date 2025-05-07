@@ -3,11 +3,16 @@
 
 <head>
     <meta charset="utf-8">
-    <title>增强容错回测报告</title>
-    <!-- 使用 jsDelivr 源引入 layui 样式 -->
-    <link href="https://cdn.jsdelivr.net/npm/layui@2.9.8/dist/css/layui.min.css" rel="stylesheet">
-    <!-- 使用国内镜像源引入 echarts -->
-    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <title>{{title}}</title>
+    <!-- 引入 layui.css -->
+    <link href="//unpkg.com/layui@2.11.1/dist/css/layui.css" rel="stylesheet">
+    <!-- 引入 layui.js -->
+    <script src="//unpkg.com/layui@2.11.1/dist/layui.js"></script>
+    <!-- 使用 UNPKG 源引入 echarts -->
+    <script src="https://unpkg.com/echarts@5.4.3/dist/echarts.min.js"></script>
+
+
+    
     <style>
         body {
             font-family: 'Microsoft YaHei', sans-serif;
@@ -92,8 +97,6 @@
         </div>
     </div>
 
-    <!-- 使用 jsDelivr 源引入 layui 脚本 -->
-    <script src="https://cdn.jsdelivr.net/npm/layui@2.9.8/dist/layui.min.js"></script>
 
     <!-- 安全数据注入 -->
     <script>

@@ -206,3 +206,178 @@ def calculate_sharpe_ratio(daily_total_assets, risk_free_rate=0.02, time_interva
     sharpe_ratio = (annualized_return - risk_free_rate) / volatility
     return sharpe_ratio
 
+class AccountAnalyzer:
+    def __init__(self, account):
+        """
+        :param account: Account 实例，应包含：
+                        - snapshots: AccountSnapshot 列表
+                        - trades: Trade 记录列表（需有 symbol, profit, open_time, close_time）
+        """
+        self.account = account
+        # 初始化日度资产
+        self.daily_total_assets = self._compute_daily_total_assets(account.snapshots)
+        # 初始化交易数据
+        self.trades = account.trades
+
+    def _compute_daily_total_assets(self, snapshots):
+        daily_snapshots = defaultdict(list)
+        for snapshot in snapshots:
+            date = snapshot.created_at.date()
+            daily_snapshots[date].append(snapshot)
+
+        return {
+            date: snaps[-1].total_assets
+            for date, snaps in daily_snapshots.items()
+        }
+
+    # ========== 资产相关方法 ==========
+    def get_daily_total_assets(self):
+        return self.daily_total_assets
+
+    def calculate_max_drawdown(self):
+        if not self.daily_total_assets:
+            return 0, None, None
+
+        dates = sorted(self.daily_total_assets.keys())
+        max_drawdown = 0
+        peak_value = self.daily_total_assets[dates[0]]
+        start_date = end_date = peak_date = dates[0]
+
+        for date in dates:
+            current_value = self.daily_total_assets[date]
+            if current_value > peak_value:
+                peak_value = current_value
+                peak_date = date
+            drawdown = (peak_value - current_value) / peak_value
+            if drawdown > max_drawdown:
+                max_drawdown = drawdown
+                start_date = peak_date
+                end_date = date
+
+        return max_drawdown, start_date, end_date
+
+    def calculate_return_rate(self, time_interval=None):
+        start_date, end_date = self._get_start_end_date(time_interval)
+        if not start_date or not end_date:
+            return None
+
+        start_value = self.daily_total_assets[start_date]
+        end_value = self.daily_total_assets[end_date]
+        return (end_value - start_value) / start_value
+
+    def calculate_annualized_return(self, time_interval=None):
+        interval_return = self.calculate_return_rate(time_interval)
+        if interval_return is None:
+            return None
+
+        start_date, end_date = self._get_start_end_date(time_interval)
+        days = (end_date - start_date).days
+        if days == 0:
+            return 0
+
+        return ((1 + interval_return) ** (365 / days)) - 1
+
+    def calculate_volatility(self, time_interval=None):
+        start_date, end_date = self._get_start_end_date(time_interval)
+        if not start_date or not end_date:
+            return None
+
+        interval_assets = {d: v for d, v in self.daily_total_assets.items() if start_date <= d <= end_date}
+        daily_returns = self._calculate_daily_returns(interval_assets)
+
+        if not daily_returns:
+            return None
+
+        mean_return = sum(daily_returns) / len(daily_returns)
+        variance = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns)
+        volatility = math.sqrt(variance)
+        return volatility
+
+    def calculate_sharpe_ratio(self, risk_free_rate=0.02, time_interval=None):
+        annualized_return = self.calculate_annualized_return(time_interval)
+        volatility = self.calculate_volatility(time_interval)
+
+        if annualized_return is None or volatility is None:
+            return None
+
+        return (annualized_return - risk_free_rate) / volatility
+
+    def _calculate_daily_returns(self, daily_assets):
+        dates = sorted(daily_assets.keys())
+        returns = []
+        for i in range(1, len(dates)):
+            prev = daily_assets[dates[i - 1]]
+            curr = daily_assets[dates[i]]
+            returns.append((curr - prev) / prev)
+        return returns
+
+    def _get_start_end_date(self, time_interval):
+        if not self.daily_total_assets:
+            return None, None
+
+        dates = sorted(self.daily_total_assets.keys())
+        end_date = dates[-1]
+
+        interval_mapping = {
+            '1m': relativedelta(months=1),
+            '3m': relativedelta(months=3),
+            '6m': relativedelta(months=6),
+            '1y': relativedelta(years=1),
+            '2y': relativedelta(years=2),
+            '3y': relativedelta(years=3),
+            '5y': relativedelta(years=5)
+        }
+
+        if time_interval is None or time_interval == 'all':
+            start_date = dates[0]
+        elif time_interval in interval_mapping:
+            start_date = end_date - interval_mapping[time_interval]
+            if start_date < dates[0]:
+                return None, None
+            closest_start_date = max((d for d in dates if d < start_date), default=None)
+            if closest_start_date is None:
+                return None, None
+            start_date = closest_start_date
+        else:
+            return None, None
+
+        return start_date, end_date
+
+    # ========== 交易相关方法 ==========
+    def get_largest_profit_trade(self):
+        """获取最大盈利交易"""
+        if not self.trades:
+            return None
+        return max(self.trades, key=lambda t: t.profit)
+
+    def get_largest_loss_trade(self):
+        """获取最大亏损交易"""
+        if not self.trades:
+            return None
+        return min(self.trades, key=lambda t: t.profit)
+
+    def calculate_average_holding_period(self):
+        """计算平均持仓周期（天数）"""
+        if not self.trades:
+            return None
+        total_days = sum((t.close_time - t.open_time).days for t in self.trades)
+        return total_days / len(self.trades)
+
+    def calculate_win_rate(self):
+        """胜率：盈利交易占比"""
+        if not self.trades:
+            return None
+        wins = sum(1 for t in self.trades if t.profit > 0)
+        return wins / len(self.trades)
+
+    def calculate_avg_profit_loss_ratio(self):
+        """平均盈亏比"""
+        profits = [t.profit for t in self.trades if t.profit > 0]
+        losses = [-t.profit for t in self.trades if t.profit < 0]
+
+        if not profits or not losses:
+            return None
+
+        avg_profit = sum(profits) / len(profits)
+        avg_loss = sum(losses) / len(losses)
+        return avg_profit / avg_loss
