@@ -2,7 +2,7 @@
 from collections import defaultdict
 from dateutil.relativedelta import relativedelta
 import math
-
+from datetime import datetime
 import json
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
@@ -173,9 +173,7 @@ class AccountAnalyzer:
             side = trade.side
             created_at = trade.created_at
             fee = trade.fee
-            print(fee)
             if side == 'buy':
-                print(fee)
                 # 买入操作，更新持仓信息，成本加上手续费
                 positions[symbol]['volume'] += abs_volume  # 使用绝对值更新持仓量
                 # 买入成本加上手续费
@@ -417,8 +415,11 @@ class AccountAnalyzer:
         caller_file = frame.f_code.co_filename
         caller_dir = Path(caller_file).resolve().parent
 
-        # 计算输出文件的路径，基于调用文件的目录
-        output_path = caller_dir / output_dir / f"{report_name}.html"
+        # 获取当前日期和时间（精确到分钟）
+        current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
+
+        # 计算输出文件的路径，基于调用文件的目录，添加日期和时间到文件名
+        output_path = caller_dir / output_dir / f"{report_name}_{current_datetime}.html"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(output_path, "w", encoding="utf-8") as f:
