@@ -205,3 +205,4 @@ def calculate_sharpe_ratio(daily_total_assets, risk_free_rate=0.02, time_interva
     # 计算夏普比率
     sharpe_ratio = (annualized_return - risk_free_rate) / volatility
     return sharpe_ratio
+

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>增强容错回测报告</title>
+    <!-- 使用 jsDelivr 源引入 layui 样式 -->
+    <link href="https://cdn.jsdelivr.net/npm/layui@2.9.8/dist/css/layui.min.css" rel="stylesheet">
+    <!-- 使用国内镜像源引入 echarts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f2f5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+
+        .metrics-container {
+            background-color: #fff;
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-container {
+            background-color: #fff;
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        .table-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        .error-container {
+            background: #fff8f7;
+            border: 1px solid #ffccc7;
+            padding: 15px;
+            margin: 20px;
+            border-radius: 4px;
+            color: #ff4d4f;
+        }
+
+        h3 {
+            color: #333;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- 关键指标 -->
+        <div class="metrics-container">
+            <h3>关键指标</h3>
+            <table class="layui-table">
+                <tbody>
+                    {% for metric in metrics %}
+                    <tr>
+                        <td>{{ metric.name }}</td>
+                        <td>{{ metric.value }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 图表容器 -->
+        <div class="chart-container">
+            <h3>净值曲线</h3>
+            <div id="chartContainer" style="width:100%;height:600px"></div>
+        </div>
+
+        <!-- 交易表格容器 -->
+        <div class="table-container">
+            <h3>交易记录</h3>
+            <table id="transactionTable" lay-filter="transactionTable"></table>
+        </div>
+    </div>
+
+    <!-- 使用 jsDelivr 源引入 layui 脚本 -->
+    <script src="https://cdn.jsdelivr.net/npm/layui@2.9.8/dist/layui.min.js"></script>
+
+    <!-- 安全数据注入 -->
+    <script>
+        // 净值数据（带多层保护）
+        let netValueData = [];
+        try {
+            // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
+            netValueData = {{ net_value_data | safe }};
+            if (!Array.isArray(netValueData)) {
+                console.warn('净值数据格式异常，自动重置为空数组');
+                netValueData = [];
+            }
+        } catch (e) {
+            console.error('净值数据解析失败:', e);
+            netValueData = [];
+        }
+
+        // 交易数据（带类型校验）
+        let transactionData = [];
+        try {
+            // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
+            transactionData = {{ transaction_data | safe }};
+            if (!Array.isArray(transactionData)) {
+                throw new Error('交易数据非数组类型');
+            }
+        } catch (e) {
+            document.write(`<div class="error-container">交易数据加载失败：${e.message}</div>`);
+            transactionData = [];
+        }
+    </script>
+
+    <script>
+        // 图表初始化（带完整防御）
+        (function initChart() {
+            const container = document.getElementById('chartContainer');
+
+            try {
+                // 数据有效性验证
+                if (!netValueData ||
+                    !Array.isArray(netValueData) ||
+                    netValueData.length === 0
+                ) {
+                    throw new Error('净值数据不完整或格式错误');
+                }
+
+                const chart = echarts.init(container);
+                const dates = netValueData.map(item => item.date);
+                const series = [];
+                const legendData = [];
+
+                // 获取除 date 外的所有字段名
+                const keys = Object.keys(netValueData[0]).filter(key => key !== 'date');
+
+                // 初始化最大最小值
+                let minValue = Infinity;
+                let maxValue = -Infinity;
+
+                keys.forEach(key => {
+                    // 为每个字段添加系列
+                    const data = netValueData.map(item => item[key]);
+                    series.push({
+                        name: key,
+                        type: 'line',
+                        data: data,
+                        smooth: true
+                    });
+                    legendData.push(key);
+
+                    // 更新最大最小值
+                    const seriesMin = Math.min(...data);
+                    const seriesMax = Math.max(...data);
+                    minValue = Math.min(minValue, seriesMin);
+                    maxValue = Math.max(maxValue, seriesMax);
+                });
+
+                // 为最大最小值添加一定的缓冲空间
+                const buffer = (maxValue - minValue) * 0.1;
+                minValue = minValue - buffer;
+                maxValue = maxValue + buffer;
+
+                const option = {
+                    title: {
+                        text: '净值曲线'
+                    },
+                    tooltip: {
+                        trigger: 'axis'
+                    },
+                    legend: {
+                        data: legendData
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: dates
+                    },
+                    yAxis: {
+                        type: 'value',
+                        // 动态设置坐标轴最大和最小值
+                        min: minValue,
+                        max: maxValue
+                    },
+                    series: series
+                };
+
+                chart.setOption(option);
+
+            } catch (e) {
+                container.innerHTML = `
+                <div class="error-container">
+                    <h3>图表渲染失败</h3>
+                    <p>错误原因：${e.message}</p>
+                    <p>建议检查数据格式是否符合要求</p>
+                </div>
+            `;
+            }
+        })();
+
+        // 表格初始化（带安全隔离）
+        layui.use(['table', 'layer'], function () {
+            const table = layui.table;
+            const container = document.getElementById('transactionTable');
+
+            try {
+                // 数据有效性验证
+                if (!transactionData ||
+                    !Array.isArray(transactionData) ||
+                    transactionData.length === 0
+                ) {
+                    container.innerHTML = '<div class="layui-none">暂无交易数据</div>';
+                    return;
+                }
+
+                // 动态列检测
+                if (!transactionData[0] || typeof transactionData[0] !== 'object') {
+                    throw new Error('交易记录数据结构异常');
+                }
+
+                const columns = [Object.keys(transactionData[0]).map(key => ({
+                    field: key,
+                    title: key.toUpperCase(),
+                    sort: true
+                }))];
+
+                table.render({
+                    elem: '#transactionTable',
+                    data: transactionData,
+                    cols: columns,
+                    page: true
+                });
+
+            } catch (e) {
+                container.innerHTML = `
+                <div class="error-container">
+                    <h3>表格初始化失败</h3>
+                    <p>${e.message}</p>
+                </div>
+            `;
+            }
+        });
+    </script>
+</body>
+
+</html>
