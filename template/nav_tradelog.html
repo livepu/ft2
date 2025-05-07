@@ -5,9 +5,9 @@
     <meta charset="utf-8">
     <title>{{title}}</title>
     <!-- 引入 layui.css -->
-    <link href="//unpkg.com/layui@2.11.1/dist/css/layui.css" rel="stylesheet">
+    <link href="https://unpkg.com/layui@2.11.1/dist/css/layui.css" rel="stylesheet">
     <!-- 引入 layui.js -->
-    <script src="//unpkg.com/layui@2.11.1/dist/layui.js"></script>
+    <script src="https://unpkg.com/layui@2.11.1/dist/layui.js"></script>
     <!-- 使用 UNPKG 源引入 echarts -->
     <script src="https://unpkg.com/echarts@5.4.3/dist/echarts.min.js"></script>
 
@@ -69,8 +69,10 @@
 
 <body>
     <div class="container">
+        <h1>{{ report_name }}</h1>
         <!-- 关键指标 -->
         <div class="metrics-container">
+
             <h3>关键指标</h3>
             <table class="layui-table">
                 <tbody>
@@ -95,6 +97,20 @@
             <h3>交易记录</h3>
             <table id="transactionTable" lay-filter="transactionTable"></table>
         </div>
+
+
+        <!-- 最大盈利交易 -->
+        <div class="table-container">
+            <h3>最大盈利的 5 笔交易</h3>
+            <div id="profitTable"></div>
+        </div>
+
+        <!-- 最大亏损交易 -->
+        <div class="table-container">
+            <h3>最大亏损的 5 笔交易</h3>
+            <div id="lossTable"></div>
+        </div>
+
     </div>
 
 
@@ -125,6 +141,30 @@
         } catch (e) {
             document.write(`<div class="error-container">交易数据加载失败：${e.message}</div>`);
             transactionData = [];
+        }
+
+        // 最大盈利交易数据（带类型校验）
+        let largestProfitTrades = [];
+        try {
+            largestProfitTrades = {{ largest_profit_trades | safe }};
+            if (!Array.isArray(largestProfitTrades)) {
+                throw new Error('最大盈利交易数据非数组类型');
+            }
+        } catch (e) {
+            document.write(`<div class="error-container">最大盈利交易数据加载失败：${e.message}</div>`);
+            largestProfitTrades = [];
+        }
+
+        // 最大亏损交易数据（带类型校验）
+        let largestLossTrades = [];
+        try {
+            largestLossTrades = {{ largest_loss_trades | safe }};
+            if (!Array.isArray(largestLossTrades)) {
+                throw new Error('最大亏损交易数据非数组类型');
+            }
+        } catch (e) {
+            document.write(`<div class="error-container">最大亏损交易数据加载失败：${e.message}</div>`);
+            largestLossTrades = [];
         }
     </script>
 
@@ -229,6 +269,42 @@
                     data: transactionData,
                     cols: columns,
                     page: true
+                });
+
+                // 最大盈利交易表格渲染
+                table.render({
+                    elem: '#profitTable',
+                    data: largestProfitTrades,
+                    cols: [[
+                        {field: 'symbol', width: 100, title: '标的'},
+                        {field: 'profit', width: 100, title: '盈利'},
+                        {field: 'open_time', width: 150, title: '开仓时间'},
+                        {field: 'close_time', width: 150, title: '平仓时间'},
+                        {field: 'volume', width: 100, title: '数量'},
+                        {field: 'price', width: 100, title: '价格'},
+                        {field: 'side', width: 100, title: '方向'},
+                        {field: 'fee', width: 100, title: '手续费'}
+                    ]],
+                    page: true,
+                    limit: 5
+                });
+
+                // 最大亏损交易表格渲染
+                table.render({
+                    elem: '#lossTable',
+                    data: largestLossTrades,
+                    cols: [[
+                        {field: 'symbol', width: 100, title: '标的'},
+                        {field: 'loss', width: 100, title: '亏损'},
+                        {field: 'open_time', width: 150, title: '开仓时间'},
+                        {field: 'close_time', width: 150, title: '平仓时间'},
+                        {field: 'volume', width: 100, title: '数量'},
+                        {field: 'price', width: 100, title: '价格'},
+                        {field: 'side', width: 100, title: '方向'},
+                        {field: 'fee', width: 100, title: '手续费'}
+                    ]],
+                    page: true,
+                    limit: 5
                 });
 
             } catch (e) {
