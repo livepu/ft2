@@ -162,48 +162,63 @@ class AccountAnalyzer:
         :param trade_log: 原始交易记录列表
         :return: 包含盈亏信息的交易记录列表
         """
-        positions = defaultdict(lambda: {'volume': 0, 'cost': 0, 'open_time': None})
+        positions = defaultdict(lambda: {'volume': 0, 'cost': 0, 'open_time': None, 'open_price': 0, 'open_fee': 0})
         processed_trades = []
 
         for trade in trade_log:
             symbol = trade.symbol
             volume = trade.volume
+            abs_volume = abs(volume)  # 新增：计算 volume 的绝对值
             price = trade.price
             side = trade.side
             created_at = trade.created_at
             fee = trade.fee
-
+            print(fee)
             if side == 'buy':
+                print(fee)
                 # 买入操作，更新持仓信息，成本加上手续费
-                positions[symbol]['volume'] += volume
+                positions[symbol]['volume'] += abs_volume  # 使用绝对值更新持仓量
                 # 买入成本加上手续费
-                positions[symbol]['cost'] += volume * price + fee
+                positions[symbol]['cost'] += abs_volume * price + fee
                 if positions[symbol]['open_time'] is None:
                     positions[symbol]['open_time'] = created_at
+                    positions[symbol]['open_price'] = price
+                    positions[symbol]['open_fee'] += fee  # 累加开仓手续费，确保为正数
             elif side == 'sell':
                 # 卖出操作，计算盈亏
                 if positions[symbol]['volume'] == 0:
                     continue  # 无持仓，跳过
 
-                sell_amount = volume * price
+                sell_amount = abs_volume * price  # 使用绝对值计算卖出金额
                 # 按比例计算卖出部分的成本
-                cost = (volume / positions[symbol]['volume']) * positions[symbol]['cost']
+                cost = (abs_volume / positions[symbol]['volume']) * positions[symbol]['cost']
                 profit = sell_amount - cost - fee
+
+                # 按比例计算卖出部分对应的开仓手续费，确保为正数
+                open_fee_portion = (abs_volume / positions[symbol]['volume']) * positions[symbol]['open_fee']
 
                 processed_trades.append({
                     'symbol': symbol,
                     'profit': profit,
                     'open_time': positions[symbol]['open_time'],
                     'close_time': created_at,
+                    'open_price': positions[symbol]['open_price'],
+                    'open_fee': open_fee_portion,
+                    'close_fee': fee,
+                    'close_price': price,
+                    'volume': volume,
                     'original_trade': trade
                 })
 
                 # 更新持仓信息
-                positions[symbol]['volume'] -= volume
+                positions[symbol]['volume'] -= abs_volume  # 使用绝对值减少持仓量
                 positions[symbol]['cost'] -= cost
+                positions[symbol]['open_fee'] -= open_fee_portion
 
                 if positions[symbol]['volume'] == 0:
                     positions[symbol]['open_time'] = None
+                    positions[symbol]['open_price'] = 0
+                    positions[symbol]['open_fee'] = 0
 
         return processed_trades
     
@@ -311,14 +326,14 @@ class AccountAnalyzer:
         original_trade = trade['original_trade']
         return {
             'symbol': original_trade.symbol,
-            'profit': f"{trade['profit']:.2f}",
-            'loss': f"{abs(trade['profit']):.2f}",
+            'profit': f"{trade['profit']:.2f}",  # 盈亏，不转换绝对值
             'open_time': trade['open_time'].strftime('%Y-%m-%d'),
+            'open_price': f"{trade['open_price']:.2f}",  # 开仓价格
+            'open_fee': f"{trade['open_fee']:.2f}",  # 开仓费用
             'close_time': trade['close_time'].strftime('%Y-%m-%d'),
-            'volume': original_trade.volume,
-            'price': original_trade.price,
-            'side': '买入' if original_trade.side == 'buy' else '卖出',
-            'fee': original_trade.fee
+            'close_price': f"{trade['close_price']:.2f}",  # 平仓价格
+            'close_fee': f"{trade['close_fee']:.2f}",  # 平仓费用
+            'volume': f"{abs(trade['volume']):d}"  # 将 volume 转换为绝对值并格式化输出
         }
     # ========== 输出结果 相关方法 ==========
 
@@ -373,6 +388,7 @@ class AccountAnalyzer:
         formatted_loss_trades = [self.format_trade(trade) for trade in largest_loss_trades]
         net_value_data_zh=self.translate_keys(net_value_data)
         formatted_transaction_log_zh=self.translate_keys(formatted_transaction_log)
+
         # 使用 json.dumps 处理数据，自动换行
         net_value_data_json = json.dumps(net_value_data_zh, indent=4, ensure_ascii=False)
         formatted_transaction_log_json = json.dumps(formatted_transaction_log_zh, indent=4, ensure_ascii=False)

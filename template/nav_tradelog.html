@@ -256,7 +256,12 @@
                 };
 
                 chart.setOption(option);
-
+                // 监听窗口大小变化事件
+                window.addEventListener('resize', function () {
+                    if (chart) {
+                        chart.resize();
+                    }
+                });
             } catch (e) {
                 container.innerHTML = `
         <div class="error-container">
@@ -299,20 +304,27 @@
                     page: true
                 });
 
+                // 统一列配置
+                const tradeCols = [
+                    [
+                        {field: 'symbol', width: 100, title: '标的'},
+                        {field: 'profit', width: 100, title: '盈利'},
+                        {field: 'open_time', width: 150, title: '开仓时间'},
+                        {field:'open_price', width: 100, title: '开仓价格'},
+                        {field:'open_fee', width: 100, title: '开仓手续费'},
+                        {field: 'close_time', width: 150, title: '平仓时间'},
+                        {field:'close_price', width: 100, title: '平仓价格'},
+                        {field:'close_fee', width: 100, title: '平仓手续费'},
+                        {field: 'volume', width: 100, title: '平仓数量'},
+      
+                    ]
+                ];
+
                 // 最大盈利交易表格渲染
                 table.render({
                     elem: '#profitTable',
                     data: largestProfitTrades,
-                    cols: [[
-                        {field: 'symbol', width: 100, title: '标的'},
-                        {field: 'profit', width: 100, title: '盈利'},
-                        {field: 'open_time', width: 150, title: '开仓时间'},
-                        {field: 'close_time', width: 150, title: '平仓时间'},
-                        {field: 'volume', width: 100, title: '数量'},
-                        {field: 'price', width: 100, title: '价格'},
-                        {field: 'side', width: 100, title: '方向'},
-                        {field: 'fee', width: 100, title: '手续费'}
-                    ]],
+                    cols: tradeCols,
                     limit: 5
                 });
 
@@ -320,16 +332,12 @@
                 table.render({
                     elem: '#lossTable',
                     data: largestLossTrades,
-                    cols: [[
-                        {field: 'symbol', width: 100, title: '标的'},
-                        {field: 'loss', width: 100, title: '亏损'},
-                        {field: 'open_time', width: 150, title: '开仓时间'},
-                        {field: 'close_time', width: 150, title: '平仓时间'},
-                        {field: 'volume', width: 100, title: '数量'},
-                        {field: 'price', width: 100, title: '价格'},
-                        {field: 'side', width: 100, title: '方向'},
-                        {field: 'fee', width: 100, title: '手续费'}
-                    ]],
+                    cols: tradeCols.map(cols => cols.map(col => {
+                        if (col.field === 'profit') {
+                            return {...col, title: '亏损'};
+                        }
+                        return col;
+                    })),
                     limit: 5
                 });
 
