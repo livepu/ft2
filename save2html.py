@@ -91,26 +91,27 @@ def generate_backtest_report(net_value_data, transaction_data, metrics,\
     :param template_name: 模板文件名，默认为 'nav_tradelog.html'
     :param output_dir: 生成的 HTML 文件所在目录，默认为当前目录
     """
-    # 字段映射表（英文 -> 中文）
-    field_mapping = {
-        "date": "日期",
-        "value": "净值",
-        "benchmark": "基准",
-        "action": "操作",
-        "code": "代码",
-        "quantity": "数量",
-        ##对应account的key
-        "price": "价格",
-        "assets": "资产",
-        "symbol": "标的",
-        "created_at": "时间",
-        "volume": "数量",
-        "side": "方向",
-        "fee": "手续费",
-        "order_id":"成交单号",
-    }
+
 
     def translate_keys(data):
+                # 字段映射表（英文 -> 中文）
+        field_mapping = {
+            "date": "日期",
+            "value": "净值",
+            "benchmark": "基准",
+            "action": "操作",
+            "code": "代码",
+            "quantity": "数量",
+            ##对应account的key
+            "price": "价格",
+            "assets": "资产",
+            "symbol": "标的",
+            "created_at": "时间",
+            "volume": "数量",
+            "side": "方向",
+            "fee": "手续费",
+            "order_id":"成交单号",
+        }
         """将字典列表中的英文字段名替换为中文"""
         return [{field_mapping.get(k, k): v for k, v in item.items()} for item in data]
 

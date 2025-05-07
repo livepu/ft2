@@ -247,34 +247,98 @@ class AccountAnalyzer:
         avg_loss = sum(losses) / len(losses)
         return avg_profit / avg_loss
     
-    # ========== 输出结果 相关方法 ==========
-
-    def get_net_value_data(self):
-        """获取净值数据"""
-        net_value_data = []
-        for date, value in self.daily_total_assets.items():
-            net_value_data.append({
-                'date': date.strftime('%Y-%m-%d'),
-                'net_value': value
-            })
-        return net_value_data
-
-    def _translate_keys(self, data):
+    # ========== 新增类方法 ==========
+    @staticmethod
+    def translate_keys(data):
         """将字典列表中的英文字段名替换为中文"""
+        # 字段映射表（英文 -> 中文）
         field_mapping = {
             "date": "日期",
-            "net_value": "净值",
-            "symbol": "标的",
-            "profit": "盈亏",
-            "open_time": "开仓时间",
-            "close_time": "平仓时间",
-            "volume": "数量",
+            "value": "净值",
+            "benchmark": "基准",
+            "action": "操作",
+            "code": "代码",
+            "quantity": "数量",
+            ##对应account的key
             "price": "价格",
+            "assets": "资产",
+            "symbol": "标的",
+            "created_at": "时间",
+            "volume": "数量",
             "side": "方向",
             "fee": "手续费",
-            "order_id": "成交单号"
+            "order_id": "成交单号",
         }
         return [{field_mapping.get(k, k): v for k, v in item.items()} for item in data]
+    
+    @staticmethod
+    def format_transaction_log(transaction_records):
+        """
+        将 TradeRecord 对象列表转换为字典列表，保持字段名不变。
+
+        :param transaction_records: 列表，元素为 TradeRecord 对象或字典
+        :return: 格式化后的字典列表（字段名不变）
+        """
+        result = []
+        for record in transaction_records:
+            # 支持对象和字典两种格式
+            if hasattr(record, '__dict__'):
+                data = record.__dict__
+            else:
+                data = record
+
+            formatted = {}
+            for key, value in data.items():
+                # 特殊字段值处理
+                if key == 'volume':
+                    formatted[key] = int(value)
+                elif key == 'price' or key == 'fee':
+                    formatted[key] = round(float(value), 2)
+                elif key == 'side':
+                    formatted[key] = '买入' if value == 'buy' else '卖出'
+                elif key == 'created_at':
+                    # 处理 pandas.Timestamp 并格式化时间
+                    formatted[key] = value.strftime("%Y-%m-%d")
+                else:
+                    formatted[key] = value
+
+            result.append(formatted)
+
+        return result
+
+    @staticmethod
+    def format_trade(trade):
+        original_trade = trade['original_trade']
+        return {
+            'symbol': original_trade.symbol,
+            'profit': f"{trade['profit']:.2f}",
+            'loss': f"{abs(trade['profit']):.2f}",
+            'open_time': trade['open_time'].strftime('%Y-%m-%d'),
+            'close_time': trade['close_time'].strftime('%Y-%m-%d'),
+            'volume': original_trade.volume,
+            'price': original_trade.price,
+            'side': '买入' if original_trade.side == 'buy' else '卖出',
+            'fee': original_trade.fee
+        }
+    # ========== 输出结果 相关方法 ==========
+
+    def format_daily_assets(self):
+
+        result = []
+        #print(self.daily_total_assets)
+        for date,assets in self.daily_total_assets.items(): #这里不是字典，而是对象
+              # 时间格式化（如果是 pandas.Timestamp）
+            if hasattr(date, 'strftime'):
+                date_str = date.strftime("%Y-%m-%d")
+            else:
+                date_str = str(date)
+
+            result.append({
+                "date": date_str,
+                "assets": round(float(assets), 2)
+            })
+        return result
+
     
     def to_html_report(self, report_name="回测报告", output_dir="."):
         initial_cash = self.account.snapshots[0].cash if self.account.snapshots else 0
@@ -299,64 +363,19 @@ class AccountAnalyzer:
         ]
 
 
-        net_value_data = self.get_net_value_data()
+        net_value_data = self.format_daily_assets()
         largest_profit_trades = self.get_largest_profit_trades(5)
         largest_loss_trades = self.get_largest_loss_trades(5)
 
-        # 格式化交易记录
-        def format_trade(trade):
-            original_trade = trade['original_trade']
-            return {
-                'symbol': original_trade.symbol,
-                'profit': f"{trade['profit']:.2f}",
-                'loss': f"{abs(trade['profit']):.2f}",
-                'open_time': trade['open_time'].strftime('%Y-%m-%d'),
-                'close_time': trade['close_time'].strftime('%Y-%m-%d'),
-                'volume': original_trade.volume,
-                'price': original_trade.price,
-                'side': '买入' if original_trade.side == 'buy' else '卖出',
-                'fee': original_trade.fee
-            }
-        def format_transaction_log(transaction_records):
-            """
-            将 TradeRecord 对象列表转换为字典列表，保持字段名不变。
-            
-            :param transaction_records: 列表，元素为 TradeRecord 对象或字典
-            :return: 格式化后的字典列表（字段名不变）
-            """
-            result = []
-            for record in transaction_records:
-                # 支持对象和字典两种格式
-                if hasattr(record, '__dict__'):
-                    data = record.__dict__
-                else:
-                    data = record
-
-                formatted = {}
-                for key, value in data.items():
-                    # 特殊字段值处理
-                    if key == 'volume':
-                        formatted[key] = int(value)
-                    elif key == 'price' or key == 'fee':
-                        formatted[key] = round(float(value), 2)
-                    elif key == 'side':
-                        formatted[key] = '买入' if value == 'buy' else '卖出'
-                    elif key == 'created_at':
-                        # 处理 pandas.Timestamp 并格式化时间
-                        formatted[key] = value.strftime("%Y-%m-%d")
-                    else:
-                        formatted[key] = value
-
-                result.append(formatted)
-
-            return result
-        formatted_transaction_log=format_transaction_log(self.account.trade_log)
-        formatted_profit_trades = [format_trade(trade) for trade in largest_profit_trades]
-        formatted_loss_trades = [format_trade(trade) for trade in largest_loss_trades]
     
+        formatted_transaction_log=self.format_transaction_log(self.account.trade_log)
+        formatted_profit_trades = [self.format_trade(trade) for trade in largest_profit_trades]
+        formatted_loss_trades = [self.format_trade(trade) for trade in largest_loss_trades]
+        net_value_data_zh=self.translate_keys(net_value_data)
+        formatted_transaction_log_zh=self.translate_keys(formatted_transaction_log)
         # 使用 json.dumps 处理数据，自动换行
-        net_value_data_json = json.dumps(net_value_data, indent=4, ensure_ascii=False)
-        formatted_transaction_log_json = json.dumps(formatted_transaction_log, indent=4, ensure_ascii=False)
+        net_value_data_json = json.dumps(net_value_data_zh, indent=4, ensure_ascii=False)
+        formatted_transaction_log_json = json.dumps(formatted_transaction_log_zh, indent=4, ensure_ascii=False)
         formatted_profit_trades_json = json.dumps(formatted_profit_trades, indent=4, ensure_ascii=False)
         formatted_loss_trades_json = json.dumps(formatted_loss_trades, indent=4, ensure_ascii=False)
 
