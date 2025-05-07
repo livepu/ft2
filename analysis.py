@@ -207,17 +207,27 @@ def calculate_sharpe_ratio(daily_total_assets, risk_free_rate=0.02, time_interva
     return sharpe_ratio
 
 class AccountAnalyzer:
-    def __init__(self, account):
+    def __init__(self, account=None, external_daily_total_assets=None):
         """
         :param account: Account 实例，应包含：
                         - snapshots: AccountSnapshot 列表
                         - trades: Trade 记录列表（需有 symbol, profit, open_time, close_time）
+        :param external_daily_total_assets: 外部导入的日度总资产数据，字典类型，键为日期，值为总资产
         """
         self.account = account
-        # 初始化日度资产
-        self.daily_total_assets = self._compute_daily_total_assets(account.snapshots)
-        # 初始化交易数据
-        self.trades = account.trades
+        if account:
+            # 从 account 实例初始化日度资产
+            self.daily_total_assets = self._compute_daily_total_assets(account.snapshots)
+            # 从 account 实例初始化交易数据，使用 trade_log 属性
+            self.trade_log = self._calculate_profit(account.trade_log)
+        elif external_daily_total_assets:
+            # 使用外部导入的数据初始化日度资产
+            self.daily_total_assets = external_daily_total_assets
+            self.trade_log = [] #严格来说，外部记录就不做交易分析
+        else:
+            # 空白初始化
+            self.daily_total_assets = {}
+            self.trade_log = []
 
     def _compute_daily_total_assets(self, snapshots):
         daily_snapshots = defaultdict(list)
@@ -334,7 +344,7 @@ class AccountAnalyzer:
             start_date = end_date - interval_mapping[time_interval]
             if start_date < dates[0]:
                 return None, None
-            closest_start_date = max((d for d in dates if d < start_date), default=None)
+            closest_start_date = max((d for d in dates if d < start_date), default=None) #区间的前一日作为基准
             if closest_start_date is None:
                 return None, None
             start_date = closest_start_date
@@ -344,36 +354,89 @@ class AccountAnalyzer:
         return start_date, end_date
 
     # ========== 交易相关方法 ==========
-    def get_largest_profit_trade(self):
-        """获取最大盈利交易"""
-        if not self.trades:
-            return None
-        return max(self.trades, key=lambda t: t.profit)
+    def _calculate_profit(self, trade_log):
+        """
+        计算每笔交易的盈亏
+        :param trade_log: 原始交易记录列表
+        :return: 包含盈亏信息的交易记录列表
+        """
+        positions = defaultdict(lambda: {'volume': 0, 'cost': 0, 'open_time': None})
+        processed_trades = []
 
-    def get_largest_loss_trade(self):
-        """获取最大亏损交易"""
-        if not self.trades:
-            return None
-        return min(self.trades, key=lambda t: t.profit)
+        for trade in trade_log:
+            symbol = trade.symbol
+            volume = trade.volume
+            price = trade.price
+            side = trade.side
+            created_at = trade.created_at
+            fee = trade.fee
+
+            if side == 'buy':
+                # 买入操作，更新持仓信息，成本加上手续费
+                positions[symbol]['volume'] += volume
+                # 买入成本加上手续费
+                positions[symbol]['cost'] += volume * price + fee
+                if positions[symbol]['open_time'] is None:
+                    positions[symbol]['open_time'] = created_at
+            elif side == 'sell':
+                # 卖出操作，计算盈亏
+                if positions[symbol]['volume'] == 0:
+                    continue  # 无持仓，跳过
+
+                sell_amount = volume * price
+                # 按比例计算卖出部分的成本
+                cost = (volume / positions[symbol]['volume']) * positions[symbol]['cost']
+                profit = sell_amount - cost - fee
+
+                processed_trades.append({
+                    'symbol': symbol,
+                    'profit': profit,
+                    'open_time': positions[symbol]['open_time'],
+                    'close_time': created_at,
+                    'original_trade': trade
+                })
+
+                # 更新持仓信息
+                positions[symbol]['volume'] -= volume
+                positions[symbol]['cost'] -= cost
+
+                if positions[symbol]['volume'] == 0:
+                    positions[symbol]['open_time'] = None
+
+        return processed_trades
+    
+    def get_largest_profit_trades(self, n):
+        """获取盈利最大的 N 个交易"""
+        if not self.trade_log or n <= 0:
+            return []
+        # 按盈利从大到小排序并取前 N 个
+        return sorted(self.trade_log, key=lambda t: t['profit'], reverse=True)[:n]
+
+    def get_largest_loss_trades(self, n):
+        """获取亏损最大的 N 个交易"""
+        if not self.trade_log or n <= 0:
+            return []
+        # 按盈利从小到大排序并取前 N 个
+        return sorted(self.trade_log, key=lambda t: t['profit'])[:n]
 
     def calculate_average_holding_period(self):
         """计算平均持仓周期（天数）"""
-        if not self.trades:
+        if not self.trade_log:
             return None
-        total_days = sum((t.close_time - t.open_time).days for t in self.trades)
-        return total_days / len(self.trades)
+        total_days = sum((t['close_time'] - t['open_time']).days for t in self.trade_log)
+        return total_days / len(self.trade_log)
 
     def calculate_win_rate(self):
         """胜率：盈利交易占比"""
-        if not self.trades:
+        if not self.trade_log:
             return None
-        wins = sum(1 for t in self.trades if t.profit > 0)
-        return wins / len(self.trades)
+        wins = sum(1 for t in self.trade_log if t['profit'] > 0)
+        return wins / len(self.trade_log)
 
     def calculate_avg_profit_loss_ratio(self):
         """平均盈亏比"""
-        profits = [t.profit for t in self.trades if t.profit > 0]
-        losses = [-t.profit for t in self.trades if t.profit < 0]
+        profits = [t['profit'] for t in self.trade_log if t['profit'] > 0]
+        losses = [-t['profit'] for t in self.trade_log if t['profit'] < 0]
 
         if not profits or not losses:
             return None
