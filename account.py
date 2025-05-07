@@ -34,11 +34,11 @@ class AccountSnapshot:
 @dataclass
 class TradeRecord:
     """成交记录（兼容掘金接口）"""
-    symbol: str
-    volume: float
-    price: float
-    side: str                # 'buy'/'sell'
     created_at: datetime     # 成交时间（严格使用datetime）
+    symbol: str
+    price: float
+    volume: float
+    side: str                # 'buy'/'sell'
     fee: float               # 总手续费
     order_id: str            # 模拟订单ID
 

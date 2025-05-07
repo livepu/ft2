@@ -2,8 +2,85 @@ from jinja2 import Environment, FileSystemLoader
 import os
 import json
 from datetime import datetime
+def format_assets_snapshot(snapshots):
+    """
+    将 AccountSnapshot 列表转换为 HTML 需要的净值数据格式。
+    
+    :param snapshot: list of AccountSnapshot 对象
+    :return: 列表格式 [{"date": "YYYY-MM-DD", "assets": float}]
+    """
+    result = []
+    for item in snapshots: #这里不是字典，而是对象
+        # 提取时间与总资产
+        date = item.created_at
+        assets = item.total_assets
 
-def generate_backtest_report(net_value_data, transaction_data, metrics, template_dir='template', template_name='nav_tradelog.html', output_dir='.'):
+        # 时间格式化（如果是 pandas.Timestamp）
+        if hasattr(date, 'strftime'):
+            date_str = date.strftime("%Y-%m-%d")
+        else:
+            date_str = str(date)
+
+        result.append({
+            "date": date_str,
+            "assets": round(float(assets), 2)
+        })
+    return result
+
+def format_transaction_log(transaction_records):
+    """
+    将 TradeRecord 对象列表转换为字典列表，保持字段名不变。
+    
+    :param transaction_records: 列表，元素为 TradeRecord 对象或字典
+    :return: 格式化后的字典列表（字段名不变）
+    """
+    result = []
+    for record in transaction_records:
+        # 支持对象和字典两种格式
+        if hasattr(record, '__dict__'):
+            data = record.__dict__
+        else:
+            data = record
+
+        formatted = {}
+        for key, value in data.items():
+            # 特殊字段值处理
+            if key == 'volume':
+                formatted[key] = int(value)
+            elif key == 'price' or key == 'fee':
+                formatted[key] = round(float(value), 2)
+            elif key == 'side':
+                formatted[key] = '买入' if value == 'buy' else '卖出'
+            elif key == 'created_at':
+                # 处理 pandas.Timestamp 并格式化时间
+                formatted[key] = value.strftime("%Y-%m-%d")
+            else:
+                formatted[key] = value
+
+        result.append(formatted)
+
+    return result
+
+def account_to_html(account,\
+    metrics,report_name=None,template_dir='template', template_name='nav_tradelog.html', output_dir='.'):
+    """
+    生成账户净值和交易记录的 HTML 报告。
+    :param account: Account 对象
+    :param metrics: 关键指标数据，列表包含字典
+    :param template_dir: 模板所在目录，默认为 'template'
+    :param template_name: 模板文件名，默认为 'nav_tradelog.html'
+    :param output_dir: 生成的 HTML 文件所在目录，默认为当前目录
+    """
+    net_value_data = format_assets_snapshot(account.snapshots)
+    transaction_data = format_transaction_log(account.trade_log)
+    generate_backtest_report(net_value_data, transaction_data, metrics,\
+        report_name=report_name, template_dir=template_dir, template_name=template_name, output_dir=output_dir)
+
+
+
+
+def generate_backtest_report(net_value_data, transaction_data, metrics,\
+    report_name=None, template_dir='template', template_name='nav_tradelog.html', output_dir='.'):
     """
     生成回测报告 HTML 文件。
 
@@ -22,7 +99,14 @@ def generate_backtest_report(net_value_data, transaction_data, metrics, template
         "action": "操作",
         "code": "代码",
         "quantity": "数量",
-        "price": "价格"
+        ##对应account的key
+        "price": "价格",
+        "assets": "资产",
+        "symbol": "标的",
+        "created_at": "时间",
+        "volume": "数量",
+        "side": "方向",
+        "fee": "手续费",
     }
 
     def translate_keys(data):
@@ -48,7 +132,14 @@ def generate_backtest_report(net_value_data, transaction_data, metrics, template
     # 渲染模板并保存为 HTML 文件
     current_time = datetime.now().strftime("%Y%m%d_%H%M")
     output_dir = os.path.abspath(os.path.join(current_dir, output_dir)) 
-    output_path = os.path.join(output_dir, f"backtest_report_{current_time}.html")
+
+    if report_name:
+        filename = f"{report_name}_{current_time}.html"
+    else:
+        filename = f"backtest_report_{current_time}.html"
+
+    output_path = os.path.join(output_dir, filename)
+
 
     html_content = template.render(
         net_value_data=net_value_data_json,
@@ -80,4 +171,4 @@ if __name__ == '__main__':
     ]
 
     # 调用函数生成报告
-    generate_backtest_report(net_value_data, transaction_data, metrics,output_dir="../html_report")
+    generate_backtest_report(net_value_data, transaction_data, metrics,report_name="测试",output_dir="../html_report")
