@@ -81,7 +81,7 @@
 
         <!-- 图表容器 -->
         <div class="chart-container">
-            <h3>净值曲线</h3>
+            <h3>业绩表现</h3>
             <div id="chartContainer" style="width:100%;height:600px"></div>
         </div>
 
@@ -102,10 +102,10 @@
         try {
             // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
             netValueData = {{ net_value_data | safe }};
-            if (!Array.isArray(netValueData)) {
-                console.warn('净值数据格式异常，自动重置为空数组');
-                netValueData = [];
-            }
+        if (!Array.isArray(netValueData)) {
+            console.warn('净值数据格式异常，自动重置为空数组');
+            netValueData = [];
+        }
         } catch (e) {
             console.error('净值数据解析失败:', e);
             netValueData = [];
@@ -116,9 +116,9 @@
         try {
             // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
             transactionData = {{ transaction_data | safe }};
-            if (!Array.isArray(transactionData)) {
-                throw new Error('交易数据非数组类型');
-            }
+        if (!Array.isArray(transactionData)) {
+            throw new Error('交易数据非数组类型');
+        }
         } catch (e) {
             document.write(`<div class="error-container">交易数据加载失败：${e.message}</div>`);
             transactionData = [];
@@ -126,33 +126,32 @@
     </script>
 
     <script>
-        // 图表初始化（带完整防御）
         (function initChart() {
             const container = document.getElementById('chartContainer');
 
             try {
-                // 数据有效性验证
                 if (!netValueData ||
-                    !Array.isArray(netValueData) ||
-                    netValueData.length === 0
-                ) {
+                 !Array.isArray(netValueData) || 
+                 netValueData.length === 0) {
                     throw new Error('净值数据不完整或格式错误');
                 }
 
                 const chart = echarts.init(container);
-                const dates = netValueData.map(item => item.date);
+
+                // 动态获取第一个字段作为日期字段
+                const firstKey = Object.keys(netValueData[0])[0];
+
+                // 提取日期字段对应的值
+                const dates = netValueData.map(item => item[firstKey]);
+
                 const series = [];
                 const legendData = [];
 
-                // 获取除 date 外的所有字段名
-                const keys = Object.keys(netValueData[0]).filter(key => key !== 'date');
+                // 获取除日期字段外的所有字段
+                const keys = Object.keys(netValueData[0]).filter(key => key !== firstKey);
 
-                // 初始化最大最小值
-                let minValue = Infinity;
-                let maxValue = -Infinity;
-
+                // 构建系列数据
                 keys.forEach(key => {
-                    // 为每个字段添加系列
                     const data = netValueData.map(item => item[key]);
                     series.push({
                         name: key,
@@ -161,38 +160,26 @@
                         smooth: true
                     });
                     legendData.push(key);
-
-                    // 更新最大最小值
-                    const seriesMin = Math.min(...data);
-                    const seriesMax = Math.max(...data);
-                    minValue = Math.min(minValue, seriesMin);
-                    maxValue = Math.max(maxValue, seriesMax);
                 });
 
-                // 为最大最小值添加一定的缓冲空间
-                const buffer = (maxValue - minValue) * 0.1;
-                minValue = minValue - buffer;
-                maxValue = maxValue + buffer;
+                // 计算最小最大值（用于 Y 轴）
+                const allValues = series.flatMap(s => s.data);
+                const minValue = Math.min(...allValues);
+                const maxValue = Math.max(...allValues);
+                const buffer = (maxValue - minValue) * 0.05;
 
                 const option = {
-                    title: {
-                        text: '净值曲线'
-                    },
-                    tooltip: {
-                        trigger: 'axis'
-                    },
-                    legend: {
-                        data: legendData
-                    },
+                    //title: { text: '业绩曲线' },
+                    tooltip: { trigger: 'axis' },
+                    legend: { data: legendData },
                     xAxis: {
                         type: 'category',
                         data: dates
                     },
                     yAxis: {
                         type: 'value',
-                        // 动态设置坐标轴最大和最小值
-                        min: minValue,
-                        max: maxValue
+                        min: parseFloat((minValue - buffer).toFixed(3)), // 最多保留 3 位小数
+                        max: parseFloat((maxValue + buffer).toFixed(3))  // 最多保留 3 位小数
                     },
                     series: series
                 };
@@ -201,15 +188,13 @@
 
             } catch (e) {
                 container.innerHTML = `
-                <div class="error-container">
-                    <h3>图表渲染失败</h3>
-                    <p>错误原因：${e.message}</p>
-                    <p>建议检查数据格式是否符合要求</p>
-                </div>
-            `;
+        <div class="error-container">
+            <h3>图表渲染失败</h3>
+            <p>错误原因：${e.message}</p>
+            <p>建议检查数据格式是否符合要求</p>
+        </div>`;
             }
         })();
-
         // 表格初始化（带安全隔离）
         layui.use(['table', 'layer'], function () {
             const table = layui.table;

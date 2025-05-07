@@ -14,9 +14,28 @@ def generate_backtest_report(net_value_data, transaction_data, metrics, template
     :param template_name: 模板文件名，默认为 'nav_tradelog.html'
     :param output_dir: 生成的 HTML 文件所在目录，默认为当前目录
     """
+    # 字段映射表（英文 -> 中文）
+    field_mapping = {
+        "date": "日期",
+        "value": "净值",
+        "benchmark": "基准",
+        "action": "操作",
+        "code": "代码",
+        "quantity": "数量",
+        "price": "价格"
+    }
+
+    def translate_keys(data):
+        """将字典列表中的英文字段名替换为中文"""
+        return [{field_mapping.get(k, k): v for k, v in item.items()} for item in data]
+
+    # 转换字段名
+    net_value_data_zh = translate_keys(net_value_data)
+    transaction_data_zh = translate_keys(transaction_data)
+
     # 使用 json.dumps 处理数据
-    net_value_data_json = json.dumps(net_value_data, indent=4, ensure_ascii=False)
-    transaction_data_json = json.dumps(transaction_data, indent=4, ensure_ascii=False)
+    net_value_data_json = json.dumps(net_value_data_zh, indent=4, ensure_ascii=False)
+    transaction_data_json = json.dumps(transaction_data_zh, indent=4, ensure_ascii=False)
 
     # 动态获取当前脚本所在目录，并构建模板路径
     current_dir = os.path.dirname(os.path.abspath(__file__))  # 获取当前脚本路径
