@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>{{title}}</title>
+    <!-- 引入 layui.css -->
+    <link href="https://unpkg.com/layui@2.11.1/dist/css/layui.css" rel="stylesheet">
+    <!-- 引入 layui.js -->
+    <script src="https://unpkg.com/layui@2.11.1/dist/layui.js"></script>
+    <!-- 使用 UNPKG 源引入 echarts -->
+    <script src="https://unpkg.com/echarts@5.4.3/dist/echarts.min.js"></script>
+
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/report.js"></script> 
+    
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f2f5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+
+        .metrics-container {
+            background-color: #fff;
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-container {
+            background-color: #fff;
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        .table-container {
+            background-color: #fff;
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+        }
+
+        .error-container {
+            background: #fff8f7;
+            border: 1px solid #ffccc7;
+            padding: 15px;
+            margin: 20px;
+            border-radius: 4px;
+            color: #ff4d4f;
+        }
+
+
+        /* 美化大标题，使用股市相关红色 */
+        h1 {
+            color: #e64340; /* 类似股市上涨的红色 */
+            font-size: 36px;
+            text-align: center;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 美化小标题，使用股市相关红色 */
+        h3 {
+            color: #e64340; /* 类似股市上涨的红色 */
+            font-size: 24px;
+            margin-top: 0;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e64340; /* 类似股市上涨的红色下划线 */
+        }
+        /* 修改 Layui 表格翻页按钮底色为红色 */
+        .layui-table-page .layui-laypage .layui-laypage-curr .layui-laypage-em {
+            background-color: #e64340; /* Layui 红色主色调 */
+        }
+
+        .layui-table-page .layui-laypage a:hover {
+            color: #e64340;
+        }
+
+        .layui-table-page .layui-laypage a,
+        .layui-table-page .layui-laypage span {
+            margin: 0 3px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>{{ report_name }}</h1>
+        <!-- 关键指标 -->
+        <div class="metrics-container">
+
+            <h3>关键指标</h3>
+            <table class="layui-table">
+                <tbody>
+                    {% for metric in metrics %}
+                    <tr>
+                        <td>{{ metric.name }}</td>
+                        <td>{{ metric.value }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 图表容器 -->
+        <div class="chart-container">
+            <h3>业绩表现</h3>
+            <div id="chartContainer" style="width:100%;height:600px"></div>
+        </div>
+
+        <!-- 交易表格容器 -->
+        <div class="table-container">
+            <h3>交易记录</h3>
+            <table id="transactionTable" lay-filter="transactionTable"></table>
+        </div>
+
+
+        <!-- 最大盈利交易 -->
+        <div class="table-container">
+            <h3>最大盈利的 5 笔交易</h3>
+            <div id="profitTable"></div>
+        </div>
+
+        <!-- 最大亏损交易 -->
+        <div class="table-container">
+            <h3>最大亏损的 5 笔交易</h3>
+            <div id="lossTable"></div>
+        </div>
+
+    </div>
+
+
+    <!-- 安全数据注入 -->
+    <script>
+        // 净值数据（带多层保护）
+        let netValueData = [];
+        try {
+            // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
+            netValueData = {{ net_value_data | safe }};
+        if (!Array.isArray(netValueData)) {
+            console.warn('净值数据格式异常，自动重置为空数组');
+            netValueData = [];
+        }
+        } catch (e) {
+            console.error('净值数据解析失败:', e);
+            netValueData = [];
+        }
+
+        // 交易数据（带类型校验）
+        let transactionData = [];
+        try {
+            // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
+            transactionData = {{ transaction_data | safe }};
+        if (!Array.isArray(transactionData)) {
+            throw new Error('交易数据非数组类型');
+        }
+        } catch (e) {
+            document.write(`<div class="error-container">交易数据加载失败：${e.message}</div>`);
+            transactionData = [];
+        }
+
+        // 最大盈利交易数据（带类型校验）
+        let largestProfitTrades = [];
+        try {
+            largestProfitTrades = {{ largest_profit_trades | safe }};
+            if (!Array.isArray(largestProfitTrades)) {
+                throw new Error('最大盈利交易数据非数组类型');
+            }
+        } catch (e) {
+            document.write(`<div class="error-container">最大盈利交易数据加载失败：${e.message}</div>`);
+            largestProfitTrades = [];
+        }
+
+        // 最大亏损交易数据（带类型校验）
+        let largestLossTrades = [];
+        try {
+            largestLossTrades = {{ largest_loss_trades | safe }};
+            if (!Array.isArray(largestLossTrades)) {
+                throw new Error('最大亏损交易数据非数组类型');
+            }
+        } catch (e) {
+            document.write(`<div class="error-container">最大亏损交易数据加载失败：${e.message}</div>`);
+            largestLossTrades = [];
+        }
+    </script>
+
+    <script>
+        (function initChart() {
+            const container = document.getElementById('chartContainer');
+
+            try {
+                if (!netValueData ||
+                 !Array.isArray(netValueData) || 
+                 netValueData.length === 0) {
+                    throw new Error('净值数据不完整或格式错误');
+                }
+
+                const chart = echarts.init(container);
+
+                // 动态获取第一个字段作为日期字段
+                const firstKey = Object.keys(netValueData[0])[0];
+
+                // 提取日期字段对应的值
+                const dates = netValueData.map(item => item[firstKey]);
+
+                const series = [];
+                const legendData = [];
+
+                // 获取除日期字段外的所有字段
+                const keys = Object.keys(netValueData[0]).filter(key => key !== firstKey);
+
+                // 构建系列数据
+                keys.forEach(key => {
+                    const data = netValueData.map(item => item[key]);
+                    series.push({
+                        name: key,
+                        type: 'line',
+                        data: data,
+                        smooth: true
+                    });
+                    legendData.push(key);
+                });
+
+                // 计算最小最大值（用于 Y 轴）
+                const allValues = series.flatMap(s => s.data);
+                const minValue = Math.min(...allValues);
+                const maxValue = Math.max(...allValues);
+                const buffer = (maxValue - minValue) * 0.05;
+
+                const option = {
+                    //title: { text: '业绩曲线' },
+                    tooltip: { trigger: 'axis' },
+                    legend: { data: legendData },
+                    xAxis: {
+                        type: 'category',
+                        data: dates
+                    },
+                    yAxis: {
+                        type: 'value',
+                        min: parseFloat((minValue - buffer).toFixed(2)), // 最多保留 2 位小数
+                        max: parseFloat((maxValue + buffer).toFixed(2))  // 最多保留 2 位小数
+                    },
+                    series: series
+                };
+
+                chart.setOption(option);
+                // 监听窗口大小变化事件
+                window.addEventListener('resize', function () {
+                    if (chart) {
+                        chart.resize();
+                    }
+                });
+            } catch (e) {
+                container.innerHTML = `
+        <div class="error-container">
+            <h3>图表渲染失败</h3>
+            <p>错误原因：${e.message}</p>
+            <p>建议检查数据格式是否符合要求</p>
+        </div>`;
+            }
+        })();
+        // 表格初始化（带安全隔离）
+        layui.use(['table', 'layer'], function () {
+            const table = layui.table;
+            const container = document.getElementById('transactionTable');
+
+            try {
+                // 数据有效性验证
+                if (!transactionData ||
+                    !Array.isArray(transactionData) ||
+                    transactionData.length === 0
+                ) {
+                    container.innerHTML = '<div class="layui-none">暂无交易数据</div>';
+                    return;
+                }
+
+                // 动态列检测
+                if (!transactionData[0] || typeof transactionData[0] !== 'object') {
+                    throw new Error('交易记录数据结构异常');
+                }
+
+                const columns = [Object.keys(transactionData[0]).map(key => ({
+                    field: key,
+                    title: key.toUpperCase(),
+                    sort: true
+                }))];
+
+                table.render({
+                    elem: '#transactionTable',
+                    data: transactionData,
+                    cols: columns,
+                    page: true
+                });
+
+                // 统一列配置
+                const tradeCols = [
+                    [
+                        {field: 'symbol', width: 100, title: '标的'},
+                        {field: 'profit', width: 100, title: '盈利'},
+                        {field: 'open_time', width: 150, title: '开仓时间'},
+                        {field:'open_price', width: 100, title: '开仓价格'},
+                        {field:'open_fee', width: 100, title: '开仓手续费'},
+                        {field: 'close_time', width: 150, title: '平仓时间'},
+                        {field:'close_price', width: 100, title: '平仓价格'},
+                        {field:'close_fee', width: 100, title: '平仓手续费'},
+                        {field: 'volume', width: 100, title: '平仓数量'},
+      
+                    ]
+                ];
+
+                // 最大盈利交易表格渲染
+                table.render({
+                    elem: '#profitTable',
+                    data: largestProfitTrades,
+                    cols: tradeCols,
+                    limit: 5
+                });
+
+                // 最大亏损交易表格渲染
+                table.render({
+                    elem: '#lossTable',
+                    data: largestLossTrades,
+                    cols: tradeCols.map(cols => cols.map(col => {
+                        if (col.field === 'profit') {
+                            return {...col, title: '亏损'};
+                        }
+                        return col;
+                    })),
+                    limit: 5
+                });
+
+            } catch (e) {
+                container.innerHTML = `
+                <div class="error-container">
+                    <h3>表格初始化失败</h3>
+                    <p>${e.message}</p>
+                </div>
+            `;
+            }
+        });
+    </script>
+</body>
+
+</html>
