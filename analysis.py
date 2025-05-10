@@ -331,32 +331,64 @@ class AccountAnalyzer:
         wins = sum(1 for t in self._trade_profits if t['profit'] > 0)
         return wins / len(self._trade_profits)
 
-    def calculate_avg_profit(self) -> float:
+    def calculate_avg_profit(self, mode='amount') -> float:
         """
-        计算所有盈利交易的平均盈利（绝对金额）
+        计算平均盈利（支持金额或百分比模式）
+        :param mode: 'amount'（金额）或 'percentage'（百分比）
         :return: 平均盈利，若无盈利交易则返回 None
         """
-        profits = [t['profit'] for t in self._trade_profits if t['profit'] > 0]
-        return sum(profits) / len(profits) if profits else None
+        profitable_trades = [t for t in self._trade_profits if t['profit'] > 0]
+        if not profitable_trades:
+            return None
 
-    def calculate_avg_loss(self) -> float:
+        if mode == 'amount':
+            profits = [t['profit'] for t in profitable_trades]
+        elif mode == 'percentage':
+            profits = [
+                t['profit'] / (abs(t['volume']) * t['open_price'])  # 盈利 / 开仓成本
+                for t in profitable_trades
+            ]
+        else:
+            raise ValueError("mode 必须是 'amount' 或 'percentage'")
+
+        return sum(profits) / len(profits)
+
+    def calculate_avg_loss(self, mode='amount') -> float:
         """
-        计算所有亏损交易的平均亏损（绝对金额）
+        计算平均亏损（支持金额或百分比模式）
+        :param mode: 'amount'（金额）或 'percentage'（百分比）
         :return: 平均亏损，若无亏损交易则返回 None
         """
-        losses = [t['profit'] for t in self._trade_profits if t['profit'] < 0]
-        return sum(losses) / len(losses) if losses else None
-    def calculate_avg_profit_loss_ratio(self) -> float:
+        loss_trades = [t for t in self._trade_profits if t['profit'] < 0]
+        if not loss_trades:
+            return None
+
+        if mode == 'amount':
+            losses = [t['profit'] for t in loss_trades]  # 亏损为负值
+        elif mode == 'percentage':
+            losses = [
+                t['profit'] / (abs(t['volume']) * t['open_price'])  # 亏损为负百分比
+                for t in loss_trades
+            ]
+        else:
+            raise ValueError("mode 必须是 'amount' 或 'percentage'")
+
+        return sum(losses) / len(losses)  # 返回负值
+
+    def calculate_avg_profit_loss_ratio(self, mode='amount') -> float:
         """
-        计算平均盈亏比（平均盈利 / 平均亏损的绝对值）
-        :return: 盈亏比，若无盈利或亏损则返回 None
+        计算平均盈亏比（支持金额或百分比模式）
+        :param mode: 'amount'（金额）或 'percentage'（百分比）
+        :return: 盈亏比（正数），若无盈利或亏损则返回 None
         """
-        avg_profit = self.calculate_avg_profit()
-        avg_loss = self.calculate_avg_loss()
+        avg_profit = self.calculate_avg_profit(mode)
+        avg_loss = self.calculate_avg_loss(mode)
+        
         if avg_profit is None or avg_loss is None:
             return None
-        return avg_profit / abs(avg_loss)  # 保证比值为正
-    
+        
+        return abs(avg_profit / avg_loss)  # 保证比值为正
+
     # ========== 新增类方法 ==========
     @staticmethod
     def translate_keys(data):
