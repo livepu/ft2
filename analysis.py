@@ -7,30 +7,40 @@ import json
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
 import inspect
+
+
 class AccountAnalyzer:
     def __init__(self, account=None, external_daily_total_assets=None):
         """
+        初始化 AccountAnalyzer 实例。
+        
         :param account: Account 实例，应包含：
-                        - snapshots: AccountSnapshot 列表
-                        - trades: Trade 记录列表（需有 symbol, profit, open_time, close_time）
+                        - snapshots: AccountSnapshot 列表（每个快照包含 created_at 和 total_assets）
+                        - trade_log: Trade 记录列表（需有 symbol, profit, open_time, close_time 等字段）
         :param external_daily_total_assets: 外部导入的日度总资产数据，字典类型，键为日期，值为总资产
         """
         self.account = account
         if account:
-            # 从 account 实例初始化日度资产
+            # 从 account 实例初始化日度资产数据
             self.daily_total_assets = self._compute_daily_total_assets(account.snapshots)
-            # 从 account 实例初始化交易数据，使用 trade_log 属性
+            # 从 account.trade_log 中提取交易记录并计算每笔交易的盈亏，生成 self.trade_log
             self.trade_log = self._calculate_profit(account.trade_log)
         elif external_daily_total_assets:
-            # 使用外部导入的数据初始化日度资产
+            # 使用外部提供的日度总资产数据初始化
             self.daily_total_assets = external_daily_total_assets
-            self.trade_log = [] #严格来说，外部记录就不做交易分析
+            self.trade_log = []  # 若无交易记录，则不分析交易数据
         else:
-            # 空白初始化
+            # 如果没有传入任何数据，则初始化为空数据结构
             self.daily_total_assets = {}
             self.trade_log = []
 
     def _compute_daily_total_assets(self, snapshots):
+        """
+        根据 AccountSnapshot 列表中的 created_at 时间戳，按天聚合获取每日最新的总资产。
+        
+        :param snapshots: AccountSnapshot 对象列表，每个对象包含 created_at（datetime）和 total_assets（float）
+        :return: 字典，键为日期（date），值为该日最后一笔快照的 total_assets 值
+        """
         daily_snapshots = defaultdict(list)
         for snapshot in snapshots:
             date = snapshot.created_at.date()
@@ -40,35 +50,54 @@ class AccountAnalyzer:
             date: snaps[-1].total_assets
             for date, snaps in daily_snapshots.items()
         }
-
     # ========== 资产相关方法 ==========
     def get_daily_total_assets(self):
         return self.daily_total_assets
     
-#计算最大回测
+
     def calculate_max_drawdown(self):
+        """
+        计算最大回撤（最大资产从峰值到谷值的跌幅）
+
+        :return: (max_drawdown: float, start_date: date, end_date: date)
+                max_drawdown 表示最大回撤比例（0~1）
+        :rtype: tuple(float, datetime.date, datetime.date)
+        """
+        # 如果每日总资产数据为空，则返回默认值
         if not self.daily_total_assets:
             return 0, None, None
 
+        # 对每日总资产的日期进行排序
         dates = sorted(self.daily_total_assets.keys())
+        # 初始化最大回撤为0，起始日期和结束日期为第一个日期
         max_drawdown = 0
         peak_value = self.daily_total_assets[dates[0]]
         start_date = end_date = peak_date = dates[0]
 
+        # 遍历所有日期计算最大回撤
         for date in dates:
             current_value = self.daily_total_assets[date]
+            # 如果当前值大于峰值，则更新峰值及其日期
             if current_value > peak_value:
                 peak_value = current_value
                 peak_date = date
+            # 计算当前回撤
             drawdown = (peak_value - current_value) / peak_value
+            # 如果当前回撤大于已知的最大回撤，则更新最大回撤及其起始和结束日期
             if drawdown > max_drawdown:
                 max_drawdown = drawdown
                 start_date = peak_date
                 end_date = date
 
+        # 返回最大回撤及其起始和结束日期
         return max_drawdown, start_date, end_date
-#计算区间收益率
     def calculate_return_rate(self, time_interval=None):
+        """
+        计算指定时间区间的收益率（结束资产 / 开始资产 - 1）。
+
+        :param time_interval: 可选的时间区间字符串，如 '1y'、'3m'，或 'all' 表示全周期
+        :return: 收益率（float），若数据不足则返回 None
+        """
         start_date, end_date = self._get_start_end_date(time_interval)
         if not start_date or not end_date:
             return None
@@ -76,8 +105,15 @@ class AccountAnalyzer:
         start_value = self.daily_total_assets[start_date]
         end_value = self.daily_total_assets[end_date]
         return (end_value - start_value) / start_value
-#计算年化收益率
+    
+
     def calculate_annualized_return(self, time_interval=None):
+        """
+        计算年化收益率：(1 + 区间收益率) ^ (365 / 天数) - 1
+
+        :param time_interval: 可选的时间区间字符串
+        :return: 年化收益率（float），若数据不足则返回 None
+        """
         interval_return = self.calculate_return_rate(time_interval)
         if interval_return is None:
             return None
@@ -88,8 +124,18 @@ class AccountAnalyzer:
             return 0
 
         return ((1 + interval_return) ** (365 / days)) - 1
-#计算波动率
+    
+
     def calculate_volatility(self, time_interval=None):
+        """
+        计算给定时间区间内的年化波动率。
+        
+        参数:
+        time_interval (str, 可选): 时间区间，如"1Y"代表一年。默认为None，使用整个数据集。
+        
+        返回:
+        float: 年化波动率。如果数据不足或计算错误，返回None。
+        """
         start_date, end_date = self._get_start_end_date(time_interval)
         if not start_date or not end_date:
             return None
@@ -103,12 +149,17 @@ class AccountAnalyzer:
         mean_return = sum(daily_returns) / len(daily_returns)
         variance = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns)
         daily_volatility = math.sqrt(variance)
-        
-        # 返回年化波动率
         annualized_volatility = daily_volatility * math.sqrt(252)
-        return annualized_volatility
-#计算夏普比率
+        return annualized_volatility#计算夏普比率
+    
     def calculate_sharpe_ratio(self, risk_free_rate=0.02, time_interval=None):
+        """
+        计算夏普比率：(年化收益率 - 无风险利率) / 波动率
+
+        :param risk_free_rate: 无风险利率，默认为 0.02（即 2%）
+        :param time_interval: 可选的时间区间字符串
+        :return: 夏普比率（float），若数据不足则返回 None
+        """
         annualized_return = self.calculate_annualized_return(time_interval)
         volatility = self.calculate_volatility(time_interval)
 
@@ -116,8 +167,15 @@ class AccountAnalyzer:
             return None
 
         return (annualized_return - risk_free_rate) / volatility
-#计算每日收益率
+
+
     def _calculate_daily_returns(self, daily_assets):
+        """
+        根据每日总资产数据，计算每日收益率（当前值 / 上一日值 - 1）
+
+        :param daily_assets: 字典，键为日期，值为总资产
+        :return: 列表，包含每日收益率
+        """
         dates = sorted(daily_assets.keys())
         returns = []
         for i in range(1, len(dates)):
@@ -125,8 +183,15 @@ class AccountAnalyzer:
             curr = daily_assets[dates[i]]
             returns.append((curr - prev) / prev)
         return returns
-#获取区间开始和结束日期
+
+
     def _get_start_end_date(self, time_interval):
+        """
+        根据时间区间字符串，计算起止日期。
+
+        :param time_interval: 时间区间字符串，如 '1y', '3m'
+        :return: (start_date, end_date)，若无效则返回 (None, None)
+        """
         if not self.daily_total_assets:
             return None, None
 
@@ -149,7 +214,7 @@ class AccountAnalyzer:
             start_date = end_date - interval_mapping[time_interval]
             if start_date < dates[0]:
                 return None, None
-            closest_start_date = max((d for d in dates if d < start_date), default=None) #区间的前一日作为基准
+            closest_start_date = max((d for d in dates if d < start_date), default=None)
             if closest_start_date is None:
                 return None, None
             start_date = closest_start_date
@@ -162,9 +227,16 @@ class AccountAnalyzer:
     #注意在初始化调用
     def _calculate_profit(self, trade_log):
         """
-        计算每笔交易的盈亏
-        :param trade_log: 原始交易记录列表
-        :return: 包含盈亏信息的交易记录列表
+        计算每笔交易的盈亏，并返回格式化的交易记录。
+
+        :param trade_log: 原始交易记录列表，每个元素为一个 Trade 对象
+        :return: 包含盈亏信息的交易记录列表，每个元素是一个字典，包含：
+                - symbol: 交易标的
+                - profit: 盈亏金额
+                - open_time: 开仓时间
+                - close_time: 平仓时间
+                - volume: 交易数量（绝对值）
+                - original_trade: 原始交易对象
         """
         positions = defaultdict(lambda: {'volume': 0, 'cost': 0, 'open_time': None, 'open_price': 0, 'open_fee': 0})
         processed_trades = []
@@ -172,31 +244,27 @@ class AccountAnalyzer:
         for trade in trade_log:
             symbol = trade.symbol
             volume = trade.volume
-            abs_volume = abs(volume)  # 新增：计算 volume 的绝对值
+            abs_volume = abs(volume)
             price = trade.price
             side = trade.side
             created_at = trade.created_at
             fee = trade.fee
+
             if side == 'buy':
-                # 买入操作，更新持仓信息，成本加上手续费
-                positions[symbol]['volume'] += abs_volume  # 使用绝对值更新持仓量
-                # 买入成本加上手续费
+                positions[symbol]['volume'] += abs_volume
                 positions[symbol]['cost'] += abs_volume * price + fee
                 if positions[symbol]['open_time'] is None:
                     positions[symbol]['open_time'] = created_at
                     positions[symbol]['open_price'] = price
-                    positions[symbol]['open_fee'] += fee  # 累加开仓手续费，确保为正数
+                    positions[symbol]['open_fee'] += fee
             elif side == 'sell':
-                # 卖出操作，计算盈亏
                 if positions[symbol]['volume'] == 0:
-                    continue  # 无持仓，跳过
+                    continue
 
-                sell_amount = abs_volume * price  # 使用绝对值计算卖出金额
-                # 按比例计算卖出部分的成本
+                sell_amount = abs_volume * price
                 cost = (abs_volume / positions[symbol]['volume']) * positions[symbol]['cost']
                 profit = sell_amount - cost - fee
 
-                # 按比例计算卖出部分对应的开仓手续费，确保为正数
                 open_fee_portion = (abs_volume / positions[symbol]['volume']) * positions[symbol]['open_fee']
 
                 processed_trades.append({
@@ -212,8 +280,7 @@ class AccountAnalyzer:
                     'original_trade': trade
                 })
 
-                # 更新持仓信息
-                positions[symbol]['volume'] -= abs_volume  # 使用绝对值减少持仓量
+                positions[symbol]['volume'] -= abs_volume
                 positions[symbol]['cost'] -= cost
                 positions[symbol]['open_fee'] -= open_fee_portion
 
