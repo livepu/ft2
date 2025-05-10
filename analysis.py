@@ -22,18 +22,24 @@ class AccountAnalyzer:
         self.account = account
         if account:
             # 从 account 实例初始化日度资产数据
-            self.daily_total_assets = self._compute_daily_total_assets(account.snapshots)
-            # 从 account.trade_log 中提取交易记录并计算每笔交易的盈亏，生成 self.trade_log
-            self.trade_log = self._calculate_profit(account.trade_log)
+            self._daily_total_assets = self._compute_daily_total_assets(account.snapshots)
+            # 从 account.trade_log 中提取交易记录并计算每笔交易的盈亏，生成 self._trade_profits。整理过的交易记录，分析盈亏用的
+            self._trade_profits = self._calculate_profit(account.trade_log) 
         elif external_daily_total_assets:
             # 使用外部提供的日度总资产数据初始化
-            self.daily_total_assets = external_daily_total_assets
-            self.trade_log = []  # 若无交易记录，则不分析交易数据
+            self._daily_total_assets = external_daily_total_assets
+            self._trade_profits = []  # 若无交易记录，则不分析交易数据
         else:
             # 如果没有传入任何数据，则初始化为空数据结构
-            self.daily_total_assets = {}
-            self.trade_log = []
+            self._daily_total_assets = {}
+            self._trade_profits = []
+    @property
+    def daily_total_assets(self):
+        return self._daily_total_assets.copy()  # 返回副本防止被修改
 
+    @property
+    def trade_profits(self):
+        return self._trade_profits.copy()  # 返回副本防止被修改
     def _compute_daily_total_assets(self, snapshots):
         """
         根据 AccountSnapshot 列表中的 created_at 时间戳，按天聚合获取每日最新的总资产。
@@ -52,7 +58,7 @@ class AccountAnalyzer:
         }
     # ========== 资产相关方法 ==========
     def get_daily_total_assets(self):
-        return self.daily_total_assets
+        return self._daily_total_assets
     
 
     def calculate_max_drawdown(self):
@@ -64,19 +70,19 @@ class AccountAnalyzer:
         :rtype: tuple(float, datetime.date, datetime.date)
         """
         # 如果每日总资产数据为空，则返回默认值
-        if not self.daily_total_assets:
+        if not self._daily_total_assets:
             return 0, None, None
 
         # 对每日总资产的日期进行排序
-        dates = sorted(self.daily_total_assets.keys())
+        dates = sorted(self._daily_total_assets.keys())
         # 初始化最大回撤为0，起始日期和结束日期为第一个日期
         max_drawdown = 0
-        peak_value = self.daily_total_assets[dates[0]]
+        peak_value = self._daily_total_assets[dates[0]]
         start_date = end_date = peak_date = dates[0]
 
         # 遍历所有日期计算最大回撤
         for date in dates:
-            current_value = self.daily_total_assets[date]
+            current_value = self._daily_total_assets[date]
             # 如果当前值大于峰值，则更新峰值及其日期
             if current_value > peak_value:
                 peak_value = current_value
@@ -102,8 +108,8 @@ class AccountAnalyzer:
         if not start_date or not end_date:
             return None
 
-        start_value = self.daily_total_assets[start_date]
-        end_value = self.daily_total_assets[end_date]
+        start_value = self._daily_total_assets[start_date]
+        end_value = self._daily_total_assets[end_date]
         return (end_value - start_value) / start_value
     
 
@@ -140,7 +146,7 @@ class AccountAnalyzer:
         if not start_date or not end_date:
             return None
 
-        interval_assets = {d: v for d, v in self.daily_total_assets.items() if start_date <= d <= end_date}
+        interval_assets = {d: v for d, v in self._daily_total_assets.items() if start_date <= d <= end_date}
         daily_returns = self._calculate_daily_returns(interval_assets)
 
         if not daily_returns:
@@ -192,10 +198,10 @@ class AccountAnalyzer:
         :param time_interval: 时间区间字符串，如 '1y', '3m'
         :return: (start_date, end_date)，若无效则返回 (None, None)
         """
-        if not self.daily_total_assets:
+        if not self._daily_total_assets:
             return None, None
 
-        dates = sorted(self.daily_total_assets.keys())
+        dates = sorted(self._daily_total_assets.keys())
         end_date = dates[-1]
 
         interval_mapping = {
@@ -293,36 +299,36 @@ class AccountAnalyzer:
     
     def get_largest_profit_trades(self, n):
         """获取盈利最大的 N 个交易"""
-        if not self.trade_log or n <= 0:
+        if not self._trade_profits or n <= 0:
             return []
         # 按盈利从大到小排序并取前 N 个
-        return sorted(self.trade_log, key=lambda t: t['profit'], reverse=True)[:n]
+        return sorted(self._trade_profits, key=lambda t: t['profit'], reverse=True)[:n]
 
     def get_largest_loss_trades(self, n):
         """获取亏损最大的 N 个交易"""
-        if not self.trade_log or n <= 0:
+        if not self._trade_profits or n <= 0:
             return []
         # 按盈利从小到大排序并取前 N 个
-        return sorted(self.trade_log, key=lambda t: t['profit'])[:n]
+        return sorted(self._trade_profits, key=lambda t: t['profit'])[:n]
 
     def calculate_average_holding_period(self):
         """计算平均持仓周期（天数）"""
-        if not self.trade_log:
+        if not self._trade_profits:
             return None
-        total_days = sum((t['close_time'] - t['open_time']).days for t in self.trade_log)
-        return total_days / len(self.trade_log)
+        total_days = sum((t['close_time'] - t['open_time']).days for t in self._trade_profits)
+        return total_days / len(self._trade_profits)
 
     def calculate_win_rate(self):
         """胜率：盈利交易占比"""
-        if not self.trade_log:
+        if not self._trade_profits:
             return None
-        wins = sum(1 for t in self.trade_log if t['profit'] > 0)
-        return wins / len(self.trade_log)
+        wins = sum(1 for t in self._trade_profits if t['profit'] > 0)
+        return wins / len(self._trade_profits)
 
     def calculate_avg_profit_loss_ratio(self):
         """平均盈亏比"""
-        profits = [t['profit'] for t in self.trade_log if t['profit'] > 0]
-        losses = [-t['profit'] for t in self.trade_log if t['profit'] < 0]
+        profits = [t['profit'] for t in self._trade_profits if t['profit'] > 0]
+        losses = [-t['profit'] for t in self._trade_profits if t['profit'] < 0]
 
         if not profits or not losses:
             return None
@@ -409,8 +415,8 @@ class AccountAnalyzer:
     def format_daily_assets(self):
 
         result = []
-        #print(self.daily_total_assets)
-        for date,assets in self.daily_total_assets.items(): #这里不是字典，而是对象
+        #print(self._daily_total_assets)
+        for date,assets in self._daily_total_assets.items(): #这里不是字典，而是对象
               # 时间格式化（如果是 pandas.Timestamp）
             if hasattr(date, 'strftime'):
                 date_str = date.strftime("%Y-%m-%d")
