@@ -429,22 +429,47 @@ class AccountAnalyzer:
             })
         return result
 
-    
+
     def to_html_report(self, report_name="回测报告", output_dir="."):
+        """
+        将回测结果生成HTML报告。
+
+        参数:
+        - report_name: str, 报告的名称，默认为"回测报告"。
+        - output_dir: str, 报告输出的目录，默认为当前目录"."。
+
+        返回值:
+        无直接返回值，但会生成HTML报告并保存到指定路径。
+        """
+        # 获取初始资金和最终资产值
         initial_cash = self.account.snapshots[0].cash if self.account.snapshots else 0
         final_assets = self.account.snapshots[-1].total_assets if self.account.snapshots else 0
+        # 计算累计收益率
         return_rate = self.calculate_return_rate() * 100
-        #年化收益
+        # 年化收益
         an_return_rate = self.calculate_annualized_return()*100
+        # 计算夏普比率
         sharpe_ratio = self.calculate_sharpe_ratio()
+        # 计算最大回撤及其时段
         max_drawdown, max_drawdown_start_date, max_drawdown_end_date = self.calculate_max_drawdown()
+        # 计算平均盈亏比
         avg_profit_loss_ratio = self.calculate_avg_profit_loss_ratio()
+        # 计算平均持仓时间
         avg_holding_period = self.calculate_average_holding_period()
 
         # 格式化最大回撤时段
         max_drawdown_period = f"{max_drawdown_start_date.strftime('%Y-%m-%d')} 至 {max_drawdown_end_date.strftime('%Y-%m-%d')}" if max_drawdown_start_date and max_drawdown_end_date else "N/A"
+        # 获取回测的日期范围
+        dates = sorted(self._daily_total_assets.keys())
+        start_date = dates[1] if dates else None
+        end_date = dates[-1] if dates else None
 
+        # 格式化回测区间
+        backtest_period = f"{start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}" if start_date and end_date else "N/A"
+
+        # 准备业绩指标数据
         metrics = [
+            {"name": "回测区间", "value": backtest_period},  # 新增的回测区间指标
             {"name": "初始资金", "value": f"{initial_cash:.2f}"},
             {"name": "最终资产", "value": f"{final_assets:.2f}"},
             {"name": "累计收益率", "value": f"{return_rate:.2f}%"},
@@ -456,15 +481,16 @@ class AccountAnalyzer:
             {"name": "平均持仓时间（天）", "value": f"{avg_holding_period:.2f}" if avg_holding_period is not None else "N/A"},
         ]
 
-
+        # 准备净值数据、最大盈利和亏损交易
         net_value_data = self.format_daily_assets()
         largest_profit_trades = self.get_largest_profit_trades(5)
         largest_loss_trades = self.get_largest_loss_trades(5)
 
-    
+        # 格式化交易日志和盈亏交易
         formatted_transaction_log=self.format_transaction_log(self.account.trade_log)
         formatted_profit_trades = [self.format_trade(trade) for trade in largest_profit_trades]
         formatted_loss_trades = [self.format_trade(trade) for trade in largest_loss_trades]
+        # 中文化翻译
         net_value_data_zh=self.translate_keys(net_value_data)
         formatted_transaction_log_zh=self.translate_keys(formatted_transaction_log)
 
@@ -503,6 +529,7 @@ class AccountAnalyzer:
         output_path = caller_dir / output_dir / f"{report_name}_{current_datetime}.html"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # 写入HTML报告
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_content)
         print(f"报告已生成至: {output_path}")
