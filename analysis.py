@@ -94,7 +94,8 @@ class AccountAnalyzer:
                 max_drawdown = drawdown
                 start_date = peak_date
                 end_date = date
-
+        if max_drawdown == 0:
+            return 0, None, None  # 明确无回撤情况
         # 返回最大回撤及其起始和结束日期
         return max_drawdown, start_date, end_date
     def calculate_return_rate(self, time_interval=None):
@@ -110,6 +111,8 @@ class AccountAnalyzer:
 
         start_value = self._daily_total_assets[start_date]
         end_value = self._daily_total_assets[end_date]
+        if start_value == 0:
+            raise ValueError("初始资产不能为零")
         return (end_value - start_value) / start_value
     
 
@@ -128,7 +131,8 @@ class AccountAnalyzer:
         days = (end_date - start_date).days
         if days == 0:
             return 0
-
+        if interval_return <= -1:  # 亏损超过100%，年化无意义
+            raise ValueError("亏损超过100%，无法计算年化收益率")
         return ((1 + interval_return) ** (365 / days)) - 1
     
 
@@ -149,13 +153,13 @@ class AccountAnalyzer:
         interval_assets = {d: v for d, v in self._daily_total_assets.items() if start_date <= d <= end_date}
         daily_returns = self._calculate_daily_returns(interval_assets)
 
-        if not daily_returns:
-            return None
-
+        if len(daily_returns) < 2:
+            raise ValueError("至少需要2个数据点计算波动率")
         mean_return = sum(daily_returns) / len(daily_returns)
         variance = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns)
         daily_volatility = math.sqrt(variance)
         annualized_volatility = daily_volatility * math.sqrt(252)
+
         return annualized_volatility#计算夏普比率
     
     def calculate_sharpe_ratio(self, risk_free_rate=0.02, time_interval=None):
@@ -248,6 +252,8 @@ class AccountAnalyzer:
         processed_trades = []
 
         for trade in trade_log:
+            if trade.volume == 0 or math.isnan(trade.price):
+                continue  # 跳过无效交易
             symbol = trade.symbol
             volume = trade.volume
             abs_volume = abs(volume)
