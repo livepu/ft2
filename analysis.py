@@ -331,17 +331,31 @@ class AccountAnalyzer:
         wins = sum(1 for t in self._trade_profits if t['profit'] > 0)
         return wins / len(self._trade_profits)
 
-    def calculate_avg_profit_loss_ratio(self):
-        """平均盈亏比"""
+    def calculate_avg_profit(self) -> float:
+        """
+        计算所有盈利交易的平均盈利（绝对金额）
+        :return: 平均盈利，若无盈利交易则返回 None
+        """
         profits = [t['profit'] for t in self._trade_profits if t['profit'] > 0]
-        losses = [-t['profit'] for t in self._trade_profits if t['profit'] < 0]
+        return sum(profits) / len(profits) if profits else None
 
-        if not profits or not losses:
+    def calculate_avg_loss(self) -> float:
+        """
+        计算所有亏损交易的平均亏损（绝对金额）
+        :return: 平均亏损，若无亏损交易则返回 None
+        """
+        losses = [t['profit'] for t in self._trade_profits if t['profit'] < 0]
+        return sum(losses) / len(losses) if losses else None
+    def calculate_avg_profit_loss_ratio(self) -> float:
+        """
+        计算平均盈亏比（平均盈利 / 平均亏损的绝对值）
+        :return: 盈亏比，若无盈利或亏损则返回 None
+        """
+        avg_profit = self.calculate_avg_profit()
+        avg_loss = self.calculate_avg_loss()
+        if avg_profit is None or avg_loss is None:
             return None
-
-        avg_profit = sum(profits) / len(profits)
-        avg_loss = sum(losses) / len(losses)
-        return avg_profit / avg_loss
+        return avg_profit / abs(avg_loss)  # 保证比值为正
     
     # ========== 新增类方法 ==========
     @staticmethod
@@ -458,6 +472,10 @@ class AccountAnalyzer:
         sharpe_ratio = self.calculate_sharpe_ratio()
         # 计算最大回撤及其时段
         max_drawdown, max_drawdown_start_date, max_drawdown_end_date = self.calculate_max_drawdown()
+        # 计算平均盈利和平均亏损
+        avg_profit = self.calculate_avg_profit()
+        avg_loss = self.calculate_avg_loss()
+
         # 计算平均盈亏比
         avg_profit_loss_ratio = self.calculate_avg_profit_loss_ratio()
         # 计算平均持仓时间
@@ -483,7 +501,12 @@ class AccountAnalyzer:
             {"name":"年化波动率", "value": f"{self.calculate_volatility()*100:.2f}%"},
             {"name": "夏普比率", "value": f"{sharpe_ratio:.2f}"},
             {"name": "最大回撤", "value": f"{max_drawdown * 100:.2f}%，时段：{max_drawdown_period}"},
-            {"name": "平均盈亏比", "value": f"{avg_profit_loss_ratio:.2f}" if avg_profit_loss_ratio is not None else "N/A"},
+            {
+                "name": "平均盈亏比",
+                "value": f"{avg_profit_loss_ratio:.2f}（平均盈利{avg_profit * 100:.2f}%，平均亏损{abs(avg_loss) * 100:.2f}%）" 
+                        if avg_profit_loss_ratio is not None and avg_profit is not None and avg_loss is not None 
+                        else "N/A"
+            },
             {"name": "平均持仓时间（天）", "value": f"{avg_holding_period:.2f}" if avg_holding_period is not None else "N/A"},
         ]
 
