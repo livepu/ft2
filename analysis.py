@@ -449,7 +449,7 @@ class AccountAnalyzer:
             {"name": "最终资产", "value": f"{final_assets:.2f}"},
             {"name": "累计收益率", "value": f"{return_rate:.2f}%"},
             {"name": "年化收益率", "value": f"{an_return_rate:.2f}%"},
-            {"name":"波动率", "value": f"{self.calculate_volatility():.2f}"},
+            {"name":"年化波动率", "value": f"{self.calculate_volatility()*100:.2f}%"},
             {"name": "夏普比率", "value": f"{sharpe_ratio:.2f}"},
             {"name": "最大回撤", "value": f"{max_drawdown * 100:.2f}%，时段：{max_drawdown_period}"},
             {"name": "平均盈亏比", "value": f"{avg_profit_loss_ratio:.2f}" if avg_profit_loss_ratio is not None else "N/A"},
