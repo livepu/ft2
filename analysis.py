@@ -44,7 +44,8 @@ class AccountAnalyzer:
     # ========== 资产相关方法 ==========
     def get_daily_total_assets(self):
         return self.daily_total_assets
-
+    
+#计算最大回测
     def calculate_max_drawdown(self):
         if not self.daily_total_assets:
             return 0, None, None
@@ -66,7 +67,7 @@ class AccountAnalyzer:
                 end_date = date
 
         return max_drawdown, start_date, end_date
-
+#计算区间收益率
     def calculate_return_rate(self, time_interval=None):
         start_date, end_date = self._get_start_end_date(time_interval)
         if not start_date or not end_date:
@@ -75,7 +76,7 @@ class AccountAnalyzer:
         start_value = self.daily_total_assets[start_date]
         end_value = self.daily_total_assets[end_date]
         return (end_value - start_value) / start_value
-
+#计算年化收益率
     def calculate_annualized_return(self, time_interval=None):
         interval_return = self.calculate_return_rate(time_interval)
         if interval_return is None:
@@ -87,7 +88,7 @@ class AccountAnalyzer:
             return 0
 
         return ((1 + interval_return) ** (365 / days)) - 1
-
+#计算波动率
     def calculate_volatility(self, time_interval=None):
         start_date, end_date = self._get_start_end_date(time_interval)
         if not start_date or not end_date:
@@ -101,9 +102,12 @@ class AccountAnalyzer:
 
         mean_return = sum(daily_returns) / len(daily_returns)
         variance = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns)
-        volatility = math.sqrt(variance)
-        return volatility
-
+        daily_volatility = math.sqrt(variance)
+        
+        # 返回年化波动率
+        annualized_volatility = daily_volatility * math.sqrt(252)
+        return annualized_volatility
+#计算夏普比率
     def calculate_sharpe_ratio(self, risk_free_rate=0.02, time_interval=None):
         annualized_return = self.calculate_annualized_return(time_interval)
         volatility = self.calculate_volatility(time_interval)
@@ -112,7 +116,7 @@ class AccountAnalyzer:
             return None
 
         return (annualized_return - risk_free_rate) / volatility
-
+#计算每日收益率
     def _calculate_daily_returns(self, daily_assets):
         dates = sorted(daily_assets.keys())
         returns = []
@@ -121,7 +125,7 @@ class AccountAnalyzer:
             curr = daily_assets[dates[i]]
             returns.append((curr - prev) / prev)
         return returns
-
+#获取区间开始和结束日期
     def _get_start_end_date(self, time_interval):
         if not self.daily_total_assets:
             return None, None
@@ -357,6 +361,8 @@ class AccountAnalyzer:
         initial_cash = self.account.snapshots[0].cash if self.account.snapshots else 0
         final_assets = self.account.snapshots[-1].total_assets if self.account.snapshots else 0
         return_rate = self.calculate_return_rate() * 100
+        #年化收益
+        an_return_rate = self.calculate_annualized_return()*100
         sharpe_ratio = self.calculate_sharpe_ratio()
         max_drawdown, max_drawdown_start_date, max_drawdown_end_date = self.calculate_max_drawdown()
         avg_profit_loss_ratio = self.calculate_avg_profit_loss_ratio()
@@ -369,6 +375,8 @@ class AccountAnalyzer:
             {"name": "初始资金", "value": f"{initial_cash:.2f}"},
             {"name": "最终资产", "value": f"{final_assets:.2f}"},
             {"name": "累计收益率", "value": f"{return_rate:.2f}%"},
+            {"name": "年化收益率", "value": f"{an_return_rate:.2f}%"},
+            {"name":"波动率", "value": f"{self.calculate_volatility():.2f}"},
             {"name": "夏普比率", "value": f"{sharpe_ratio:.2f}"},
             {"name": "最大回撤", "value": f"{max_drawdown * 100:.2f}%，时段：{max_drawdown_period}"},
             {"name": "平均盈亏比", "value": f"{avg_profit_loss_ratio:.2f}" if avg_profit_loss_ratio is not None else "N/A"},
