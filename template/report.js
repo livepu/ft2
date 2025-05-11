@@ -3,8 +3,11 @@ class AssetAnalyzer {
         this.assetsData = assetsData;
         this.processData();
     }
-
-
+    
+    addbenchmark(benchmarkData) {
+        //添加基准数据，格式和assetsData相同，日期会比assetsData多
+        this.benchmarkData = benchmarkData;
+    }
     processData() {
         // 确保数据按日期排序
         this.assetsData.sort((a, b) => new Date(a.日期) - new Date(b.日期));
@@ -26,7 +29,15 @@ class AssetAnalyzer {
     getCumulativeReturnSeries() {
         return this.dates.map((date, index) => ({
             日期: date,
-            累计收益: parseFloat(this.cumulativeReturns[index])
+            策略收益: parseFloat(this.cumulativeReturns[index])
+        }));
+    }
+
+    // 获取回撤曲线数据
+    getDrawdownSeries() {
+        return this.dates.map((date, index) => ({
+            日期: date,
+            策略回撤: this.drawdowns[index]
         }));
     }
 
@@ -114,20 +125,6 @@ class AssetAnalyzer {
     }
 
 
-    // 获取回撤曲线数据
-    getDrawdownSeries() {
-        return this.dates.map((date, index) => ({
-            日期: date,
-            回撤: this.drawdowns[index]
-        }));
-    }
 
-    // 获取峰值曲线数据
-    getPeakSeries() {
-        return this.dates.map((date, index) => ({
-            日期: date,
-            峰值: this.peakValues[index]
-        }));
-    }
 
 }
