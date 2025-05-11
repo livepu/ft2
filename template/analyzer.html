@@ -232,12 +232,16 @@
 
                 keys.forEach(key => {
                     const isDrawdown = key.includes('回撤');
+                    const isSg=key.includes('策略');
+                    const isBech=key.includes('基准');
                     const seriesConfig = {
                         name: key,
                         type: 'line',
                         data: ecdatas.map(item => item[key]),
                         smooth: true,
-                        symbol: 'none'
+                        symbol: 'none',
+                        // 新增颜色配置
+                        color: isSg ? '#c23531' : (isBech ? '#61a0a8' : '#2f4554') // 策略红色，基准浅蓝，默认深蓝
                     };
 
                     if (isDrawdown) {
@@ -253,14 +257,33 @@
 
                 const option = {
                     tooltip: { trigger: 'axis' },
-                    legend: { data: [...returnSeries, ...drawdownSeries].map(s => s.name) },
+                    legend: [
+                        { 
+                            data: returnSeries.map(s => s.name),
+
+                        },
+                        {
+                            data: drawdownSeries.map(s => s.name),
+                            top: '70%',  // 下方图例位置
+                        }
+                    ],
                     grid: [
-                        { left: '10%', right: '10%', height: '45%', top: '10%' },
-                        { left: '10%', right: '10%', height: '45%', top: '55%' }
+                        {
+                            left: '5%',
+                            right: '5%',
+                            height: '60%',  // 上方图表高度调整为60%
+                            top: '5%'
+                        },
+                        {
+                            left: '5%',
+                            right: '5%',
+                            height: '15%',  
+                            top: '75%'      
+                        }
                     ],
                     xAxis: [
                         { type: 'category', data: dates, gridIndex: 0 },
-                        { type: 'category', data: dates, gridIndex: 1, show: false }
+                        { type: 'category', data: dates, gridIndex: 1, show: false,position:'top' }
                     ],
                     yAxis: [
                         { 
@@ -273,12 +296,14 @@
                             type: 'value', 
                             gridIndex: 1, 
                             name: '回撤率(%)',
-                            inverse: true,
-                            axisLabel: { formatter: '{value}%' }
+                              
+                            axisLabel: { formatter: '{value}%' },
+                            splitNumber: 3  // 新增：设置分割段数
                         }
                     ],
                     series: [...returnSeries, ...drawdownSeries]
                 };
+
 
                 chart.setOption(option);
                 // 监听窗口大小变化事件
