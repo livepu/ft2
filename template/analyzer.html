@@ -155,29 +155,14 @@
             transactionData = [];
         }
 
+        // 初始化分析器
+        const analyzer = new AssetAnalyzer(assetsData,transactionData);
         // 最大盈利交易数据（带类型校验）
-        let largestProfitTrades = [];
-        try {
-            largestProfitTrades = {{ largest_profit_trades | safe }};
-            if (!Array.isArray(largestProfitTrades)) {
-                throw new Error('最大盈利交易数据非数组类型');
-            }
-        } catch (e) {
-            document.write(`<div class="error-container">最大盈利交易数据加载失败：${e.message}</div>`);
-            largestProfitTrades = [];
-        }
+        let largestProfitTrades = analyzer.get_largest_profit_trades(5);
 
         // 最大亏损交易数据（带类型校验）
-        let largestLossTrades = [];
-        try {
-            largestLossTrades = {{ largest_loss_trades | safe }};
-            if (!Array.isArray(largestLossTrades)) {
-                throw new Error('最大亏损交易数据非数组类型');
-            }
-        } catch (e) {
-            document.write(`<div class="error-container">最大亏损交易数据加载失败：${e.message}</div>`);
-            largestLossTrades = [];
-        }
+        let largestLossTrades = analyzer.get_largest_loss_trades(5);
+
     </script>
 
     <script>
@@ -202,8 +187,7 @@
                 const series = [];
                 const legendData = [];
 
-                // 初始化分析器
-                const analyzer = new AssetAnalyzer(assetsData);
+
                 // 获取关键指标数据并渲染表格
                 const metricsData = analyzer.getMetrics();
                 renderMetricsTable(metricsData);
