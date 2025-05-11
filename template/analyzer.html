@@ -222,43 +222,62 @@
                 const analyzer = new AssetAnalyzer(assetsData);
                 
                 // 获取累计收益率数据
-                const ecdatas = analyzer.getCumulativeReturnSeries();
-
+                const ecdatas = analyzer.getEchartsData();
+                console.log(ecdatas);//测试用
                 // 获取除日期字段外的所有字段
                 const keys = Object.keys(ecdatas[0]).filter(key => key !== firstKey);
+                // 构建系列数据和坐标系配置
+                const returnSeries = [];
+                const drawdownSeries = [];
 
-                // 构建系列数据
                 keys.forEach(key => {
-                    const data = ecdatas.map(item => item[key]);
-                    series.push({
+                    const isDrawdown = key.includes('回撤');
+                    const seriesConfig = {
                         name: key,
                         type: 'line',
-                        data: data,
-                        smooth: true
-                    });
-                    legendData.push(key);
+                        data: ecdatas.map(item => item[key]),
+                        smooth: true,
+                        symbol: 'none'
+                    };
+
+                    if (isDrawdown) {
+                        seriesConfig.xAxisIndex = 1;
+                        seriesConfig.yAxisIndex = 1;
+                        drawdownSeries.push(seriesConfig);
+                    } else {
+                        seriesConfig.xAxisIndex = 0;
+                        seriesConfig.yAxisIndex = 0;
+                        returnSeries.push(seriesConfig);
+                    }
                 });
 
-                // 计算最小最大值（用于 Y 轴）
-                const allValues = series.flatMap(s => s.data);
-                const minValue = Math.min(...allValues);
-                const maxValue = Math.max(...allValues);
-                const buffer = (maxValue - minValue) * 0.05;
-
                 const option = {
-                    //title: { text: '业绩曲线' },
                     tooltip: { trigger: 'axis' },
-                    legend: { data: legendData },
-                    xAxis: {
-                        type: 'category',
-                        data: dates
-                    },
-                    yAxis: {
-                        type: 'value',
-                        min: parseFloat((minValue - buffer).toFixed(2)), // 最多保留 2 位小数
-                        max: parseFloat((maxValue + buffer).toFixed(2))  // 最多保留 2 位小数
-                    },
-                    series: series
+                    legend: { data: [...returnSeries, ...drawdownSeries].map(s => s.name) },
+                    grid: [
+                        { left: '10%', right: '10%', height: '45%', top: '10%' },
+                        { left: '10%', right: '10%', height: '45%', top: '55%' }
+                    ],
+                    xAxis: [
+                        { type: 'category', data: dates, gridIndex: 0 },
+                        { type: 'category', data: dates, gridIndex: 1, show: false }
+                    ],
+                    yAxis: [
+                        { 
+                            type: 'value', 
+                            gridIndex: 0, 
+                            name: '收益率(%)',
+                            axisLabel: { formatter: '{value}%' }
+                        },
+                        { 
+                            type: 'value', 
+                            gridIndex: 1, 
+                            name: '回撤率(%)',
+                            inverse: true,
+                            axisLabel: { formatter: '{value}%' }
+                        }
+                    ],
+                    series: [...returnSeries, ...drawdownSeries]
                 };
 
                 chart.setOption(option);

@@ -71,7 +71,7 @@ class AssetAnalyzer {
         }
     }
 
-    getEcahartsData() {
+    getEchartsData() {
         //获取echarts数据
         const result = this.dates.map((date, index) => ({
             日期: date,
