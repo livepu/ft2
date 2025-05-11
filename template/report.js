@@ -1,24 +1,41 @@
 class AssetAnalyzer {
-    constructor(netValueData) {
-        this.netValueData = netValueData;
+    constructor(assetsData) {
+        this.assetsData = assetsData;
         this.processData();
     }
 
+
     processData() {
         // 确保数据按日期排序
-        this.netValueData.sort((a, b) => new Date(a.日期) - new Date(b.日期));
+        this.assetsData.sort((a, b) => new Date(a.日期) - new Date(b.日期));
         
-        this.dates = this.netValueData.map(item => new Date(item.日期));
-        this.assets = this.netValueData.map(item => item.资产);
+        this.dates = this.assetsData.map(item => new Date(item.日期));
+        this.assets = this.assetsData.map(item => item.资产);
+        
+        // 计算累计收益率数组（百分比形式）
+        this.cumulativeReturns = [];
+        if (this.assets.length > 0) {
+            const initial = this.assets[0];
+            this.cumulativeReturns = this.assets.map(asset => 
+                ((asset - initial) / initial * 100).toFixed(2)
+            );
+        }
     }
 
-    // 获取时间区间（与Python一致）
+    // 新增：获取累计收益率数据（用于ECharts）
+    getCumulativeReturnSeries() {
+        return this.dates.map((date, index) => ({
+            日期: date,
+            累计收益: parseFloat(this.cumulativeReturns[index])
+        }));
+    }
+
+    // 获取时间区间（与Python一致，考虑交易日历）
     _get_start_end_date(time_interval) {
         if (!time_interval) {
             return [this.dates[0], this.dates[this.dates.length-1]];
         }
         
-        // 实现与Python相同的时间区间逻辑
         const endDate = this.dates[this.dates.length-1];
         let startDate = new Date(endDate);
         
@@ -28,7 +45,18 @@ class AssetAnalyzer {
             startDate.setMonth(startDate.getMonth() - parseInt(time_interval));
         }
         
-        // 确保开始日期不小于最早日期
+        // 找到第一个大于等于计算日期的交易日
+        const findNearestTradeDate = (targetDate) => {
+            for (let i = 0; i < this.dates.length; i++) {
+                if (this.dates[i] >= targetDate) {
+                    return this.dates[i];
+                }
+            }
+            return this.dates[this.dates.length-1];
+        };
+        
+        // 确保开始日期是交易日且不小于最早日期
+        startDate = findNearestTradeDate(startDate);
         startDate = startDate < this.dates[0] ? this.dates[0] : startDate;
         return [startDate, endDate];
     }

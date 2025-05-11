@@ -543,7 +543,7 @@ class AccountAnalyzer:
         ]
 
         # 准备净值数据、最大盈利和亏损交易
-        net_value_data = self.format_daily_assets()
+        assets_data = self.format_daily_assets()
         largest_profit_trades = self.get_largest_profit_trades(5)
         largest_loss_trades = self.get_largest_loss_trades(5)
 
@@ -552,11 +552,11 @@ class AccountAnalyzer:
         formatted_profit_trades = [self.format_trade(trade) for trade in largest_profit_trades]
         formatted_loss_trades = [self.format_trade(trade) for trade in largest_loss_trades]
         # 中文化翻译
-        net_value_data_zh=self.translate_keys(net_value_data)
+        assets_data_zh=self.translate_keys(assets_data)
         formatted_transaction_log_zh=self.translate_keys(formatted_transaction_log)
 
         # 使用 json.dumps 处理数据，自动换行
-        net_value_data_json = json.dumps(net_value_data_zh, indent=4, ensure_ascii=False)
+        assets_data_json = json.dumps(assets_data_zh, indent=4, ensure_ascii=False)
         formatted_transaction_log_json = json.dumps(formatted_transaction_log_zh, indent=4, ensure_ascii=False)
         formatted_profit_trades_json = json.dumps(formatted_profit_trades, indent=4, ensure_ascii=False)
         formatted_loss_trades_json = json.dumps(formatted_loss_trades, indent=4, ensure_ascii=False)
@@ -567,12 +567,12 @@ class AccountAnalyzer:
 
         # 输出部分
         env = Environment(loader=FileSystemLoader(template_dir))
-        template = env.get_template("nav_tradelog.html")
+        template = env.get_template("analyzer.html")
 
         html_content = template.render(
             report_name=report_name,
             metrics=metrics,
-            net_value_data=net_value_data_json,
+            assets_data=assets_data_json,
             transaction_data=formatted_transaction_log_json,
             largest_profit_trades=formatted_profit_trades_json,
             largest_loss_trades=formatted_loss_trades_json

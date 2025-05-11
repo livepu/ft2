@@ -145,17 +145,17 @@
     <!-- 安全数据注入 -->
     <script>
         // 净值数据（带多层保护）
-        let netValueData = [];
+        let assetsData = [];
         try {
             // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
-            netValueData = {{ net_value_data | safe }};
-        if (!Array.isArray(netValueData)) {
-            console.warn('净值数据格式异常，自动重置为空数组');
-            netValueData = [];
+            assetsData = {{ assets_data | safe }};
+        if (!Array.isArray(assetsData)) {
+            console.warn('总资产数据格式异常，自动重置为空数组');
+            assetsData = [];
         }
         } catch (e) {
-            console.error('净值数据解析失败:', e);
-            netValueData = [];
+            console.error('总资产数据解析失败:', e);
+            assetsData = [];
         }
 
         // 交易数据（带类型校验）
@@ -201,29 +201,35 @@
             const container = document.getElementById('chartContainer');
 
             try {
-                if (!netValueData ||
-                 !Array.isArray(netValueData) || 
-                 netValueData.length === 0) {
-                    throw new Error('净值数据不完整或格式错误');
+                if (!assetsData ||
+                 !Array.isArray(assetsData) || 
+                 assetsData.length === 0) {
+                    throw new Error('数据不完整或格式错误');
                 }
 
                 const chart = echarts.init(container);
 
                 // 动态获取第一个字段作为日期字段
-                const firstKey = Object.keys(netValueData[0])[0];
+                const firstKey = Object.keys(assetsData[0])[0];
 
                 // 提取日期字段对应的值
-                const dates = netValueData.map(item => item[firstKey]);
+                const dates = assetsData.map(item => item[firstKey]);
 
                 const series = [];
                 const legendData = [];
 
+                // 初始化分析器
+                const analyzer = new AssetAnalyzer(assetsData);
+                
+                // 获取累计收益率数据
+                const ecdatas = analyzer.getCumulativeReturnSeries();
+
                 // 获取除日期字段外的所有字段
-                const keys = Object.keys(netValueData[0]).filter(key => key !== firstKey);
+                const keys = Object.keys(ecdatas[0]).filter(key => key !== firstKey);
 
                 // 构建系列数据
                 keys.forEach(key => {
-                    const data = netValueData.map(item => item[key]);
+                    const data = ecdatas.map(item => item[key]);
                     series.push({
                         name: key,
                         type: 'line',
@@ -264,11 +270,12 @@
                 });
             } catch (e) {
                 container.innerHTML = `
-        <div class="error-container">
-            <h3>图表渲染失败</h3>
-            <p>错误原因：${e.message}</p>
-            <p>建议检查数据格式是否符合要求</p>
-        </div>`;
+                <div class="error-container" style="user-select: text;">
+                    <h3>图表渲染失败</h3>
+                    <p>错误原因：${e.message}</p>
+                    <p>建议检查数据格式是否符合要求</p>
+                </div>`;
+                console.error('图表渲染错误:', e);
             }
         })();
         // 表格初始化（带安全隔离）
