@@ -11,7 +11,7 @@
     <!-- 使用 UNPKG 源引入 echarts -->
     <script src="https://unpkg.com/echarts@5.4.3/dist/echarts.min.js"></script>
 
-    <script src="https://rp.make2.top/report.js"></script> 
+    <script src="https://rp.make2.top/report.js" charset="UTF-8"></script>
     
     <style>
         body {
@@ -82,6 +82,7 @@
         .layui-table-page .layui-laypage span {
             margin: 0 3px;
         }
+
     </style>
 </head>
 
@@ -101,16 +102,7 @@
         <div class="report-container">
 
             <h3>关键指标</h3>
-            <table class="layui-table">
-                <tbody>
-                    {% for metric in metrics %}
-                    <tr>
-                        <td>{{ metric.name }}</td>
-                        <td>{{ metric.value }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <table id="metricsTable" lay-filter="metricsTable"></table>
         </div>
         <!-- 交易表格容器 -->
         <div class="report-container">
@@ -212,7 +204,10 @@
 
                 // 初始化分析器
                 const analyzer = new AssetAnalyzer(assetsData);
-                
+                // 获取关键指标数据并渲染表格
+                const metricsData = analyzer.getMetrics();
+                renderMetricsTable(metricsData);
+
                 // 获取累计收益率数据
                 const ecdatas = analyzer.getEchartsData();
                 console.log(ecdatas);//测试用
