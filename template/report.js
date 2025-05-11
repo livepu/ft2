@@ -34,7 +34,7 @@ class AssetAnalyzer {
         let peak = this.assets[0];
         for (let i = 0; i < this.assets.length; i++) {
             if (this.assets[i] > peak) peak = this.assets[i];
-            this.strategyDrawdowns.push(((peak - this.assets[i]) / peak * 100).toFixed(2));
+            this.strategyDrawdowns.push(((this.assets[i] - peak) / peak * 100).toFixed(2));
         }
 
         // 4. 处理基准数据（如果存在）
@@ -66,7 +66,7 @@ class AssetAnalyzer {
             let benchmarkPeak = this.benchmark[0];
             for (let i = 0; i < this.benchmark.length; i++) {
                 if (this.benchmark[i] > benchmarkPeak) benchmarkPeak = this.benchmark[i];
-                this.benchmarkDrawdowns.push(((benchmarkPeak - this.benchmark[i]) / benchmarkPeak * 100).toFixed(2));
+                this.benchmarkDrawdowns.push(((this.benchmark[i] - benchmarkPeak) / benchmarkPeak * 100).toFixed(2));
             }
         }
     }
