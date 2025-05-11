@@ -1,45 +1,97 @@
+//js版本的分析类，最重要的是处理echarts的数据，涉及基准；
+// 其他夏普之类的数据，按照输出形式格式需要。因为这里直接html的结果。
 class AssetAnalyzer {
     constructor(assetsData) {
         this.assetsData = assetsData;
+        this.benchmarkData = null; // 明确初始化为null
         this.processData();
     }
-    
+
+
     addbenchmark(benchmarkData) {
-        //添加基准数据，格式和assetsData相同，日期会比assetsData多
+        // 添加基准数据，格式和assetsData相同，日期会比assetsData多
         this.benchmarkData = benchmarkData;
+        this.processData(); // 重新处理数据
     }
+
     processData() {
-        // 确保数据按日期排序
+        // 1. 处理资产数据
         this.assetsData.sort((a, b) => new Date(a.日期) - new Date(b.日期));
-        
         this.dates = this.assetsData.map(item => new Date(item.日期));
         this.assets = this.assetsData.map(item => item.资产);
-        
-        // 计算累计收益率数组（百分比形式）
-        this.cumulativeReturns = [];
+
+        // 2. 计算策略累计收益率（百分比）
+        this.strategyReturns = [];
         if (this.assets.length > 0) {
             const initial = this.assets[0];
-            this.cumulativeReturns = this.assets.map(asset => 
+            this.strategyReturns = this.assets.map(asset => 
                 ((asset - initial) / initial * 100).toFixed(2)
             );
         }
+
+        // 3. 计算策略回撤（百分比）
+        this.strategyDrawdowns = [];
+        let peak = this.assets[0];
+        for (let i = 0; i < this.assets.length; i++) {
+            if (this.assets[i] > peak) peak = this.assets[i];
+            this.strategyDrawdowns.push(((peak - this.assets[i]) / peak * 100).toFixed(2));
+        }
+
+        // 4. 处理基准数据（如果存在）
+        if (this.benchmarkData) {
+            this.benchmarkData.sort((a, b) => new Date(a.日期) - new Date(b.日期));
+            
+            // 对齐基准数据到资产数据日期范围
+            const startDate = this.dates[0];
+            const endDate = this.dates[this.dates.length-1];
+            
+            this.benchmark = this.benchmarkData
+                .filter(item => {
+                    const date = new Date(item.日期);
+                    return date >= startDate && date <= endDate;
+                })
+                .map(item => item.基准);
+                
+            // 5. 计算基准累计收益率（百分比）
+            this.benchmarkReturns = [];
+            if (this.benchmark.length > 0) {
+                const initial = this.benchmark[0];
+                this.benchmarkReturns = this.benchmark.map(b => 
+                    ((b - initial) / initial * 100).toFixed(2)
+                );
+            }
+
+            // 6. 计算基准回撤（百分比）
+            this.benchmarkDrawdowns = [];
+            let benchmarkPeak = this.benchmark[0];
+            for (let i = 0; i < this.benchmark.length; i++) {
+                if (this.benchmark[i] > benchmarkPeak) benchmarkPeak = this.benchmark[i];
+                this.benchmarkDrawdowns.push(((benchmarkPeak - this.benchmark[i]) / benchmarkPeak * 100).toFixed(2));
+            }
+        }
     }
 
-    // 新增：获取累计收益率数据（用于ECharts）
-    getCumulativeReturnSeries() {
-        return this.dates.map((date, index) => ({
+    getEcahartsData() {
+        //获取echarts数据
+        const result = this.dates.map((date, index) => ({
             日期: date,
-            策略收益: parseFloat(this.cumulativeReturns[index])
+            策略收益: parseFloat(this.strategyReturns[index]),
+            策略回撤: parseFloat(this.strategyDrawdowns[index]),
         }));
+
+        // 如果有基准数据，添加基准收益和回撤
+        if (this.benchmark && this.benchmark.length > 0) {
+            this.dates.forEach((date, index) => {
+                result[index].基准收益 = parseFloat(this.benchmarkReturns[index]);
+                result[index].基准回撤 = parseFloat(this.benchmarkDrawdowns[index]);
+            });
+        }
+
+        return result;
     }
 
-    // 获取回撤曲线数据
-    getDrawdownSeries() {
-        return this.dates.map((date, index) => ({
-            日期: date,
-            策略回撤: this.drawdowns[index]
-        }));
-    }
+
+
 
     // 获取时间区间（与Python一致，考虑交易日历）
     _get_start_end_date(time_interval) {
