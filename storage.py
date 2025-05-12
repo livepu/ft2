@@ -56,7 +56,7 @@ class Context:
 
     
     #这里和掘金的不同，返回dict。可以自行转换
-    def data(self, symbol: str, frequency: str, count: int = 1, fields: List[str] = None):
+    def data(self, symbol: str, frequency: str, count: int = 1, fields: List[str] = None,format="row"):
         """
         获取数据滑窗（仅返回当前时间点之前的数据）
         :param symbol: 标的代码
@@ -73,6 +73,10 @@ class Context:
             
         # 获取原始数据
         raw_data = self._cache.get_data(symbol, frequency, count,fields)
+        # 如果要求 DataFrame 并且数据不为空
+        if format == "pd" and raw_data:
+            return pd.DataFrame(raw_data)
+        
         return raw_data
 
     
