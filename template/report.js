@@ -293,7 +293,7 @@ class AssetAnalyzer {
     // 计算平均持仓周期（交易日）
     calculate_average_holding_period() {
         if (!this._trade_profits || this._trade_profits.length === 0) {
-            return "0.00";
+            return 0;
         }
         
         let totalDays = 0;
@@ -314,7 +314,7 @@ class AssetAnalyzer {
         
         // 确保计算结果有效
         const avgDays = totalDays / this._trade_profits.length;
-        return isNaN(avgDays) ? "0.00" : avgDays;
+        return isNaN(avgDays) ? 0 : avgDays;
     }
 
 
