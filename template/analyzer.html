@@ -30,7 +30,7 @@
         .report-container {
             background-color: #fff;
             margin-bottom: 10px;
-            padding: 20px;
+            padding: 10px 20px;
             border-radius: 8px;
             box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
         }
@@ -49,10 +49,10 @@
         /* 美化小标题，使用股市相关红色 */
         .container h3 {
             color: #e64340; /* 类似股市上涨的红色 */
-            font-size: 24px;
+            font-size: 18px;
             margin-top: 0;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 5px;
             border-bottom: 2px solid #e64340; /* 类似股市上涨的红色下划线 */
         }
 
@@ -83,6 +83,20 @@
             margin: 0 3px;
         }
 
+
+
+.collapse-content {
+    display: none;
+}
+
+.collapse-content.active {
+    display: block;
+}
+/* 添加h3悬停样式 */
+.collapse-title h3 {
+    cursor: pointer;
+}
+
     </style>
 </head>
 
@@ -92,36 +106,53 @@
         <strong>{{report_name}}</strong>
         </div>
 
-
         <!-- 图表容器 -->
         <div class="report-container">
             <h3>业绩表现</h3>
             <div id="chartContainer" style="width:100%;height:600px"></div>
         </div>
-        <!-- 关键指标 -->
-        <div class="report-container">
+<div class="report-container">
+    <div class="collapse-title" onclick="toggleCollapse(this)">
+        <h3>关键指标</h3>
+  
+    </div>
+    <div class="collapse-content">
+        <table id="metricsTable" lay-filter="metricsTable"></table>
+    </div>
+</div>
 
-            <h3>关键指标</h3>
-            <table id="metricsTable" lay-filter="metricsTable"></table>
-        </div>
-        <!-- 交易表格容器 -->
-        <div class="report-container">
-            <h3>交易记录</h3>
-            <table id="transactionTable" lay-filter="transactionTable"></table>
-        </div>
+<!-- 修改交易记录部分 --> 
+<div class="report-container">
+    <div class="collapse-title" onclick="toggleCollapse(this)">
+        <h3>交易记录</h3>
 
+    </div>
+    <div class="collapse-content">
+        <table id="transactionTable" lay-filter="transactionTable"></table>
+    </div>
+</div>
 
-        <!-- 最大盈利交易 -->
-        <div class="report-container">
-            <h3>最大盈利的 5 笔交易</h3>
-            <div id="profitTable"></div>
-        </div>
+<!-- 修改最大盈利交易部分 -->
+<div class="report-container">
+    <div class="collapse-title" onclick="toggleCollapse(this)">
+        <h3>最大盈利的 5 笔交易</h3>
+  
+    </div>
+    <div class="collapse-content">
+        <div id="profitTable"></div>
+    </div>
+</div>
 
-        <!-- 最大亏损交易 -->
-        <div class="report-container">
-            <h3>最大亏损的 5 笔交易</h3>
-            <div id="lossTable"></div>
-        </div>
+<!-- 修改最大亏损交易部分 -->
+<div class="report-container">
+    <div class="collapse-title" onclick="toggleCollapse(this)">
+        <h3>最大亏损的 5 笔交易</h3>
+  
+    </div>
+    <div class="collapse-content">
+        <div id="lossTable"></div>
+    </div>
+</div>
 
     </div>
 
@@ -373,6 +404,27 @@
             }
         });
     </script>
+<script>
+// 修改初始化代码 - 展开所有折叠内容
+document.querySelectorAll('.collapse-content').forEach(content => {
+    content.classList.add('active');
+});
+
+function toggleCollapse(element) {
+    const content = element.nextElementSibling;
+    
+    content.classList.toggle('active');
+    
+    // 如果是表格内容，可能需要重新渲染
+    if (content.querySelector('table')) {
+        setTimeout(() => {
+            const table = layui.table;
+            table.resize('metricsTable');
+            table.resize('transactionTable');
+        }, 300);
+    }
+}
+</script>
 </body>
 
 </html>
