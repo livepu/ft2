@@ -20,7 +20,13 @@ class Context:
 
         self._timeline = {}  # 按频率存储时间轴 {'1d': [datetime...]}
 
-        
+    def is_backtest_model(self):
+        return self.mode == 'backtest'
+
+    @property 
+    def now(self):
+        return self._current_time if self.mode == 'backtest' else datetime.datetime.now()
+    
     def subscribe(self, symbols: Union[str, List[str]], freq='1d'):
         """标记需要处理的品种"""
         if isinstance(symbols, str):
@@ -50,9 +56,7 @@ class Context:
         else:
             context._add_data_to_cache(bar["symbol"], bar["frequency"], bar)
             self.bar_data_set.add(kk)
-    @property 
-    def now(self):
-        return self._current_time if self.mode == 'backtest' else datetime.datetime.now()
+
 
     
     #这里和掘金的不同，返回dict。可以自行转换

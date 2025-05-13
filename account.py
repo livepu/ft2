@@ -50,15 +50,11 @@ class AccountManager:
         init_cash: float = 1e6,
         fee_config: Dict = None,
         price_provider: Callable[[str, datetime], float] = None,
-        initial_time: datetime = None,
-        default_timezone: Optional[str] = 'Asia/Shanghai'  # 新增默认时区参数
     ):
         """
         :param init_cash: 初始资金
         :param fee_config: 手续费配置（默认股票费率）
         :param price_provider: 价格获取函数 (symbol, datetime) -> price
-        :param initial_time: 初始时间（可选）
-        :param default_timezone: 默认时区，无时区对象时使用该时区
         """
         # 账户状态
         self.cash = round(init_cash, 2)
@@ -76,41 +72,20 @@ class AccountManager:
         }
         self.price_provider = price_provider
         
-        # 当前时间（严格使用datetime）
-        self.current_time: datetime = self._normalize_time(initial_time or datetime.now(), default_timezone)
-
         # 插件列表（初始化为None）
         self._plugins: Optional[Dict[str, Plugin]] = None
 
-        # 初始快照
-        if initial_time:
-            self.take_snapshot(initial_time)
-
-        # 存储默认时区
-        self.default_timezone = pytz.timezone(default_timezone)
-
-    def _normalize_time(self, dt: datetime, default_timezone: str) -> datetime:
-        """将时间对象统一转换为有时区信息的对象"""
-        if dt.tzinfo is None:
-            return pytz.timezone(default_timezone).localize(dt)
-        return dt.astimezone(pytz.timezone(default_timezone))
-
-    def _validate_time(self, action_time: datetime) -> datetime:
-        """验证并返回有效的时间戳，统一时区"""
-        if not isinstance(action_time, datetime):
-            raise TypeError(f"action_time must be datetime object, got {type(action_time)}")
-        return self._normalize_time(action_time, self.default_timezone.zone)
 
     # ---------- 核心方法 ----------
-    def take_snapshot(self, snapshot_time: datetime = None) -> AccountSnapshot:
+    def take_snapshot(self) -> AccountSnapshot:
         """记录账户快照"""
-        created_at = self._validate_time(snapshot_time or self.current_time)
+        created_at = context.now
         
         pos_snapshots = {}
         total_assets = self.cash
         
         for symbol, pos in self.positions.items():
-            price = self._get_market_price(symbol, snapshot_time)
+            price = self._get_market_price(symbol)
             pos_snap = PositionSnapshot(
                 symbol=symbol,
                 volume=pos['volume'],
@@ -137,13 +112,13 @@ class AccountManager:
         
         return snapshot
 
-    def _get_market_price(self, symbol: str, action_time: datetime) -> float:
+    def _get_market_price(self, symbol: str) -> float:
         """获取指定时间的市场价格"""
         if self.price_provider is None:
             raise ValueError("Price provider must be set before getting market price")
         
-        action_time = self._validate_time(action_time)
-        price = self.price_provider(symbol, action_time)
+        action_time = context.now
+        price = self.price_provider(symbol, action_time) #这里保留时间参数，对外部数据的处理相对通用
         
         if not isinstance(price, (float, int)) or price <= 0:
             raise ValueError(f"Invalid price {price} for {symbol} at {action_time}")
@@ -154,18 +129,15 @@ class AccountManager:
         symbol: str, 
         percent: float, 
         price: float = None, 
-        order_time: datetime = None
     ) -> str:
         """
         按总资产指定比例下单
         :param symbol: 标的代码
         :param percent: 下单比例，0-1 之间，正数买入，负数卖出
         :param price: 指定价格（可选）
-        :param order_time: 交易时间（可选，默认使用current_time）
         :return: 模拟订单ID
         """
-        order_time = self._validate_time(order_time or self.current_time)
-        
+       
         if not -1 <= percent <= 1:
             raise ValueError("Percent must be between -1 and 1")
             
@@ -173,7 +145,7 @@ class AccountManager:
             raise ValueError("Order percent cannot be zero")
 
         # 获取当前总资产，使用 get_account 方法避免额外记录快照
-        account_info = self.get_account(order_time)
+        account_info = self.get_account()
         total_assets = account_info['total_assets']
 
         # 计算下单金额
@@ -187,7 +159,7 @@ class AccountManager:
                 order_amount = available_amount
 
         # 获取当前价格
-        price = price or self._get_market_price(symbol, order_time)
+        price = price or self._get_market_price(symbol)
         if price <= 0:
             raise ValueError(f"Invalid price {price} for {symbol}")
 
@@ -208,28 +180,24 @@ class AccountManager:
             raise ValueError("Calculated order volume is zero")
 
         # 调用按数量下单方法
-        return self.order_volume(symbol, volume, price, order_time)
+        return self.order_volume(symbol, volume, price)
 
     def order_volume(
         self, 
         symbol: str, 
         volume: int, 
         price: float = None, 
-        order_time: datetime = None
     ) -> str:
         """
         按数量下单
         :param volume: >0买入，<0卖出
         :param price: 指定价格（可选）
-        :param order_time: 交易时间（可选，默认使用current_time）
         :return: 模拟订单ID
         """
-        order_time = self._validate_time(order_time or self.current_time)
-        
         if volume == 0:
             raise ValueError("Order volume cannot be zero")
             
-        price = price or self._get_market_price(symbol, order_time)
+        price = price or self._get_market_price(symbol)
         if price <= 0:
             raise ValueError(f"Invalid price {price} for {symbol}")
 
@@ -237,11 +205,11 @@ class AccountManager:
         order_id = f"order_{len(self.trade_log)+1}"
         
         # 计算实际成交量（考虑持仓限制）
-        executed_volume = self._process_order(symbol, volume, price, order_id, order_time)
+        executed_volume = self._process_order(symbol, volume, price, order_id)
         
         # 记录成交
         if executed_volume != 0:
-            self.take_snapshot(order_time)
+            self.take_snapshot()
         return order_id
 
     def _process_order(
@@ -250,7 +218,6 @@ class AccountManager:
         volume: int, 
         price: float, 
         order_id: str,
-        action_time: datetime
     ) -> int:
         """处理订单成交（返回实际成交量）"""
         # 计算手续费
@@ -287,7 +254,7 @@ class AccountManager:
             volume=volume,
             price=price,
             side='buy' if volume>0 else 'sell',
-            created_at=action_time,
+            created_at=context.now, #使用context.now
             order_id=order_id,
             fee=total_fee
         ))
@@ -312,8 +279,8 @@ class AccountManager:
     # ---------- 查询接口 ----------
     def get_account(self, query_time: datetime = None) -> Dict:
         """获取当前账户信息"""
-        query_time = self._validate_time(query_time or self.current_time)
-        
+        query_time = context.now if query_time is None else query_time
+
         if not self.snapshots:
             return {
                 'cash': self.cash,
@@ -368,10 +335,6 @@ class AccountManager:
         end_query_time: datetime = None
     ) -> List[TradeRecord]:
         """获取历史订单"""
-        if start_query_time is not None:
-            start_query_time = self._validate_time(start_query_time)
-        if end_query_time is not None:
-            end_query_time = self._validate_time(end_query_time)
             
         if start_query_time and end_query_time:
             return [t for t in self.trade_log if start_query_time <= t.created_at <= end_query_time]
@@ -381,10 +344,6 @@ class AccountManager:
             return [t for t in self.trade_log if t.created_at <= end_query_time]
         return self.trade_log.copy()
 
-    # ---------- 时间管理 ----------
-    def set_current_time(self, action_time: datetime):
-        """设置当前时间"""
-        self.current_time = self._validate_time(action_time)
 
     # ---------- 仿真专用方法 ----------
     def load_snapshot(self, snapshot: AccountSnapshot):
@@ -428,7 +387,7 @@ class AccountManager:
 #设置一个按日度获取价格的回调函数
 def day_price_provider(symbol: str, timestamp: datetime) -> float:
     # 按时间查找最接近的 bar 数据
-    data = context.data(symbol=symbol, frequency='1d', count=5, fields=['close', 'eob'])
+    data = context.data(symbol=symbol, frequency='1d', count=3, fields=['close', 'eob'])
     for d in reversed(data):  # 倒序查找第一个 eob <= timestamp 的价格
         if d['eob'] <= timestamp:
             return d['close']
