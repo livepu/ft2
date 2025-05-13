@@ -5,10 +5,12 @@ import pandas as pd
 
 #回测的数据驱动引擎
 class Engine:
-    def __init__(self,cache_count=100):
+    def __init__(self):
         self.timeline = {} #按照时间轴存放bars
-        self.cache_count=cache_count
+        self.cache_count=100
     
+    def set_cache_count(self,cache_count):
+        self.cache_count=cache_count
     ##在引擎内准备的所有数据按照时间轴，分离出对应的bar数据
     def add_data(self, symbol, freq, data):
         """
@@ -74,3 +76,5 @@ class Engine:
                 #on_bar之后，执行账户的快照。后续通过快照分析净值
                 account.take_snapshot()
             last_time=current_time
+
+engine=Engine() #全局的引擎实例，供策略调用。
