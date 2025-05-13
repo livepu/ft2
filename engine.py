@@ -20,12 +20,27 @@ class Engine:
         """
         if isinstance(data, pd.DataFrame):
             data = data.to_dict('records')
-        # 自动提取字段（假设所有 bar 的字段一致）
-        sample_bar = data[0]
-        fields = list(sample_bar.keys())
+
+
+        # 获取订阅参数，针对不同品种，不同的缓存长度是合理的。
+        params = context.get_subscribe_params(symbol, freq)
+        if params is None:
+            # 如果没有订阅参数，使用默认字段和缓存大小
+            sample_bar = data[0]
+            fields = list(sample_bar.keys()) #提取全部字段
+            count = self.cache_count
+        else:
+            # 使用订阅参数中的字段和缓存大小
+            sample_bar = data[0]
+            available_fields = set(sample_bar.keys())  # 数据源实际拥有的字段
+            requested_fields = params['fields'] or list(available_fields)  # 订阅请求的字段(如果为None则取全部)
+            
+            # 取交集，确保只保留数据源存在的字段
+            fields = [f for f in requested_fields if f in available_fields]
+            count = params.get('count', self.cache_count)
 
         # 初始化缓存
-        context._init_cache(symbol, freq, format='row', fields=fields, count=self.cache_count) #量化掘金里面确实需要初始化。
+        context._init_cache(symbol, freq, format='row', fields=fields, count=count)
         for bar in data:
             bar['symbol'] = symbol
             bar['frequency'] = freq
@@ -53,9 +68,9 @@ class Engine:
                 context._add_bar2bar_data_cache(bar) #持续添加数据，直到在时间段内执行策略
             if start_time <= current_time <= end_time: #时间段之外，自动补充。保证运行的数据足够长。时间段内，运行策略
                 if begin_snapshot==0 and last_time is not None:
-                    account.take_snapshot(last_time)
+                    account.take_snapshot()
                     begin_snapshot=1
                 strategy.on_bar(context,bars_at_current_time)
                 #on_bar之后，执行账户的快照。后续通过快照分析净值
-                account.take_snapshot(current_time)
+                account.take_snapshot()
             last_time=current_time

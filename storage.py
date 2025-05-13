@@ -10,15 +10,13 @@ class Context:
     def __init__(self):
         # 数据存储
         self._cache = _Cache()  # 直接使用原版Cache实现
-        self._subscribed = set()  # 改为set保持与原版一致
+        self._subscribed = {}  # 改为字典存储订阅详情
         self.bar_data_set = set()  # 添加bar数据去重集合
         
         # 状态管理
         self.mode = None  # 'backtest'/'live'
         self._current_time = None
   
-
-        self._timeline = {}  # 按频率存储时间轴 {'1d': [datetime...]}
 
     def is_backtest_model(self):
         return self.mode == 'backtest'
@@ -27,20 +25,31 @@ class Context:
     def now(self):
         return self._current_time if self.mode == 'backtest' else datetime.datetime.now()
     
-    def subscribe(self, symbols: Union[str, List[str]], freq='1d'):
-        """标记需要处理的品种"""
+    def subscribe(self, symbols: Union[str, List[str]], freq='1d', fields=None, count=100):
+        """记录订阅参数"""
         if isinstance(symbols, str):
             symbols = [symbols]
-        for symbol in symbols:
-            self._subscribed.add((symbol, freq))
             
+        for symbol in symbols:
+            self._subscribed[(symbol, freq)] = {
+                'fields': fields,
+                'count': count
+            }
+            # 注意：这里不调用_init_cache
+
+    def get_subscribe_params(self, symbol: str, freq: str) -> dict:
+        """获取订阅参数"""
+        return self._subscribed.get((symbol, freq))
+
     def unsubscribe(self, symbols: Union[str, List[str]], freq='1d'):
-        """取消标记"""
+        """取消订阅"""
         if isinstance(symbols, str):
             symbols = [symbols]
+            
         for symbol in symbols:
-            self._subscribed.discard((symbol, freq))
-
+            if (symbol, freq) in self._subscribed:
+                del self._subscribed[(symbol, freq)]
+                self._rm_cache(symbol, freq)
     @property  
     def symbols(self, freq=None):
         """获取已订阅的品种列表"""
@@ -57,8 +66,6 @@ class Context:
             context._add_data_to_cache(bar["symbol"], bar["frequency"], bar)
             self.bar_data_set.add(kk)
 
-
-    
     #这里和掘金的不同，返回dict。可以自行转换
     def data(self, symbol: str, frequency: str, count: int = 1, fields: List[str] = None,format="row"):
         """
