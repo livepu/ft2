@@ -77,10 +77,11 @@ class AccountManager:
 
 
     # ---------- 核心方法 ----------
-    def take_snapshot(self) -> AccountSnapshot:
+    def take_snapshot(self,created_at: datetime=None) -> AccountSnapshot:
         """记录账户快照"""
-        created_at = context.now
-        
+        if created_at is None:
+            created_at = context.now
+                
         pos_snapshots = {}
         total_assets = self.cash
         

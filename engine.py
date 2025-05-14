@@ -70,7 +70,8 @@ class Engine:
                 context._add_bar2bar_data_cache(bar) #持续添加数据，直到在时间段内执行策略
             if start_time <= current_time <= end_time: #时间段之外，自动补充。保证运行的数据足够长。时间段内，运行策略
                 if begin_snapshot==0 and last_time is not None:
-                    account.take_snapshot()
+                    
+                    account.take_snapshot(last_time) #快照需要有插入时间的才行，不然没法按照前一交易日作为基准
                     begin_snapshot=1
                 strategy.on_bar(context,bars_at_current_time)
                 #on_bar之后，执行账户的快照。后续通过快照分析净值
