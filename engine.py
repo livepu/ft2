@@ -8,9 +8,11 @@ class Engine:
     def __init__(self):
         self.timeline = {} #按照时间轴存放bars
         self.cache_count=100
-    
+
+    #设置缓存长度
     def set_cache_count(self,cache_count):
         self.cache_count=cache_count
+
     ##在引擎内准备的所有数据按照时间轴，分离出对应的bar数据
     def add_data(self, symbol, freq, data):
         """
@@ -23,8 +25,7 @@ class Engine:
         if isinstance(data, pd.DataFrame):
             data = data.to_dict('records')
 
-
-        # 获取订阅参数，针对不同品种，不同的缓存长度是合理的。
+        # 获取订阅参数，针对不同品种，不同的缓存长度是合理的。注意策略初始化的时候先设置订阅参数。不然默认使用引擎参数初始化
         params = context.get_subscribe_params(symbol, freq)
         if params is None:
             # 如果没有订阅参数，使用默认字段和缓存大小
@@ -36,7 +37,7 @@ class Engine:
             sample_bar = data[0]
             available_fields = set(sample_bar.keys())  # 数据源实际拥有的字段
             requested_fields = params['fields'] or list(available_fields)  # 订阅请求的字段(如果为None则取全部)
-            
+
             # 取交集，确保只保留数据源存在的字段
             fields = [f for f in requested_fields if f in available_fields]
             count = params.get('count', self.cache_count)
@@ -63,7 +64,6 @@ class Engine:
         begin_snapshot=0
         last_time=None
         for current_time in sorted_times:
-            
             context._current_time = current_time #传入时间点
             bars_at_current_time = self.timeline[current_time]  #找到bars
             for bar in bars_at_current_time:
