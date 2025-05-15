@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>{{title}}</title>
+    <title>{{report_name}}</title>
     <!-- 引入 layui.css -->
     <link href="https://unpkg.com/layui@2.11.1/dist/css/layui.css" rel="stylesheet">
     <!-- 引入 layui.js -->
@@ -303,7 +303,16 @@
                             splitNumber: 3  // 新增：设置分割段数
                         }
                     ],
-                    series: [...returnSeries, ...drawdownSeries]
+                    series: [...returnSeries, ...drawdownSeries],
+                    dataZoom: [
+                    {
+                        type: 'slider', // 使用滑块式数据区域缩放组件
+                        start: 0,       // 初始显示范围起始百分比
+                        end: 100,       // 初始显示范围结束百分比
+                        xAxisIndex: [0, 1], // 控制两个 x 轴
+                        filterMode: 'empty' // 缩放时只过滤对应区域的数据
+                    }
+                    ]
                 };
 
 
