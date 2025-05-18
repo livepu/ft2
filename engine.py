@@ -32,6 +32,7 @@ class Engine:
             sample_bar = data[0]
             fields = list(sample_bar.keys()) #提取全部字段
             count = self.cache_count
+            format=None
         else:
             # 使用订阅参数中的字段和缓存大小
             sample_bar = data[0]
@@ -42,18 +43,31 @@ class Engine:
             fields = [f for f in requested_fields if f in available_fields]
             count = params.get('count', self.cache_count)
             format=params.get('format')
-        # 初始化缓存
-        context._init_cache(symbol, freq, format=format, fields=fields, count=count)
+
+        # 只在缓存不存在时初始化
+        if not context._has_cache(symbol, freq):
+            context._init_cache(symbol, freq, format=format, fields=fields, count=count)
+
         for bar in data:
             bar['symbol'] = symbol
             bar['frequency'] = freq
-            eob = bar.get('eob') #掘金的时间带时区的，但这个类不做限制。是否统一时区，应该在策略里面完成。统一的时间格式
+            eob = bar.get('eob')
             if eob is None:
                 continue
+                
+            # 检查是否已存在相同时间点的相同symbol数据
+            if eob in self.timeline:
+                existing_bars = [b for b in self.timeline[eob] 
+                               if b['symbol'] == symbol and b['frequency'] == freq]
+                if existing_bars:
+                    # 更新现有bar数据（保留原始时间戳）
+                    existing_bars[0].update(bar)
+                    continue
+            
+            # 新增数据
             if eob not in self.timeline:
                 self.timeline[eob] = []
-            # 直接将 bar 字典添加到对应时间的列表中
-            self.timeline[eob].append(bar) #一个时间点上，多个品种的数据
+            self.timeline[eob].append(bar)
 
     def run(self,strategy_class,start_time, end_time):
         """

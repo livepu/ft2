@@ -39,15 +39,15 @@ class 动量策略:
 
     def on_bar(self,context, bars):
         #print("bars内容：",bars)
-        data=context.data('SHSE.000300','1d',count=1)
-        df=pd.DataFrame(data)
+        df=context.data('SHSE.000300','1d',count=1)
+        
         print("df内容：",df)
         print("now:",context.now)
-        latest_close = data[-1]['close']
+        latest_close = df['close'].iloc[-1]
         
         account.order_volume('SHSE.000300', 1, latest_close)
         print("account.get_account()",account.get_account())
-        print("account.get_positions()",account.get_positions())
+        print("account.get_position()",account.get_position())
 
 # 获取东八区时区
 tz = pytz.timezone('Asia/Shanghai')

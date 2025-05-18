@@ -102,8 +102,14 @@ class AccountManager:
         """获取指定时间的市场价格（直接从context获取数据）"""
         action_time = context.now
         
-        # 获取context中订阅的所有频率数据，目前不需要tick，关键字段不同
-        frequencies = ['1m','60s', '5m','300s', '15m','900s','30m','1800s', '60m','3600s','1d']  # 常见频率
+        # 获取该品种已订阅的所有频率
+        subscribed_freqs = {freq for (s, freq) in context._subscribed if s == symbol}
+        if not subscribed_freqs:
+            raise ValueError(f"品种 {symbol} 未订阅任何频率数据")
+            
+        # 按频率从高到低排序（高频数据优先）
+        freq_order = [ '1m', '60s', '5m', '300s', '15m', '900s', '30m', '1800s', '60m', '3600s', '1d']
+        frequencies = [f for f in freq_order if f in subscribed_freqs]
         
         for freq in frequencies:
             try:
