@@ -42,12 +42,10 @@ class AccountManager:
         self,
         init_cash: float = 1e6,
         fee_config: Dict = None,
-        price_provider: Callable[[str, datetime], float] = None,
     ):
         """
         :param init_cash: 初始资金
         :param fee_config: 手续费配置（默认股票费率）
-        :param price_provider: 价格获取函数 (symbol, datetime) -> price
         """
         # 账户状态
         self.cash = round(init_cash, 2)
@@ -63,8 +61,7 @@ class AccountManager:
             'stamp_tax_rate': 0.001,    # 印花税（仅卖出）
             'min_commission': 5.0       # 最低佣金
         }
-        self.price_provider = price_provider
-        
+       
 
 
     # ---------- 核心方法 ----------
@@ -101,17 +98,32 @@ class AccountManager:
         
         return snapshot
 
+#获取价格函数，这个不再使用外部函数。通过比较context里面订阅的周期，选择时间最近的一个周期，计算价格。
     def _get_market_price(self, symbol: str) -> float:
-        """获取指定时间的市场价格"""
-        if self.price_provider is None:
-            raise ValueError("Price provider must be set before getting market price")
-        
+        """获取指定时间的市场价格（直接从context获取数据）"""
         action_time = context.now
-        price = self.price_provider(symbol, action_time) #这里保留时间参数，对外部数据的处理相对通用
         
-        if not isinstance(price, (float, int)) or price <= 0:
-            raise ValueError(f"Invalid price {price} for {symbol} at {action_time}")
-        return float(price)
+        # 获取context中订阅的所有频率数据
+        frequencies = ['tick', '1m','60s', '5m','300s', '15m','900s','30m','1800s', '60m','3600s' '1d']  # 常见频率
+        
+        for freq in sorted(frequencies, key=lambda x: len(x)):  # 从高频到低频尝试
+            try:
+                data = context.data(
+                    symbol=symbol,
+                    frequency=freq,
+                    count=3,
+                    fields=['close', 'eob']
+                )
+                for d in reversed(data):  # 倒序查找第一个 eob <= action_time 的价格
+                    if d['eob'] <= action_time:
+                        price = d['close']
+                        if not isinstance(price, (float, int)) or price <= 0:
+                            raise ValueError(f"Invalid price {price} for {symbol} at {action_time}")
+                        return float(price)
+            except Exception:
+                continue
+                
+        raise ValueError(f"No valid price found for {symbol} at {action_time}")
 
     def order_percent(
         self, 
@@ -348,13 +360,5 @@ class AccountManager:
 
 ##这个类有外部回调函数，不能在这里设置统一实例。应该配合外部函数，再初始化实例
 
-#设置一个按日度获取价格的回调函数
-def day_price_provider(symbol: str, timestamp: datetime) -> float:
-    # 按时间查找最接近的 bar 数据
-    data = context.data(symbol=symbol, frequency='1d', count=3, fields=['close', 'eob'])
-    for d in reversed(data):  # 倒序查找第一个 eob <= timestamp 的价格
-        if d['eob'] <= timestamp:
-            return d['close']
-    raise ValueError(f"未找到 {symbol} 在 {timestamp} 的有效价格")
 
-account = AccountManager(init_cash=1e6, price_provider=day_price_provider)#把账户管理类，独立出来。不再context里面。
+account = AccountManager(init_cash=1e6)#把账户管理类，独立出来。不再context里面。
