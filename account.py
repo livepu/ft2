@@ -5,14 +5,7 @@ from typing import Dict, List, Optional, Callable, Union, TypeVar, Any
 import pandas as pd
 import pytz
 from .storage import context
-# 添加插件类型定义
-T = TypeVar('T')
-class Plugin:
-    def update(self, account: 'AccountManager', timestamp: datetime) -> None:
-        pass
-    
-    def get_results(self) -> Any:
-        pass
+
 # ---------- 基础数据结构 ----------
 @dataclass
 class PositionSnapshot:
@@ -72,8 +65,6 @@ class AccountManager:
         }
         self.price_provider = price_provider
         
-        # 插件列表（初始化为None）
-        self._plugins: Optional[Dict[str, Plugin]] = None
 
 
     # ---------- 核心方法 ----------
@@ -106,10 +97,7 @@ class AccountManager:
         )
         self.snapshots.append(snapshot)
 
-        # 更新插件（仅在插件启用时）
-        if self._plugins is not None:
-            for plugin in self._plugins.values():
-                plugin.update(self, created_at)
+
         
         return snapshot
 
@@ -356,32 +344,7 @@ class AccountManager:
         }
         self.current_time = self._validate_time(snapshot.created_at)
 
-    def add_plugin(self, plugin: Plugin, plugin_name: str):
-        """添加插件"""
-        if self._plugins is None:
-            self._plugins = {}
-        self._plugins[plugin_name] = plugin
 
-
-    def get_plugin_results(self, plugin_name: Optional[str] = None):
-        """获取所有插件的结果或特定插件的结果"""
-        # 检查插件系统是否初始化
-        if self._plugins is None:
-            if plugin_name is None:
-                return {}
-            else:
-                raise KeyError(f"No plugin found with name: {plugin_name}")
-        
-        if plugin_name is None:
-            results = {}
-            for name, plugin in self._plugins.items():
-                results[name] = plugin.get_results()
-            return results
-        else:
-            if plugin_name in self._plugins:
-                return self._plugins[plugin_name].get_results()
-            else:
-                raise KeyError(f"No plugin found with name: {plugin_name}")
 
 ##这个类有外部回调函数，不能在这里设置统一实例。应该配合外部函数，再初始化实例
 
