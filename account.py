@@ -103,8 +103,8 @@ class AccountManager:
         """获取指定时间的市场价格（直接从context获取数据）"""
         action_time = context.now
         
-        # 获取context中订阅的所有频率数据
-        frequencies = ['tick', '1m','60s', '5m','300s', '15m','900s','30m','1800s', '60m','3600s','1d']  # 常见频率
+        # 获取context中订阅的所有频率数据，目前不需要tick，关键字段不同
+        frequencies = ['1m','60s', '5m','300s', '15m','900s','30m','1800s', '60m','3600s','1d']  # 常见频率
         
         for freq in frequencies:
             try:
