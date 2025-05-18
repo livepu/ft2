@@ -316,7 +316,7 @@ class AccountManager:
             'created_at': snapshot.created_at
         }
 
-    def get_positions(self, symbol: str = None) -> Dict:
+    def get_position(self, symbol: str = None) -> Dict:
         """获取持仓"""
         if not self.snapshots:
             # 若没有快照，返回当前持仓
