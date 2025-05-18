@@ -104,16 +104,16 @@ class AccountManager:
         action_time = context.now
         
         # 获取context中订阅的所有频率数据
-        frequencies = ['tick', '1m','60s', '5m','300s', '15m','900s','30m','1800s', '60m','3600s' '1d']  # 常见频率
+        frequencies = ['tick', '1m','60s', '5m','300s', '15m','900s','30m','1800s', '60m','3600s','1d']  # 常见频率
         
-        for freq in sorted(frequencies, key=lambda x: len(x)):  # 从高频到低频尝试
+        for freq in frequencies:  # 从高频到低频尝试
             try:
                 data = context.data(
                     symbol=symbol,
                     frequency=freq,
                     count=3,
-                    fields=['close', 'eob']
-                )
+                    fields='close,eob'
+                    )
                 for d in reversed(data):  # 倒序查找第一个 eob <= action_time 的价格
                     if d['eob'] <= action_time:
                         price = d['close']
@@ -121,6 +121,7 @@ class AccountManager:
                             raise ValueError(f"Invalid price {price} for {symbol} at {action_time}")
                         return float(price)
             except Exception:
+                #print(f"No valid price found for {symbol} at {action_time} in {freq} frequency") 保留测试
                 continue
                 
         raise ValueError(f"No valid price found for {symbol} at {action_time}")
