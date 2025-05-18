@@ -41,9 +41,9 @@ class Engine:
             # 取交集，确保只保留数据源存在的字段
             fields = [f for f in requested_fields if f in available_fields]
             count = params.get('count', self.cache_count)
-
+            format=params.get('format')
         # 初始化缓存
-        context._init_cache(symbol, freq, format='row', fields=fields, count=count)
+        context._init_cache(symbol, freq, format=format, fields=fields, count=count)
         for bar in data:
             bar['symbol'] = symbol
             bar['frequency'] = freq

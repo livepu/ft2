@@ -106,15 +106,23 @@ class AccountManager:
         # 获取context中订阅的所有频率数据
         frequencies = ['tick', '1m','60s', '5m','300s', '15m','900s','30m','1800s', '60m','3600s','1d']  # 常见频率
         
-        for freq in frequencies:  # 从高频到低频尝试
+        for freq in frequencies:
             try:
-                data = context.data(
+                raw_data = context.data(
                     symbol=symbol,
                     frequency=freq,
                     count=3,
-                    fields='close,eob'
-                    )
-                for d in reversed(data):  # 倒序查找第一个 eob <= action_time 的价格
+                    fields='close,eob',
+                )
+                
+                # 统一转换为字典列表格式
+                if isinstance(raw_data, pd.DataFrame):
+                    data = raw_data.to_dict('records')
+                else:
+                    data = raw_data
+                
+                # 后续处理保持不变
+                for d in reversed(data):
                     if d['eob'] <= action_time:
                         price = d['close']
                         if not isinstance(price, (float, int)) or price <= 0:

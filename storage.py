@@ -25,7 +25,7 @@ class Context:
     def now(self):
         return self._current_time if self.mode == 'backtest' else datetime.datetime.now()
     
-    def subscribe(self, symbols: Union[str, List[str]], freq='1d', fields=None, count=100):
+    def subscribe(self, symbols: Union[str, List[str]], freq='1d', count=100, fields=None,format='df'):
         """记录订阅参数"""
         if isinstance(symbols, str):
             symbols = [symbols]
@@ -33,7 +33,8 @@ class Context:
         for symbol in symbols:
             self._subscribed[(symbol, freq)] = {
                 'fields': fields,
-                'count': count
+                'count': count,
+                'format': format
             }
             # 注意：这里不调用_init_cache
 
@@ -67,7 +68,7 @@ class Context:
             self.bar_data_set.add(kk)
 
     #这里和掘金的不同，返回dict。可以自行转换
-    def data(self, symbol: str, frequency: str, count: int = 1,fields: Union[str, List[str]] = None, format="row"):
+    def data(self, symbol: str, frequency: str, count: int = 1,fields: Union[str, List[str]] = None):
         """
         获取数据滑窗（与掘金API兼容）
         :param symbol: 标的代码
@@ -85,11 +86,7 @@ class Context:
             
         # 获取原始数据
         raw_data = self._cache.get_data(symbol, frequency, count, fields)
-        
-        # 如果要求 DataFrame 并且数据不为空
-        if format == "pd" and raw_data:
-            return pd.DataFrame(raw_data)
-        
+                
         return raw_data
 
     
