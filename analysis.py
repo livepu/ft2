@@ -53,7 +53,7 @@ class AccountAnalyzer:
             daily_snapshots[date].append(snapshot)
 
         return {
-            date: snaps[-1].total_assets
+            date: snaps[-1].nav # 修改 total_assets -> nav
             for date, snaps in daily_snapshots.items()
         }
     # ========== 资产相关方法 ==========
@@ -495,7 +495,7 @@ class AccountAnalyzer:
         """
         # 获取初始资金和最终资产值
         initial_cash = self.account.snapshots[0].cash if self.account.snapshots else 0
-        final_assets = self.account.snapshots[-1].total_assets if self.account.snapshots else 0
+        final_assets = self.account.snapshots[-1].nav if self.account.snapshots else 0 # 修改 total_assets -> nav
         # 计算累计收益率
         return_rate = self.calculate_return_rate() * 100
         # 年化收益

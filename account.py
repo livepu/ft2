@@ -12,14 +12,14 @@ class PositionSnapshot:
     symbol: str
     volume: float            # 持仓数量
     cost_price: float        # 持仓成本价
-    market_price: float      # 快照时标的价格
+    price: float             # 市场价格(掘金字段)
     created_at: datetime     # 快照时间（严格使用datetime）
 
 @dataclass
 class AccountSnapshot:
     """账户快照（与掘金account()返回值兼容）"""
     cash: float              # 可用资金
-    total_assets: float       # 总资产价值
+    nav: float               # 总资产价值(掘金字段)
     created_at: datetime     # 快照时间（严格使用datetime）
     positions: Dict[str, PositionSnapshot] = field(default_factory=dict)
     
@@ -73,12 +73,12 @@ class AccountManager:
         total_assets = self.cash
         
         for symbol, pos in self.positions.items():
-            price = self._get_market_price(symbol)
+            price = self._get_price(symbol)
             pos_snap = PositionSnapshot(
                 symbol=symbol,
                 volume=pos['volume'],
                 cost_price=round(pos['cost_price'], 3),
-                market_price=price,
+                price=price,
                 created_at=created_at
             )
             pos_snapshots[symbol] = pos_snap
@@ -87,7 +87,7 @@ class AccountManager:
         total_assets = round(total_assets, 2)
         snapshot = AccountSnapshot(
             cash=self.cash,
-            total_assets=total_assets,
+            nav=total_assets, #改用掘金的字段名称，但保留这里的逻辑名
             created_at=created_at,
             positions=pos_snapshots
         )
@@ -98,7 +98,7 @@ class AccountManager:
         return snapshot
 
 #获取价格函数，这个不再使用外部函数。通过比较context里面订阅的周期，选择时间最近的一个周期，计算价格。
-    def _get_market_price(self, symbol: str) -> float:
+    def _get_price(self, symbol: str) -> float:
         """获取指定时间的市场价格（直接从context获取数据）"""
         action_time = context.now
         
@@ -161,10 +161,10 @@ class AccountManager:
 
         # 获取当前总资产，使用 get_account 方法避免额外记录快照
         account_info = self.get_account()
-        total_assets = account_info['total_assets']
+        nav = account_info['nav']
 
         # 计算下单金额
-        order_amount = total_assets * abs(percent)
+        order_amount = nav * abs(percent)
 
         if percent > 0:  # 买入
             # 考虑手续费，计算可购买的最大金额
@@ -174,7 +174,7 @@ class AccountManager:
                 order_amount = available_amount
 
         # 获取当前价格
-        price = price or self._get_market_price(symbol)
+        price = price or self._get_price(symbol)
         if price <= 0:
             raise ValueError(f"Invalid price {price} for {symbol}")
 
@@ -212,7 +212,7 @@ class AccountManager:
         if volume == 0:
             raise ValueError("Order volume cannot be zero")
             
-        price = price or self._get_market_price(symbol)
+        price = price or self._get_price(symbol)
         if price <= 0:
             raise ValueError(f"Invalid price {price} for {symbol}")
 
@@ -299,7 +299,7 @@ class AccountManager:
         if not self.snapshots:
             return {
                 'cash': self.cash,
-                'total_assets': self.cash,
+                'nav': self.cash,
                 'created_at': query_time
             }
             
@@ -312,13 +312,13 @@ class AccountManager:
         if snapshot is None:
             return {
                 'cash': self.cash,
-                'total_assets': self.cash,
+                'nav': self.cash,
                 'created_at': query_time
             }
             
         return {
             'cash': snapshot.cash,
-            'total_assets': snapshot.total_assets,
+            'nav': snapshot.nav,
             'created_at': snapshot.created_at
         }
 
@@ -362,17 +362,13 @@ class AccountManager:
 
     # ---------- 仿真专用方法 ----------
     def load_snapshot(self, snapshot: AccountSnapshot):
-        """加载账户快照（用于仿真初始化）"""
+        """加载账户快照（用于仿真初始化，使用掘金字段命名）"""
         self.cash = round(snapshot.cash, 2)
         self.positions = {
             sym: {'volume': pos.volume, 'cost_price': round(pos.cost_price, 3)}
             for sym, pos in snapshot.positions.items()
         }
         self.current_time = self._validate_time(snapshot.created_at)
-
-
-
-##这个类有外部回调函数，不能在这里设置统一实例。应该配合外部函数，再初始化实例
 
 
 account = AccountManager(init_cash=1e6)#把账户管理类，独立出来。不再context里面。
