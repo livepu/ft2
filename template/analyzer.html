@@ -5,14 +5,11 @@
     <meta charset="utf-8">
     <title>{{report_name}}</title>
     <!-- 引入 layui.css -->
-    <link href="https://unpkg.com/layui@2.11.1/dist/css/layui.css" rel="stylesheet">
-    <!-- 引入 layui.js -->
-    <script src="https://unpkg.com/layui@2.11.1/dist/layui.js"></script>
-    <!-- 使用 UNPKG 源引入 echarts -->
-    <script src="https://unpkg.com/echarts@5.4.3/dist/echarts.min.js"></script>
+    <link href="https://rp.make2.top/smartvc/static/css/layui.css" rel="stylesheet">
+    <script src="https://rp.make2.top/smartvc/static/js/layui.js"></script>
+    <script src="https://rp.make2.top/smartvc/static/js/echarts.min.js"></script>
+    <script src="https://rp.make2.top/smartvc/static/js/report.js"></script>
 
-    <script src="https://rp.make2.top/report.js" charset="UTF-8"></script>
-    
     <style>
         body {
             font-family: 'Microsoft YaHei', sans-serif;
@@ -48,12 +45,14 @@
 
         /* 美化小标题，使用股市相关红色 */
         .container h3 {
-            color: #e64340; /* 类似股市上涨的红色 */
+            color: #e64340;
+            /* 类似股市上涨的红色 */
             font-size: 18px;
             margin-top: 0;
             margin-bottom: 15px;
             padding-bottom: 5px;
-            border-bottom: 2px solid #e64340; /* 类似股市上涨的红色下划线 */
+            border-bottom: 2px solid #e64340;
+            /* 类似股市上涨的红色下划线 */
         }
 
         .top-info {
@@ -69,9 +68,11 @@
             margin-left: 0.5rem;
             color: #333;
         }
+
         /* 修改 Layui 表格翻页按钮底色为红色 */
         .layui-table-page .layui-laypage .layui-laypage-curr .layui-laypage-em {
-            background-color: #e64340; /* Layui 红色主色调 */
+            background-color: #e64340;
+            /* Layui 红色主色调 */
         }
 
         .layui-table-page .layui-laypage a:hover {
@@ -85,25 +86,25 @@
 
 
 
-.collapse-content {
-    display: none;
-}
+        .collapse-content {
+            display: none;
+        }
 
-.collapse-content.active {
-    display: block;
-}
-/* 添加h3悬停样式 */
-.collapse-title h3 {
-    cursor: pointer;
-}
+        .collapse-content.active {
+            display: block;
+        }
 
+        /* 添加h3悬停样式 */
+        .collapse-title h3 {
+            cursor: pointer;
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
         <div class="top-info">
-        <strong>{{report_name}}</strong>
+            <strong>{{report_name}}</strong>
         </div>
 
         <!-- 图表容器 -->
@@ -111,48 +112,48 @@
             <h3>业绩表现</h3>
             <div id="chartContainer" style="width:100%;height:600px"></div>
         </div>
-<div class="report-container">
-    <div class="collapse-title" onclick="toggleCollapse(this)">
-        <h3>关键指标</h3>
-  
-    </div>
-    <div class="collapse-content">
-        <table id="metricsTable" lay-filter="metricsTable"></table>
-    </div>
-</div>
+        <div class="report-container">
+            <div class="collapse-title" onclick="toggleCollapse(this)">
+                <h3>关键指标</h3>
 
-<!-- 修改交易记录部分 --> 
-<div class="report-container">
-    <div class="collapse-title" onclick="toggleCollapse(this)">
-        <h3>交易记录</h3>
+            </div>
+            <div class="collapse-content">
+                <table id="metricsTable" lay-filter="metricsTable"></table>
+            </div>
+        </div>
 
-    </div>
-    <div class="collapse-content">
-        <table id="transactionTable" lay-filter="transactionTable"></table>
-    </div>
-</div>
+        <!-- 修改交易记录部分 -->
+        <div class="report-container">
+            <div class="collapse-title" onclick="toggleCollapse(this)">
+                <h3>交易记录</h3>
 
-<!-- 修改最大盈利交易部分 -->
-<div class="report-container">
-    <div class="collapse-title" onclick="toggleCollapse(this)">
-        <h3>最大盈利的 5 笔交易</h3>
-  
-    </div>
-    <div class="collapse-content">
-        <div id="profitTable"></div>
-    </div>
-</div>
+            </div>
+            <div class="collapse-content">
+                <table id="transactionTable" lay-filter="transactionTable"></table>
+            </div>
+        </div>
 
-<!-- 修改最大亏损交易部分 -->
-<div class="report-container">
-    <div class="collapse-title" onclick="toggleCollapse(this)">
-        <h3>最大亏损的 5 笔交易</h3>
-  
-    </div>
-    <div class="collapse-content">
-        <div id="lossTable"></div>
-    </div>
-</div>
+        <!-- 修改最大盈利交易部分 -->
+        <div class="report-container">
+            <div class="collapse-title" onclick="toggleCollapse(this)">
+                <h3>最大盈利的 5 笔交易</h3>
+
+            </div>
+            <div class="collapse-content">
+                <div id="profitTable"></div>
+            </div>
+        </div>
+
+        <!-- 修改最大亏损交易部分 -->
+        <div class="report-container">
+            <div class="collapse-title" onclick="toggleCollapse(this)">
+                <h3>最大亏损的 5 笔交易</h3>
+
+            </div>
+            <div class="collapse-content">
+                <div id="lossTable"></div>
+            </div>
+        </div>
 
     </div>
 
@@ -163,7 +164,8 @@
         let assetsData = [];
         try {
             // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
-            assetsData = {{ assets_data | safe }};
+            assetsData = {{ assets_data | safe }
+        };
         if (!Array.isArray(assetsData)) {
             console.warn('总资产数据格式异常，自动重置为空数组');
             assetsData = [];
@@ -177,7 +179,8 @@
         let transactionData = [];
         try {
             // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
-            transactionData = {{ transaction_data | safe }};
+            transactionData = {{ transaction_data | safe }
+        };
         if (!Array.isArray(transactionData)) {
             throw new Error('交易数据非数组类型');
         }
@@ -187,7 +190,7 @@
         }
 
         // 初始化分析器
-        const analyzer = new AssetAnalyzer(assetsData,transactionData);
+        const analyzer = new AssetAnalyzer(assetsData, transactionData);
         // 最大盈利交易数据（带类型校验）
         let largestProfitTrades = analyzer.get_largest_profit_trades(5);
 
@@ -202,8 +205,8 @@
 
             try {
                 if (!assetsData ||
-                 !Array.isArray(assetsData) || 
-                 assetsData.length === 0) {
+                    !Array.isArray(assetsData) ||
+                    assetsData.length === 0) {
                     throw new Error('数据不完整或格式错误');
                 }
 
@@ -234,8 +237,8 @@
 
                 keys.forEach(key => {
                     const isDrawdown = key.includes('回撤');
-                    const isSg=key.includes('策略');
-                    const isBech=key.includes('基准');
+                    const isSg = key.includes('策略');
+                    const isBech = key.includes('基准');
                     const seriesConfig = {
                         name: key,
                         type: 'line',
@@ -260,7 +263,7 @@
                 const option = {
                     tooltip: { trigger: 'axis' },
                     legend: [
-                        { 
+                        {
                             data: returnSeries.map(s => s.name),
 
                         },
@@ -279,39 +282,39 @@
                         {
                             left: '5%',
                             right: '5%',
-                            height: '15%',  
-                            top: '75%'      
+                            height: '15%',
+                            top: '75%'
                         }
                     ],
                     xAxis: [
                         { type: 'category', data: dates, gridIndex: 0 },
-                        { type: 'category', data: dates, gridIndex: 1, show: false,position:'top' }
+                        { type: 'category', data: dates, gridIndex: 1, show: false, position: 'top' }
                     ],
                     yAxis: [
-                        { 
-                            type: 'value', 
-                            gridIndex: 0, 
+                        {
+                            type: 'value',
+                            gridIndex: 0,
                             name: '收益率(%)',
                             axisLabel: { formatter: '{value}%' }
                         },
-                        { 
-                            type: 'value', 
-                            gridIndex: 1, 
+                        {
+                            type: 'value',
+                            gridIndex: 1,
                             name: '回撤率(%)',
-                              
+
                             axisLabel: { formatter: '{value}%' },
                             splitNumber: 3  // 新增：设置分割段数
                         }
                     ],
                     series: [...returnSeries, ...drawdownSeries],
                     dataZoom: [
-                    {
-                        type: 'slider', // 使用滑块式数据区域缩放组件
-                        start: 0,       // 初始显示范围起始百分比
-                        end: 100,       // 初始显示范围结束百分比
-                        xAxisIndex: [0, 1], // 控制两个 x 轴
-                        filterMode: 'empty' // 缩放时只过滤对应区域的数据
-                    }
+                        {
+                            type: 'slider', // 使用滑块式数据区域缩放组件
+                            start: 0,       // 初始显示范围起始百分比
+                            end: 100,       // 初始显示范围结束百分比
+                            xAxisIndex: [0, 1], // 控制两个 x 轴
+                            filterMode: 'empty' // 缩放时只过滤对应区域的数据
+                        }
                     ]
                 };
 
@@ -369,16 +372,16 @@
                 // 统一列配置
                 const tradeCols = [
                     [
-                        {field: 'symbol', width: 100, title: '标的'},
-                        {field: 'profit', width: 100, title: '盈利'},
-                        {field: 'open_time', width: 150, title: '开仓时间'},
-                        {field:'open_price', width: 100, title: '开仓价格'},
-                        {field:'open_fee', width: 100, title: '开仓手续费'},
-                        {field: 'close_time', width: 150, title: '平仓时间'},
-                        {field:'close_price', width: 100, title: '平仓价格'},
-                        {field:'close_fee', width: 100, title: '平仓手续费'},
-                        {field: 'volume', width: 100, title: '平仓数量'},
-      
+                        { field: 'symbol', width: 100, title: '标的' },
+                        { field: 'profit', width: 100, title: '盈利' },
+                        { field: 'open_time', width: 150, title: '开仓时间' },
+                        { field: 'open_price', width: 100, title: '开仓价格' },
+                        { field: 'open_fee', width: 100, title: '开仓手续费' },
+                        { field: 'close_time', width: 150, title: '平仓时间' },
+                        { field: 'close_price', width: 100, title: '平仓价格' },
+                        { field: 'close_fee', width: 100, title: '平仓手续费' },
+                        { field: 'volume', width: 100, title: '平仓数量' },
+
                     ]
                 ];
 
@@ -396,7 +399,7 @@
                     data: largestLossTrades,
                     cols: tradeCols.map(cols => cols.map(col => {
                         if (col.field === 'profit') {
-                            return {...col, title: '亏损'};
+                            return { ...col, title: '亏损' };
                         }
                         return col;
                     })),
@@ -413,27 +416,27 @@
             }
         });
     </script>
-<script>
-// 修改初始化代码 - 展开所有折叠内容
-document.querySelectorAll('.collapse-content').forEach(content => {
-    content.classList.add('active');
-});
+    <script>
+        // 修改初始化代码 - 展开所有折叠内容
+        document.querySelectorAll('.collapse-content').forEach(content => {
+            content.classList.add('active');
+        });
 
-function toggleCollapse(element) {
-    const content = element.nextElementSibling;
-    
-    content.classList.toggle('active');
-    
-    // 如果是表格内容，可能需要重新渲染
-    if (content.querySelector('table')) {
-        setTimeout(() => {
-            const table = layui.table;
-            table.resize('metricsTable');
-            table.resize('transactionTable');
-        }, 300);
-    }
-}
-</script>
+        function toggleCollapse(element) {
+            const content = element.nextElementSibling;
+
+            content.classList.toggle('active');
+
+            // 如果是表格内容，可能需要重新渲染
+            if (content.querySelector('table')) {
+                setTimeout(() => {
+                    const table = layui.table;
+                    table.resize('metricsTable');
+                    table.resize('transactionTable');
+                }, 300);
+            }
+        }
+    </script>
 </body>
 
 </html>
