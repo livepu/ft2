@@ -164,13 +164,14 @@
         let assetsData = [];
         try {
             // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
-            assetsData = {{ assets_data | safe }
-        };
-        if (!Array.isArray(assetsData)) {
-            console.warn('总资产数据格式异常，自动重置为空数组');
-            assetsData = [];
+            assetsData = {{ assets_data | safe }};
+        
+            if (!Array.isArray(assetsData)) {
+                console.warn('总资产数据格式异常，自动重置为空数组');
+                assetsData = [];
+            }
         }
-        } catch (e) {
+        catch (e) {
             console.error('总资产数据解析失败:', e);
             assetsData = [];
         }
@@ -179,12 +180,13 @@
         let transactionData = [];
         try {
             // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
-            transactionData = {{ transaction_data | safe }
-        };
-        if (!Array.isArray(transactionData)) {
-            throw new Error('交易数据非数组类型');
+            transactionData = {{ transaction_data | safe }}; //格式化会导致}}分隔错误
+        
+            if (!Array.isArray(transactionData)) {
+                throw new Error('交易数据非数组类型');
+            }
         }
-        } catch (e) {
+        catch (e) {
             document.write(`<div class="error-container">交易数据加载失败：${e.message}</div>`);
             transactionData = [];
         }
