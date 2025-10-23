@@ -147,6 +147,9 @@ class AccountManager:
     ) -> str:
         """
         按总资产指定比例下单
+        注意：买入和卖出采用不同的计算基准
+        - 买入时：基于当前总资产计算目标金额
+        - 卖出时：基于当前持仓数量计算比例
         :param symbol: 标的代码
         :param percent: 下单比例，0-1 之间，正数买入，负数卖出
         :param price: 指定价格（可选）
@@ -163,7 +166,7 @@ class AccountManager:
         account_info = self.get_account()
         nav = account_info['nav']
 
-        # 计算下单金额
+        # 计算下单金额（买入时基于总资产）
         order_amount = nav * abs(percent)
 
         if percent > 0:  # 买入
@@ -187,7 +190,7 @@ class AccountManager:
             )
             available_amount = order_amount - commission
             volume = int(available_amount / price)
-        else:  # 卖出
+        else:  # 卖出（基于当前持仓数量计算比例）
             current_pos = self.positions.get(symbol, {'volume': 0})
             volume = -int(current_pos['volume'] * abs(percent))
 
