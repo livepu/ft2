@@ -4,11 +4,11 @@
 <head>
     <meta charset="utf-8">
     <title>{{report_name}}</title>
-    <!-- 引入 layui.css -->
-    <link href="https://rp.make2.top/smartvc/static/css/layui.css" rel="stylesheet">
-    <script src="https://rp.make2.top/smartvc/static/js/layui.js"></script>
-    <script src="https://rp.make2.top/smartvc/static/js/echarts.min.js"></script>
-    <script src="https://rp.make2.top/smartvc/static/js/report.js"></script>
+    
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/alpine.min.js"></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/alpine-table.js"></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/echarts.min.js"></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/report.js"></script>
 
     <style>
         body {
@@ -69,23 +69,6 @@
             color: #333;
         }
 
-        /* 修改 Layui 表格翻页按钮底色为红色 */
-        .layui-table-page .layui-laypage .layui-laypage-curr .layui-laypage-em {
-            background-color: #e64340;
-            /* Layui 红色主色调 */
-        }
-
-        .layui-table-page .layui-laypage a:hover {
-            color: #e64340;
-        }
-
-        .layui-table-page .layui-laypage a,
-        .layui-table-page .layui-laypage span {
-            margin: 0 3px;
-        }
-
-
-
         .collapse-content {
             display: none;
         }
@@ -97,6 +80,84 @@
         /* 添加h3悬停样式 */
         .collapse-title h3 {
             cursor: pointer;
+        }
+
+        /* Alpine Table 样式 */
+        .alpine-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 14px;
+            text-align: left;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .alpine-table th {
+            background-color: #f5f5f5;
+            color: #333;
+            font-weight: bold;
+            padding: 12px 8px;
+            border: 1px solid #e0e0e0;
+            cursor: pointer;
+        }
+
+        .alpine-table th:hover {
+            background-color: #e8e8e8;
+        }
+
+        .alpine-table td {
+            padding: 10px 8px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .alpine-table tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        .alpine-table tr:hover {
+            background-color: #f0f0f0;
+        }
+
+        /* 排序指示符样式 */
+        .sort-asc, .sort-desc {
+            margin-left: 5px;
+            font-size: 12px;
+            color: #e64340;
+        }
+
+        /* 分页样式 */
+        .alpine-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 10px 0;
+            gap: 10px;
+        }
+
+        .alpine-pagination button {
+            padding: 5px 10px;
+            border: 1px solid #e0e0e0;
+            background-color: #fff;
+            color: #333;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+
+        .alpine-pagination button:hover {
+            background-color: #f0f0f0;
+        }
+
+        .alpine-pagination button:disabled {
+            background-color: #f5f5f5;
+            color: #999;
+            cursor: not-allowed;
+        }
+
+        .alpine-pagination select {
+            padding: 5px;
+            border: 1px solid #e0e0e0;
+            border-radius: 3px;
         }
     </style>
 </head>
@@ -118,7 +179,40 @@
 
             </div>
             <div class="collapse-content">
-                <table id="metricsTable" lay-filter="metricsTable"></table>
+                <div x-data="table({ id: 'metricsTable', data: metricsData, cols: [{ field: 'name', title: '指标名称' }, { field: 'value', title: '指标值' }, { field: 'desc', title: '备注' }], page: { limit: 20 } })">
+                    <table class="alpine-table">
+                        <thead>
+                            <tr>
+                                <template x-for="col in cols" :key="col.field">
+                                    <th @click="sort(col.field, $event)">
+                                        <span x-text="getColumnLabel(col.field)"></span>
+                                        <span x-if="getSortDirection(col.field) === 'asc'" class="sort-asc">↑</span>
+                                        <span x-if="getSortDirection(col.field) === 'desc'" class="sort-desc">↓</span>
+                                    </th>
+                                </template>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="row in getPageData()" :key="row.name">
+                                <tr>
+                                    <td x-text="row.name"></td>
+                                    <td x-text="row.value"></td>
+                                    <td x-text="row.desc"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                    <div class="alpine-pagination">
+                        <button @click="prevPage()" :disabled="page.curr === 1">上一页</button>
+                        <span x-text="`第 ${page.curr} 页 / 共 ${page.totalPage} 页`"></span>
+                        <button @click="nextPage()" :disabled="page.curr === page.totalPage">下一页</button>
+                        <select v-model="page.limit" @change="changeLimit()">
+                            <template x-for="limit in page.limits" :key="limit">
+                                <option :value="limit" x-text="`${limit} 条/页`"></option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -129,7 +223,40 @@
 
             </div>
             <div class="collapse-content">
-                <table id="transactionTable" lay-filter="transactionTable"></table>
+                <div x-data="table({ id: 'transactionTable', data: transactionData, cols: transactionCols, page: { limit: 10 } })">
+                    <table class="alpine-table">
+                        <thead>
+                            <tr>
+                                <template x-for="col in cols" :key="col.field">
+                                    <th @click="sort(col.field, $event)">
+                                        <span x-text="getColumnLabel(col.field)"></span>
+                                        <span x-if="getSortDirection(col.field) === 'asc'" class="sort-asc">↑</span>
+                                        <span x-if="getSortDirection(col.field) === 'desc'" class="sort-desc">↓</span>
+                                    </th>
+                                </template>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="row in getPageData()" :key="row.标的">
+                                <tr>
+                                    <template x-for="col in cols" :key="col.field">
+                                        <td x-text="row[col.field]"></td>
+                                    </template>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                    <div class="alpine-pagination">
+                        <button @click="prevPage()" :disabled="page.curr === 1">上一页</button>
+                        <span x-text="`第 ${page.curr} 页 / 共 ${page.totalPage} 页`"></span>
+                        <button @click="nextPage()" :disabled="page.curr === page.totalPage">下一页</button>
+                        <select v-model="page.limit" @change="changeLimit()">
+                            <template x-for="limit in page.limits" :key="limit">
+                                <option :value="limit" x-text="`${limit} 条/页`"></option>
+                            </template>
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -140,7 +267,36 @@
 
             </div>
             <div class="collapse-content">
-                <div id="profitTable"></div>
+                <div x-data="table({ id: 'profitTable', data: largestProfitTrades, cols: [{ field: 'symbol', title: '标的' }, { field: 'profit', title: '盈利' }, { field: 'open_time', title: '开仓时间' }, { field: 'open_price', title: '开仓价格' }, { field: 'open_fee', title: '开仓手续费' }, { field: 'close_time', title: '平仓时间' }, { field: 'close_price', title: '平仓价格' }, { field: 'close_fee', title: '平仓手续费' }, { field: 'volume', title: '平仓数量' }], page: { limit: 5 } })">
+                    <table class="alpine-table">
+                        <thead>
+                            <tr>
+                                <template x-for="col in cols" :key="col.field">
+                                    <th @click="sort(col.field, $event)">
+                                        <span x-text="getColumnLabel(col.field)"></span>
+                                        <span x-if="getSortDirection(col.field) === 'asc'" class="sort-asc">↑</span>
+                                        <span x-if="getSortDirection(col.field) === 'desc'" class="sort-desc">↓</span>
+                                    </th>
+                                </template>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="row in getPageData()" :key="row.symbol + row.open_time">
+                                <tr>
+                                    <td x-text="row.symbol"></td>
+                                    <td x-text="row.profit"></td>
+                                    <td x-text="row.open_time"></td>
+                                    <td x-text="row.open_price"></td>
+                                    <td x-text="row.open_fee"></td>
+                                    <td x-text="row.close_time"></td>
+                                    <td x-text="row.close_price"></td>
+                                    <td x-text="row.close_fee"></td>
+                                    <td x-text="row.volume"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -151,20 +307,59 @@
 
             </div>
             <div class="collapse-content">
-                <div id="lossTable"></div>
+                <div x-data="table({ id: 'lossTable', data: largestLossTrades, cols: [{ field: 'symbol', title: '标的' }, { field: 'profit', title: '亏损' }, { field: 'open_time', title: '开仓时间' }, { field: 'open_price', title: '开仓价格' }, { field: 'open_fee', title: '开仓手续费' }, { field: 'close_time', title: '平仓时间' }, { field: 'close_price', title: '平仓价格' }, { field: 'close_fee', title: '平仓手续费' }, { field: 'volume', title: '平仓数量' }], page: { limit: 5 } })">
+                    <table class="alpine-table">
+                        <thead>
+                            <tr>
+                                <template x-for="col in cols" :key="col.field">
+                                    <th @click="sort(col.field, $event)">
+                                        <span x-text="getColumnLabel(col.field)"></span>
+                                        <span x-if="getSortDirection(col.field) === 'asc'" class="sort-asc">↑</span>
+                                        <span x-if="getSortDirection(col.field) === 'desc'" class="sort-desc">↓</span>
+                                    </th>
+                                </template>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="row in getPageData()" :key="row.symbol + row.open_time">
+                                <tr>
+                                    <td x-text="row.symbol"></td>
+                                    <td x-text="row.profit"></td>
+                                    <td x-text="row.open_time"></td>
+                                    <td x-text="row.open_price"></td>
+                                    <td x-text="row.open_fee"></td>
+                                    <td x-text="row.close_time"></td>
+                                    <td x-text="row.close_price"></td>
+                                    <td x-text="row.close_fee"></td>
+                                    <td x-text="row.volume"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
     </div>
 
 
+    <!-- 将配置以 JSON 格式输出到独立的 script 标签中，避免 Jinja2 和 JavaScript 语法冲突 -->
+    <script id="app-config" type="application/json">
+        {
+            "assetsData": {{ assets_data | safe }},
+            "transactionData": {{ transaction_data | safe }}
+        }
+    </script>
+
     <!-- 安全数据注入 -->
     <script>
+        // 从独立的 script 标签中获取配置数据
+        const config = JSON.parse(document.getElementById('app-config').textContent);
+        
         // 净值数据（带多层保护）
         let assetsData = [];
         try {
-            // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
-            assetsData = {{ assets_data | safe }};
+            assetsData = config.assetsData;
         
             if (!Array.isArray(assetsData)) {
                 console.warn('总资产数据格式异常，自动重置为空数组');
@@ -179,8 +374,7 @@
         // 交易数据（带类型校验）
         let transactionData = [];
         try {
-            // 直接使用经过 json.dumps 处理的数据，移除 tojson 过滤器
-            transactionData = {{ transaction_data | safe }}; //格式化会导致}}分隔错误
+            transactionData = config.transactionData;
         
             if (!Array.isArray(transactionData)) {
                 throw new Error('交易数据非数组类型');
@@ -224,9 +418,15 @@
                 const legendData = [];
 
 
-                // 获取关键指标数据并渲染表格
+                // 获取关键指标数据
                 const metricsData = analyzer.getMetrics();
-                renderMetricsTable(metricsData);
+                
+                // 定义交易记录表格列
+                const transactionCols = [];
+                if (transactionData && transactionData.length > 0) {
+                    const keys = Object.keys(transactionData[0]);
+                    transactionCols = keys.map(key => ({ field: key, title: key.toUpperCase() }));
+                }
 
                 // 获取累计收益率数据
                 const ecdatas = analyzer.getEchartsData();
@@ -426,17 +626,7 @@
 
         function toggleCollapse(element) {
             const content = element.nextElementSibling;
-
             content.classList.toggle('active');
-
-            // 如果是表格内容，可能需要重新渲染
-            if (content.querySelector('table')) {
-                setTimeout(() => {
-                    const table = layui.table;
-                    table.resize('metricsTable');
-                    table.resize('transactionTable');
-                }, 300);
-            }
         }
     </script>
 </body>
