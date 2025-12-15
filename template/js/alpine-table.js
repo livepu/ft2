@@ -23,24 +23,7 @@
  *     {field: 'age', title: '年龄'}
  *   ]
  * })">
- *   <table>
- *     <thead>
- *       <tr>
- *         <template x-for="col in cols" :key="col.field">
- *           <th @click="sort(col.field, $event)" x-text="col.title"></th>
- *         </template>
- *       </tr>
- *     </thead>
- *     <tbody>
- *       <template x-for="item in getPageData()" :key="item.id">
- *         <tr>
- *           <td x-text="item.id"></td>
- *           <td x-text="item.name"></td>
- *           <td x-text="item.age"></td>
- *         </tr>
- *       </template>
- *     </tbody>
- *   </table>
+ *   <!-- 表格和分页控件会自动渲染 -->
  * </div>
  * ```
  * 
@@ -58,7 +41,7 @@
  *     return res.data.items;
  *   }
  * })">
- *   <!-- 表格HTML结构同上 -->
+ *   <!-- 表格和分页控件会自动渲染 -->
  * </div>
  * ```
  * 
@@ -85,7 +68,7 @@
  *   dataSrc: '#table-data',
  *   colsSrc: '#table-cols'  // 可选，如果不提供则自动从数据推断列定义
  * })">
- *   <!-- 表格HTML结构同上 -->
+ *   <!-- 表格和分页控件会自动渲染 -->
  * </div>
  * ```
  * 
@@ -101,7 +84,7 @@
  * 
  * <!-- 不提供列配置，自动从数据中推断 -->
  * <div x-data="table({ dataSrc: '#table-data' })">
- *   <!-- 表格HTML结构同上 -->
+ *   <!-- 表格和分页控件会自动渲染 -->
  *   <!-- 此时会自动生成列: 员工编号, 姓名, 部门, 年龄 -->
  * </div>
  * ```
@@ -122,8 +105,97 @@
  *   data: {{ data|tojson }},  # Flask/Jinja2 模板语法
  *   cols: {{ cols|tojson }}
  * })">
- *   <!-- 表格HTML结构 -->
+ *   <!-- 表格和分页控件会自动渲染 -->
  * </div>
+ * ```
+ * 
+ * 6. 自定义表格和分页控件:
+ * 如果需要自定义表格或分页控件样式，可以在组件内添加.table-container和.pagination-container元素:
+ * ```html
+ * <div x-data="table({...})">
+ *   <div class="table-container">
+ *     <!-- 自定义表格 -->
+ *   </div>
+ *   <div class="pagination-container">
+ *     <!-- 自定义分页控件 -->
+ *   </div>
+ * </div>
+ * ```
+ * 
+ * CSS 样式参考:
+ * ```css
+ * .alpine-table-container {
+ *   overflow-x: auto;
+ * }
+ * 
+ * .alpine-table {
+ *   width: 100%;
+ *   border-collapse: collapse;
+ *   margin: 10px 0;
+ *   font-size: 14px;
+ *   text-align: left;
+ * }
+ * 
+ * .alpine-table th {
+ *   background-color: #f5f5f5;
+ *   color: #333;
+ *   font-weight: bold;
+ *   padding: 12px 8px;
+ *   border: 1px solid #e0e0e0;
+ *   cursor: pointer;
+ * }
+ * 
+ * .alpine-table th:hover {
+ *   background-color: #e8e8e8;
+ * }
+ * 
+ * .alpine-table td {
+ *   padding: 10px 8px;
+ *   border: 1px solid #e0e0e0;
+ * }
+ * 
+ * .alpine-table tr:nth-child(even) {
+ *   background-color: #fafafa;
+ * }
+ * 
+ * .alpine-table tr:hover {
+ *   background-color: #f0f0f0;
+ * }
+ * 
+ * .alpine-table .sort-asc, .alpine-table .sort-desc {
+ *   margin-left: 5px;
+ *   font-size: 12px;
+ *   color: #e64340;
+ * }
+ * 
+ * .alpine-table-pagination {
+ *   display: flex;
+ *   align-items: center;
+ *   justify-content: center;
+ *   margin: 10px 0;
+ *   gap: 10px;
+ * }
+ * 
+ * .alpine-table-pagination .pagination-btn {
+ *   padding: 5px 10px;
+ *   border: 1px solid #e0e0e0;
+ *   background-color: #fff;
+ *   color: #333;
+ *   cursor: pointer;
+ *   border-radius: 3px;
+ * }
+ * 
+ * .alpine-table-pagination .pagination-btn:disabled {
+ *   background-color: #f5f5f5;
+ *   color: #999;
+ *   cursor: not-allowed;
+ * }
+ * 
+ * .alpine-table-pagination .pagination-select {
+ *   padding: 5px;
+ *   border: 1px solid #e0e0e0;
+ *   border-radius: 3px;
+ * }
  * ```
  */
 
@@ -222,6 +294,12 @@
         if (this.url) {
           this.loadData();
         }
+        
+        // 在下一帧执行自动表格和分页控件渲染
+        setTimeout(() => {
+          this.renderTable();
+          this.renderPagination();
+        }, 0);
       },
 
       // 通过AJAX加载数据
@@ -241,6 +319,10 @@
               
               // 更新分页信息
               this.updatePageInfo();
+              
+              // 重新渲染表格和分页控件
+              this.renderTable();
+              this.renderPagination();
             } catch (error) {
               console.error('加载数据失败:', error);
               alert('数据加载失败: ' + error.message);
@@ -332,6 +414,123 @@
         const start = (this.page.curr - 1) * this.page.limit;
         const end = start + this.page.limit;
         return result.slice(start, end);
+      },
+      
+      // 检查是否需要分页（数据量超过每页限制才需要分页）
+      needsPagination() {
+        return this.data && this.data.length > this.page.limit;
+      },
+      
+      // 渲染表格
+      renderTable() {
+        // 查找组件根元素
+        const rootElement = document.querySelector(`[x-data*="${this.id}"]`) || 
+                           document.querySelector(`[x-data*="table"]`);
+                           
+        if (!rootElement) return;
+        
+        // 查找自定义表格容器
+        const customTableContainer = rootElement.querySelector('.table-container');
+        
+        // 如果有自定义表格容器，不自动渲染
+        if (customTableContainer) return;
+        
+        // 查找是否已存在内置表格
+        const existingTable = rootElement.querySelector('.alpine-table-container');
+        if (existingTable) return; // 如果已存在内置表格，则不重复创建
+        
+        // 创建表格HTML
+        const tableHTML = `
+          <div class="alpine-table-container">
+            <table class="alpine-table">
+              <thead>
+                <tr>
+                  ${this.cols.map(col => `
+                    <th @click="sort('${col.field}', $event)">
+                      <span x-text="getColumnLabel('${col.field}')"></span>
+                      <span x-show="getSortDirection('${col.field}') === 'asc'" class="sort-asc">↑</span>
+                      <span x-show="getSortDirection('${col.field}') === 'desc'" class="sort-desc">↓</span>
+                    </th>
+                  `).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="row in getPageData()" :key="row.id || row[Object.keys(row)[0]]">
+                  <tr>
+                    ${this.cols.map(col => `<td x-text="row['${col.field}']"></td>`).join('')}
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        `;
+        
+        // 将表格添加到根元素开头
+        rootElement.insertAdjacentHTML('afterbegin', tableHTML);
+        
+        // 如果使用 Alpine 3.x，需要重新处理新添加的元素
+        if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+          const newTable = rootElement.querySelector('.alpine-table-container');
+          if (newTable) {
+            window.Alpine.initTree(newTable);
+          }
+        }
+      },
+      
+      // 渲染分页控件
+      renderPagination() {
+        // 查找组件根元素
+        const rootElement = document.querySelector(`[x-data*="${this.id}"]`) || 
+                           document.querySelector(`[x-data*="table"]`);
+                           
+        if (!rootElement) return;
+        
+        // 查找自定义分页容器
+        const customPaginationContainer = rootElement.querySelector('.pagination-container');
+        
+        // 如果有自定义分页容器，不自动渲染
+        if (customPaginationContainer) return;
+        
+        // 查找是否已存在内置分页控件
+        const existingPagination = rootElement.querySelector('.alpine-table-pagination');
+        if (existingPagination) {
+          // 如果已存在且不需要分页，则移除
+          if (!this.needsPagination()) {
+            existingPagination.remove();
+          }
+          return;
+        }
+        
+        // 如果需要分页且没有自定义分页容器，则自动创建
+        if (this.needsPagination()) {
+          const paginationHTML = `
+            <div class="alpine-table-pagination">
+              <button @click="prevPage()" :disabled="page.curr === 1" class="pagination-btn pagination-prev">
+                上一页
+              </button>
+              <span class="pagination-info" x-text="'第 ' + page.curr + ' 页 / 共 ' + page.totalPage + ' 页'"></span>
+              <button @click="nextPage()" :disabled="page.curr === page.totalPage" class="pagination-btn pagination-next">
+                下一页
+              </button>
+              <select x-model="page.limit" @change="changeLimit()" class="pagination-select">
+                <template x-for="limit in page.limits" :key="limit">
+                  <option :value="limit" x-text="limit + ' 条/页'"></option>
+                </template>
+              </select>
+            </div>
+          `;
+          
+          // 将分页控件添加到根元素末尾
+          rootElement.insertAdjacentHTML('beforeend', paginationHTML);
+          
+          // 如果使用 Alpine 3.x，需要重新处理新添加的元素
+          if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+            const newPagination = rootElement.querySelector('.alpine-table-pagination');
+            if (newPagination) {
+              window.Alpine.initTree(newPagination);
+            }
+          }
+        }
       },
 
       // 排序方法
@@ -471,6 +670,8 @@
           this.data = [...this.data, newData];
         }
         this.updatePageInfo();
+        this.renderTable();
+        this.renderPagination();
       },
 
       // 重载数据
@@ -492,6 +693,8 @@
         // 强制更新
         this.sortRules = [...this.sortRules];
         this.updatePageInfo();
+        this.renderTable();
+        this.renderPagination();
       }
     };
   };
