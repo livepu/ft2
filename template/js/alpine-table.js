@@ -1,3 +1,88 @@
+/**
+ * Alpine.js 表格组件
+ * 
+ * 功能特性:
+ * - 支持从本地数据或远程URL加载数据
+ * - 分页功能
+ * - 多列排序（支持单列和多列排序）
+ * - 自定义数据解析
+ * - 响应式设计
+ * 
+ * 使用方法:
+ * 
+ * 1. 基础用法 - 静态数据:
+ * ```html
+ * <div x-data="table({
+ *   data: [
+ *     {id: 1, name: 'John', age: 30},
+ *     {id: 2, name: 'Jane', age: 25}
+ *   ],
+ *   cols: [
+ *     {field: 'id', title: 'ID'},
+ *     {field: 'name', title: '姓名'},
+ *     {field: 'age', title: '年龄'}
+ *   ]
+ * })">
+ *   <table>
+ *     <thead>
+ *       <tr>
+ *         <template x-for="col in cols" :key="col.field">
+ *           <th @click="sort(col.field, $event)" x-text="col.title"></th>
+ *         </template>
+ *       </tr>
+ *     </thead>
+ *     <tbody>
+ *       <template x-for="item in getPageData()" :key="item.id">
+ *         <tr>
+ *           <td x-text="item.id"></td>
+ *           <td x-text="item.name"></td>
+ *           <td x-text="item.age"></td>
+ *         </tr>
+ *       </template>
+ *     </tbody>
+ *   </table>
+ * </div>
+ * ```
+ * 
+ * 2. 远程数据加载:
+ * ```html
+ * <div x-data="table({
+ *   url: '/api/users',
+ *   cols: [
+ *     {field: 'id', title: 'ID'},
+ *     {field: 'name', title: '姓名'},
+ *     {field: 'email', title: '邮箱'}
+ *   ],
+ *   parseData: function(res) {
+ *     // 自定义数据解析函数
+ *     return res.data.items;
+ *   }
+ * })">
+ *   <!-- 表格HTML结构同上 -->
+ * </div>
+ * ```
+ * 
+ * 3. Python Pandas 数据适配:
+ * 当使用 Python 的 Pandas 处理数据时，可以将其转换为如下格式:
+ * ```python
+ * # Python端
+ * data = df.to_dict('records')  # 转换DataFrame为字典列表
+ * cols = [{'field': col, 'title': col} for col in df.columns]  # 自动生成列定义
+ * 
+ * # 然后将data和cols传递给前端
+ * ```
+ * 
+ * 前端使用:
+ * ```html
+ * <div x-data="table({
+ *   data: {{ data|tojson }},  # Flask/Jinja2 模板语法
+ *   cols: {{ cols|tojson }}
+ * })">
+ *   <!-- 表格HTML结构 -->
+ * </div>
+ * ```
+ */
+
 // Alpine.js 表格组件扩展 - 兼容全局作用域
 (function () {
   'use strict';
@@ -85,22 +170,22 @@
         try {
           const response = await fetch(this.url);
           if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          const rawData = await response.json();
-          
-          // 使用自定义数据处理函数处理数据
-          this.data = this.parseData(rawData);
-          
-          // 更新分页信息
-          this.updatePageInfo();
-        } catch (error) {
-          console.error('加载数据失败:', error);
-          alert('数据加载失败: ' + error.message);
-        } finally {
-          this.loading = false;
-        }
-      },
+                throw new Error(`HTTP error! status: ${response.status}`);
+              }
+              const rawData = await response.json();
+              
+              // 使用自定义数据处理函数处理数据
+              this.data = this.parseData(rawData);
+              
+              // 更新分页信息
+              this.updatePageInfo();
+            } catch (error) {
+              console.error('加载数据失败:', error);
+              alert('数据加载失败: ' + error.message);
+            } finally {
+              this.loading = false;
+            }
+          },
 
       // 更新分页信息
       updatePageInfo() {
