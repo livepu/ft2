@@ -1,17 +1,55 @@
-// Alpine.js 表格组件扩展
-(function (global, factory) {
-  typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-  typeof define === 'function' && define.amd ? define(factory) :
-  global.AlpineTable = factory();
-}(this, (function () {
+// Alpine.js 表格组件扩展 - 兼容全局作用域
+(function () {
   'use strict';
 
-  // 等待 Alpine.js 初始化完成
-  document.addEventListener('alpine:init', () => {
-    Alpine.data('table', (config = {}) => ({
+  // 辅助函数：从JSON脚本标签读取数据
+  function getDataFromSrc(src) {
+    if (!src) return [];
+    
+    // 支持选择器
+    if (src.startsWith('#')) {
+      const elem = document.querySelector(src);
+      if (elem && elem.textContent) {
+        try {
+          return JSON.parse(elem.textContent);
+        } catch (e) {
+          console.error('Failed to parse JSON data from', src, e);
+          return [];
+        }
+      }
+    }
+    
+    // 支持全局变量路径
+    if (src.includes('.')) {
+      try {
+        const parts = src.split('.');
+        let data = window;
+        for (const part of parts) {
+          data = data[part];
+          if (data === undefined) return [];
+        }
+        return data;
+      } catch (e) {
+        console.error('Failed to get data from path', src, e);
+        return [];
+      }
+    }
+    
+    return [];
+  }
+
+  // 定义表格组件工厂函数
+  window.table = function table(config = {}) {
+    // 处理数据来源
+    let data = config.data || [];
+    if (config.dataSrc) {
+      data = getDataFromSrc(config.dataSrc);
+    }
+    
+    return {
       // 默认配置
       id: config.id || 'table-' + Date.now(),
-      data: config.data || [],
+      data: data,
       cols: config.cols || [],
       url: config.url || null,
       sortRules: [],
@@ -308,8 +346,15 @@
         this.sortRules = [...this.sortRules];
         this.updatePageInfo();
       }
-    }));
-  });
+    };
+  };
+});
 
-  return {};
-})));
+// 同时支持 Alpine.js 3.x 的数据组件注册
+document.addEventListener('alpine:init', () => {
+  // 检查 Alpine 是否存在
+  if (window.Alpine) {
+    // 注册为 Alpine.js 数据组件，确保使用全局的 table 函数
+    window.Alpine.data('table', window.table);
+  }
+});
