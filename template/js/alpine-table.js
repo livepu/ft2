@@ -62,7 +62,51 @@
  * </div>
  * ```
  * 
- * 3. Python Pandas 数据适配:
+ * 3. 从JSON脚本标签加载数据和列配置:
+ * ```html
+ * <!-- 数据源 -->
+ * <script id="table-data" type="application/json">
+ * [
+ *   {"id": 1, "name": "John", "age": 30},
+ *   {"id": 2, "name": "Jane", "age": 25}
+ * ]
+ * </script>
+ *
+ * <!-- 列配置源（可选）-->
+ * <script id="table-cols" type="application/json">
+ * [
+ *   {"field": "id", "title": "ID"},
+ *   {"field": "name", "title": "姓名"},
+ *   {"field": "age", "title": "年龄"}
+ * ]
+ * </script>
+ *
+ * <div x-data="table({
+ *   dataSrc: '#table-data',
+ *   colsSrc: '#table-cols'  // 可选，如果不提供则自动从数据推断列定义
+ * })">
+ *   <!-- 表格HTML结构同上 -->
+ * </div>
+ * ```
+ * 
+ * 4. 自动列推断（不提供列配置时）:
+ * 当不提供cols或colsSrc参数时，组件会自动从数据的第一项中提取所有键作为列定义:
+ * ```html
+ * <script id="table-data" type="application/json">
+ * [
+ *   {"员工编号": 1, "姓名": "张三", "部门": "技术部", "年龄": 25},
+ *   {"员工编号": 2, "姓名": "李四", "部门": "市场部", "年龄": 30}
+ * ]
+ * </script>
+ * 
+ * <!-- 不提供列配置，自动从数据中推断 -->
+ * <div x-data="table({ dataSrc: '#table-data' })">
+ *   <!-- 表格HTML结构同上 -->
+ *   <!-- 此时会自动生成列: 员工编号, 姓名, 部门, 年龄 -->
+ * </div>
+ * ```
+ * 
+ * 5. Python Pandas 数据适配:
  * 当使用 Python 的 Pandas 处理数据时，可以将其转换为如下格式:
  * ```python
  * # Python端
@@ -131,11 +175,29 @@
       data = getDataFromSrc(config.dataSrc);
     }
     
+    // 处理列配置来源
+    let cols = config.cols || [];
+    if (config.colsSrc) {
+      cols = getDataFromSrc(config.colsSrc);
+    }
+    
+    // 如果没有提供列配置，则根据数据自动推断列定义
+    if ((!config.cols || config.cols.length === 0) && 
+        (!config.colsSrc || cols.length === 0) && 
+        data.length > 0) {
+      // 获取第一条数据的所有键作为列
+      const firstItem = data[0];
+      cols = Object.keys(firstItem).map(key => ({
+        field: key,
+        title: key
+      }));
+    }
+    
     return {
       // 默认配置
       id: config.id || 'table-' + Date.now(),
       data: data,
-      cols: config.cols || [],
+      cols: cols,
       url: config.url || null,
       sortRules: [],
       page: {
