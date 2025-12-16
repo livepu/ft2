@@ -5,10 +5,19 @@
     <meta charset="utf-8">
     <title>{{report_name}}</title>
     
-    <!-- 添加 defer 属性确保 Alpine.js 和 alpine-table.js 在 body 加载完成后初始化 -->
-    <!-- 确保 alpine.min.js 先加载，然后是 alpine-table.js -->
+    <!-- 注意事项：以下脚本顺序非常重要，请勿随意修改 -->
+    <!-- 1. alpine-table.js 必须先加载，然后是 alpine.min.js -->
+    <!-- 2. alpine.min.js 需要添加 defer 属性，确保在 DOM 加载完成后初始化 -->
+    <!-- 3. 顺序：alpine-table.js → alpine.min.js (defer) → echarts.min.js → report.js -->
+    <!-- 4. table 组件使用注意：
+        - 必须使用 x-data="table({...})" 的形式初始化
+        - 必须提供唯一的 id 参数
+        - data 参数必须是数组格式
+        - cols 参数必须是包含 field 和 title 的对象数组
+        - 组件会自动渲染表格和分页控件
+    -->
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/alpine-table.js"></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/alpine.min.js" defer></script>
-    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/alpine-table.js" defer></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/echarts.min.js"></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/report.js"></script>
 

@@ -353,70 +353,76 @@ window.table = function table(config = {}) {
 
       // 获取当前页数据
       getPageData() {
-        let result = this.data || [];
-        
-        // 如果有排序规则，则进行排序
-        if (this.sortRules.length > 0) {
-          // 创建数据副本以避免修改原始数据
-          result = [...result];
+        try {
+          // 确保数据和分页配置都存在
+          const data = this.data || [];
+          const page = this.page || { curr: 1, limit: 10 };
+          
+          let result = [...data];
+          
+          // 如果有排序规则，则进行排序
+          if (this.sortRules && this.sortRules.length > 0) {
+            // 按照排序规则优先级进行排序
+            result.sort((a, b) => {
+              // 遍历所有排序规则
+              for (let i = 0; i < this.sortRules.length; i++) {
+                const rule = this.sortRules[i];
+                const field = rule.field;
+                const type = rule.type;
 
-          // 按照排序规则优先级进行排序
-          result.sort((a, b) => {
-            // 遍历所有排序规则
-            for (let i = 0; i < this.sortRules.length; i++) {
-              const rule = this.sortRules[i];
-              const field = rule.field;
-              const type = rule.type;
+                // 获取要比较的值
+                let aValue = a[field];
+                let bValue = b[field];
 
-              // 获取要比较的值
-              let aValue = a[field];
-              let bValue = b[field];
+                // 处理 null 或 undefined 值
+                if (aValue == null && bValue == null) {
+                  continue; // 如果都为空，比较下一个规则
+                }
 
-              // 处理 null 或 undefined 值
-              if (aValue == null && bValue == null) {
-                continue; // 如果都为空，比较下一个规则
+                if (aValue == null) {
+                  return type === 'asc' ? -1 : 1;
+                }
+
+                if (bValue == null) {
+                  return type === 'asc' ? 1 : -1;
+                }
+
+                // 尝试转换为数字进行比较
+                const aNum = Number(aValue);
+                const bNum = Number(bValue);
+
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                  aValue = aNum;
+                  bValue = bNum;
+                }
+
+                // 执行比较
+                let comparison = 0;
+                if (aValue < bValue) {
+                  comparison = -1;
+                } else if (aValue > bValue) {
+                  comparison = 1;
+                }
+
+                // 根据排序方向调整结果
+                if (comparison !== 0) {
+                  return type === 'asc' ? comparison : -comparison;
+                }
               }
 
-              if (aValue == null) {
-                return type === 'asc' ? -1 : 1;
-              }
+              // 所有规则都相等，保持原有顺序
+              return 0;
+            });
+          }
 
-              if (bValue == null) {
-                return type === 'asc' ? 1 : -1;
-              }
-
-              // 尝试转换为数字进行比较
-              const aNum = Number(aValue);
-              const bNum = Number(bValue);
-
-              if (!isNaN(aNum) && !isNaN(bNum)) {
-                aValue = aNum;
-                bValue = bNum;
-              }
-
-              // 执行比较
-              let comparison = 0;
-              if (aValue < bValue) {
-                comparison = -1;
-              } else if (aValue > bValue) {
-                comparison = 1;
-              }
-
-              // 根据排序方向调整结果
-              if (comparison !== 0) {
-                return type === 'asc' ? comparison : -comparison;
-              }
-            }
-
-            // 所有规则都相等，保持原有顺序
-            return 0;
-          });
+          // 应用分页
+          const start = (page.curr - 1) * page.limit;
+          const end = start + page.limit;
+          return result.slice(start, end);
+        } catch (error) {
+          console.error('Error in getPageData:', error);
+          return [];
         }
-
-        // 应用分页
-        const start = (this.page.curr - 1) * this.page.limit;
-        const end = start + this.page.limit;
-        return result.slice(start, end);
       },
       
       // 检查是否需要分页（数据量超过每页限制才需要分页）
@@ -455,7 +461,7 @@ window.table = function table(config = {}) {
                   </tr>
                 </thead>
                 <tbody>
-                  <template x-for="(row, index) in getPageData()" :key="index + '-' + (row.id || JSON.stringify(row))">
+                  <template x-for="(row, index) in getPageData()" :key="'row-' + index + '-' + index + '-' + JSON.stringify(row)">
                     <tr>
                       ${this.cols.map(col => `<td x-text="row['${col.field}']"></td>`).join('')}
                     </tr>
