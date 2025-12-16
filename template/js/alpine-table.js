@@ -199,10 +199,8 @@
  * ```
  */
 
-// Alpine.js 表格组件扩展 - 兼容全局作用域
-(function () {
-  'use strict';
-
+// 提前定义并暴露table函数到全局作用域
+window.table = function table(config = {}) {
   // 辅助函数：从JSON脚本标签读取数据
   function getDataFromSrc(src) {
     if (!src) return [];
@@ -229,7 +227,7 @@
           data = data[part];
           if (data === undefined) return [];
         }
-        return data;
+        return Array.isArray(data) ? data : (data.data || []);
       } catch (e) {
         console.error('Failed to get data from path', src, e);
         return [];
@@ -239,31 +237,29 @@
     return [];
   }
 
-  // 定义表格组件工厂函数
-  window.table = function table(config = {}) {
-    // 处理数据来源
-    let data = config.data || [];
-    if (config.dataSrc) {
-      data = getDataFromSrc(config.dataSrc);
-    }
-    
-    // 处理列配置来源
-    let cols = config.cols || [];
-    if (config.colsSrc) {
-      cols = getDataFromSrc(config.colsSrc);
-    }
-    
-    // 如果没有提供列配置，则根据数据自动推断列定义
-    if ((!config.cols || config.cols.length === 0) && 
-        (!config.colsSrc || cols.length === 0) && 
-        data.length > 0) {
-      // 获取第一条数据的所有键作为列
-      const firstItem = data[0];
-      cols = Object.keys(firstItem).map(key => ({
-        field: key,
-        title: key
-      }));
-    }
+  // 处理数据来源
+  let data = config.data || [];
+  if (config.dataSrc) {
+    data = getDataFromSrc(config.dataSrc);
+  }
+  
+  // 处理列配置来源
+  let cols = config.cols || [];
+  if (config.colsSrc) {
+    cols = getDataFromSrc(config.colsSrc);
+  }
+  
+  // 如果没有提供列配置，则根据数据自动推断列定义
+  if ((!config.cols || config.cols.length === 0) && 
+      (!config.colsSrc || cols.length === 0) && 
+      data.length > 0) {
+    // 获取第一条数据的所有键作为列
+    const firstItem = data[0];
+    cols = Object.keys(firstItem).map(key => ({
+      field: key,
+      title: key
+    }));
+  }
     
     return {
       // 默认配置
@@ -295,11 +291,18 @@
           this.loadData();
         }
         
-        // 在下一帧执行自动表格和分页控件渲染
+        // 添加延迟检测机制，确保自定义表格有足够时间渲染
+        // 第一次尝试
         setTimeout(() => {
           this.renderTable();
           this.renderPagination();
         }, 0);
+        
+        // 第二次尝试，确保自定义表格已经渲染完成
+        setTimeout(() => {
+          this.renderTable();
+          this.renderPagination();
+        }, 100);
       },
 
       // 通过AJAX加载数据
@@ -320,9 +323,9 @@
               // 更新分页信息
               this.updatePageInfo();
               
-              // 重新渲染表格和分页控件
-              this.renderTable();
-              this.renderPagination();
+              // 移除直接调用，因为Alpine.js会自动响应数据变化
+              // this.renderTable();
+              // this.renderPagination();
             } catch (error) {
               console.error('加载数据失败:', error);
               alert('数据加载失败: ' + error.message);
@@ -423,113 +426,135 @@
       
       // 渲染表格
       renderTable() {
-        // 查找组件根元素
-        const rootElement = document.querySelector(`[x-data*="${this.id}"]`) || 
-                           document.querySelector(`[x-data*="table"]`);
-                           
-        if (!rootElement) return;
-        
-        // 查找自定义表格容器
-        const customTableContainer = rootElement.querySelector('.table-container');
-        
-        // 如果有自定义表格容器，不自动渲染
-        if (customTableContainer) return;
-        
-        // 查找是否已存在内置表格
-        const existingTable = rootElement.querySelector('.alpine-table-container');
-        if (existingTable) return; // 如果已存在内置表格，则不重复创建
-        
-        // 创建表格HTML
-        const tableHTML = `
-          <div class="alpine-table-container">
-            <table class="alpine-table">
-              <thead>
-                <tr>
-                  ${this.cols.map(col => `
-                    <th @click="sort('${col.field}', $event)">
-                      <span x-text="getColumnLabel('${col.field}')"></span>
-                      <span x-show="getSortDirection('${col.field}') === 'asc'" class="sort-asc">↑</span>
-                      <span x-show="getSortDirection('${col.field}') === 'desc'" class="sort-desc">↓</span>
-                    </th>
-                  `).join('')}
-                </tr>
-              </thead>
-              <tbody>
-                <template x-for="row in getPageData()" :key="row.id || row[Object.keys(row)[0]]">
+        try {
+          // 查找组件根元素（简化逻辑，优先使用ID选择器）
+          const rootElement = this.$el || document.getElementById(this.id);
+          if (!rootElement) return;
+          
+          // 检查是否存在任何表格元素（无论是否为内置或自定义）
+          const anyTable = rootElement.querySelector('table');
+          if (anyTable) return; // 如果已经存在表格元素，则不自动渲染
+          
+          // 查找是否已存在内置表格容器
+          const existingTableContainer = rootElement.querySelector('.alpine-table-container');
+          if (existingTableContainer) return; // 如果已存在内置表格容器，则不重复创建
+          
+          // 创建表格HTML
+          const tableHTML = `
+            <div class="alpine-table-container">
+              <table class="alpine-table">
+                <thead>
                   <tr>
-                    ${this.cols.map(col => `<td x-text="row['${col.field}']"></td>`).join('')}
+                    ${this.cols.map(col => `
+                      <th @click="sort('${col.field}', $event)">
+                        <span x-text="getColumnLabel('${col.field}')"></span>
+                        <span x-show="getSortDirection('${col.field}') === 'asc'" class="sort-asc">↑</span>
+                        <span x-show="getSortDirection('${col.field}') === 'desc'" class="sort-desc">↓</span>
+                      </th>
+                    `).join('')}
                   </tr>
-                </template>
-              </tbody>
-            </table>
-          </div>
-        `;
-        
-        // 将表格添加到根元素开头
-        rootElement.insertAdjacentHTML('afterbegin', tableHTML);
-        
-        // 如果使用 Alpine 3.x，需要重新处理新添加的元素
-        if (window.Alpine && typeof window.Alpine.initTree === 'function') {
-          const newTable = rootElement.querySelector('.alpine-table-container');
-          if (newTable) {
-            window.Alpine.initTree(newTable);
+                </thead>
+                <tbody>
+                  <template x-for="row in getPageData()" :key="row.id || row[Object.keys(row)[0]]">
+                    <tr>
+                      ${this.cols.map(col => `<td x-text="row['${col.field}']"></td>`).join('')}
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          `;
+          
+          // 将表格添加到根元素开头
+          rootElement.insertAdjacentHTML('afterbegin', tableHTML);
+          
+          // 如果使用 Alpine 3.x，需要重新处理新添加的元素
+          if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+            const newTable = rootElement.querySelector('.alpine-table-container');
+            if (newTable) {
+              window.Alpine.initTree(newTable);
+            }
           }
+        } catch (error) {
+          console.error('Error in renderTable:', error);
         }
       },
       
       // 渲染分页控件
       renderPagination() {
-        // 查找组件根元素
-        const rootElement = document.querySelector(`[x-data*="${this.id}"]`) || 
-                           document.querySelector(`[x-data*="table"]`);
-                           
-        if (!rootElement) return;
-        
-        // 查找自定义分页容器
-        const customPaginationContainer = rootElement.querySelector('.pagination-container');
-        
-        // 如果有自定义分页容器，不自动渲染
-        if (customPaginationContainer) return;
-        
-        // 查找是否已存在内置分页控件
-        const existingPagination = rootElement.querySelector('.alpine-table-pagination');
-        if (existingPagination) {
-          // 如果已存在且不需要分页，则移除
-          if (!this.needsPagination()) {
-            existingPagination.remove();
+        try {
+          // 查找组件根元素
+          const rootElement = this.$el || document.getElementById(this.id);
+          if (!rootElement) return;
+          
+          // 检查是否已存在内置分页控件
+          const existingPagination = rootElement.querySelector('.alpine-table-pagination');
+          if (existingPagination) {
+            // 如果已存在且不需要分页，则移除
+            if (!this.needsPagination()) {
+              existingPagination.remove();
+            }
+            return;
           }
-          return;
-        }
-        
-        // 如果需要分页且没有自定义分页容器，则自动创建
-        if (this.needsPagination()) {
-          const paginationHTML = `
-            <div class="alpine-table-pagination">
-              <button @click="prevPage()" :disabled="page.curr === 1" class="pagination-btn pagination-prev">
-                上一页
-              </button>
-              <span class="pagination-info" x-text="'第 ' + page.curr + ' 页 / 共 ' + page.totalPage + ' 页'"></span>
-              <button @click="nextPage()" :disabled="page.curr === page.totalPage" class="pagination-btn pagination-next">
-                下一页
-              </button>
-              <select x-model="page.limit" @change="changeLimit()" class="pagination-select">
-                <template x-for="limit in page.limits" :key="limit">
-                  <option :value="limit" x-text="limit + ' 条/页'"></option>
-                </template>
-              </select>
-            </div>
-          `;
           
-          // 将分页控件添加到根元素末尾
-          rootElement.insertAdjacentHTML('beforeend', paginationHTML);
+          // 简化检测：只检查是否存在自定义分页容器或任何包含分页相关内容的元素
+          let hasCustomPagination = false;
           
-          // 如果使用 Alpine 3.x，需要重新处理新添加的元素
-          if (window.Alpine && typeof window.Alpine.initTree === 'function') {
-            const newPagination = rootElement.querySelector('.alpine-table-pagination');
-            if (newPagination) {
-              window.Alpine.initTree(newPagination);
+          // 检查1：是否存在分页容器
+          if (rootElement.querySelector('.pagination-container')) {
+            hasCustomPagination = true;
+          }
+          
+          // 检查2：是否存在包含page.curr或page.limit的元素
+          const allElements = rootElement.querySelectorAll('[x-text], [x-model]');
+          for (let i = 0; i < allElements.length; i++) {
+            const element = allElements[i];
+            const xText = element.getAttribute('x-text');
+            const xModel = element.getAttribute('x-model');
+            if ((xText && (xText.includes('page.curr') || xText.includes('page.totalPage'))) ||
+                (xModel && xModel.includes('page.limit'))) {
+              hasCustomPagination = true;
+              break;
             }
           }
+          
+          // 如果有自定义分页元素，则不自动渲染
+          if (hasCustomPagination) {
+            return;
+          }
+          
+          // 如果需要分页且没有自定义分页结构，则自动创建
+          if (this.needsPagination()) {
+            const paginationHTML = `
+              <div class="alpine-table-pagination">
+                <button @click="prevPage()" :disabled="page.curr === 1" class="pagination-btn pagination-prev">
+                  上一页
+                </button>
+                <span class="pagination-info" x-text="'第 ' + page.curr + ' 页 / 共 ' + page.totalPage + ' 页'"></span>
+                <button @click="nextPage()" :disabled="page.curr === page.totalPage" class="pagination-btn pagination-next">
+                  下一页
+                </button>
+                <select x-model="page.limit" @change="changeLimit()" class="pagination-select">
+                  <template x-for="limit in page.limits" :key="limit">
+                    <option :value="limit" x-text="limit + ' 条/页'"></option>
+                  </template>
+                </select>
+              </div>
+            `;
+            
+            // 将分页控件添加到根元素末尾
+            rootElement.insertAdjacentHTML('beforeend', paginationHTML);
+            
+            // 如果使用 Alpine 3.x，需要重新处理新添加的元素
+            if (window.Alpine && typeof window.Alpine.initTree === 'function') {
+              const newPagination = rootElement.querySelector('.alpine-table-pagination');
+              if (newPagination) {
+                window.Alpine.initTree(newPagination);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error in renderPagination:', error);
         }
       },
 
@@ -697,14 +722,27 @@
         this.renderPagination();
       }
     };
-  };
-});
+}
 
-// 同时支持 Alpine.js 3.x 的数据组件注册
+// 确保在Alpine.js可用时注册组件
+if (window.Alpine) {
+  window.Alpine.data('table', window.table);
+}
+
+// 同时监听alpine:init事件以兼容不同版本的Alpine.js
 document.addEventListener('alpine:init', () => {
-  // 检查 Alpine 是否存在
   if (window.Alpine) {
-    // 注册为 Alpine.js 数据组件，确保使用全局的 table 函数
     window.Alpine.data('table', window.table);
   }
 });
+
+// 返回table函数以支持AMD/CommonJS模块系统
+if (typeof define === 'function' && define.amd) {
+  // AMD
+  define([], function () {
+    return window.table;
+  });
+} else if (typeof module === 'object' && module.exports) {
+  // CommonJS
+  module.exports = window.table;
+}
