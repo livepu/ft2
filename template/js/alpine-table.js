@@ -455,7 +455,7 @@ window.table = function table(config = {}) {
                   </tr>
                 </thead>
                 <tbody>
-                  <template x-for="row in getPageData()" :key="row.id || row[Object.keys(row)[0]]">
+                  <template x-for="(row, index) in getPageData()" :key="index + '-' + (row.id || JSON.stringify(row))">
                     <tr>
                       ${this.cols.map(col => `<td x-text="row['${col.field}']"></td>`).join('')}
                     </tr>
