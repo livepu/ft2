@@ -470,10 +470,7 @@
             const timeAxisContainer = document.getElementById('timeAxis');
             
             // 定义统一的左右边距
-            const echartPadding = {
-                left: '0%',
-                right: '0%'
-            };
+            const echartPadding = { left: '0%', right: '0%' };
 
             try {
                 if (!window.assetsData ||
@@ -536,26 +533,25 @@
                     tooltip: { trigger: 'axis' },
                     legend: [
                         {
-                            data: returnSeries.map(s => s.name),
-
+                            data: returnSeries.map(s => s.name)
                         },
                         {
                             data: drawdownSeries.map(s => s.name),
-                            top: '70%',  // 调整下方图例位置
+                            top: '70%'
                         }
                     ],
                     grid: [
                         {
-                            left: '0%',  // 去除左边距以最大化利用空间
-                            right: 5, // 去除右边距以最大化利用空间
+                            left: '0%',
+                            right: 5,
                             top: '5%',
-                            bottom: '35%',  // 调整主图与回撤图之间的间距，减少间距
+                            bottom: '35%',
                             containLabel: true
                         },
                         {
-                            left: '0%',  // 去除左边距以最大化利用空间
-                            right: 5, // 去除右边距以最大化利用空间
-                            top: '75%',  // 调整回撤图位置，使其更靠近主图
+                            left: '0%',
+                            right: 5,
+                            top: '75%',
                             bottom: '5%',
                             containLabel: true
                         }
@@ -565,15 +561,9 @@
                             type: 'category', 
                             data: dates, 
                             gridIndex: 0,
-                            axisLabel: {
-                                show: false // 隐藏X轴标签使其更贴近
-                            },
-                            axisTick: {
-                                show: false // 隐藏X轴刻度使其更贴近
-                            },
-                            axisLine: {
-                                onZero: true
-                            }
+                            axisLabel: { show: false },
+                            axisTick: { show: false },
+                            axisLine: { onZero: true }
                         },
                         { 
                             type: 'category', 
@@ -581,15 +571,9 @@
                             gridIndex: 1, 
                             show: false, 
                             position: 'top',
-                            axisLabel: {
-                                show: false // 隐藏X轴标签使其更贴近
-                            },
-                            axisTick: {
-                                show: false // 隐藏X轴刻度使其更贴近
-                            },
-                            axisLine: {
-                                onZero: true
-                            }
+                            axisLabel: { show: false },
+                            axisTick: { show: false },
+                            axisLine: { onZero: true }
                         }
                     ],
                     yAxis: [
@@ -606,7 +590,7 @@
                             nameLocation: 'end',
                             nameGap: 10,
                             axisLabel: { formatter: '{value}%' },
-                            splitNumber: 3  // 新增：设置分割段数
+                            splitNumber: 3
                         }
                     ],
                     series: [...returnSeries, ...drawdownSeries]
@@ -615,64 +599,38 @@
                 // 设置主图表选项
                 mainChart.setOption(option);
 
-                // 配置时间轴图表选项
+                // 配置时间轴图表选项（简化版）
                 const timeAxisOption = {
                     xAxis: {
                         type: 'category',
                         data: fullData.map(item => item.日期),
                         boundaryGap: false,
-                        axisLabel: {
-                            show: false
-                        },
-                        axisLine: {
-                            show: false
-                        },
-                        axisTick: {
-                            show: false
+                        axisLabel: { show: false },
+                        axisLine: { show: false },
+                        axisTick: { show: false }
+                    },
+                    yAxis: { type: 'value', show: false },
+                    dataZoom: [
+                        { type: 'inside', start: 0, end: 100 },
+                        { 
+                            type: 'slider', 
+                            start: 0, 
+                            end: 100, 
+                            bottom: 0, 
+                            height: 40,
+                            brushSelect: false  // 禁用刷选，只保留缩放
                         }
-                    },
-                    yAxis: {
-                        type: 'value',
-                        show: false
-                    },
-                    dataZoom: [{
-                        show: true,
-                        realtime: true,
-                        start: 0,
-                        end: 100,
-                        zoomLock: false,
-                        type: 'inside'
-                    }, {
-                        show: true,
-                        realtime: true,
-                        start: 0,
-                        end: 100,
-                        zoomLock: false,
-                        type: 'slider',
-                        bottom: 0,
-                        height: 40,
-                    }],
+                    ],
                     grid: {
-                        // 不占用任何空间，完全用于时间轴
                         height: 0,
                         top: -10,
-                        left: 30,  // 去除左边距以最大化利用空间
-                        right: 5, // 去除右边距以最大化利用空间
+                        left: 30,
+                        right: 5
                     },
                     series: [{
-                        name: '资产',
                         type: 'line',
-                        data: fullData.map(item => parseFloat(item.资产)),
-                        lineStyle: {
-                            color: 'transparent',
-                            width: 0
-                        },
-                        itemStyle: {
-                            color: 'transparent'
-                            },
-                        symbol: 'none',
-                        silent: true,
-                        showSymbol: false
+                        data: [],  // 空数据，仅用于提供时间轴范围
+                        silent: true
                     }]
                 };
 
@@ -731,12 +689,9 @@
                         }
                     });
                     
+                    // 更新主图表显示
                     mainChart.setOption({
-                        xAxis: [{
-                            data: visibleDates
-                        }, {
-                            data: visibleDates
-                        }],
+                        xAxis: [{ data: visibleDates }, { data: visibleDates }],
                         series: [...visibleReturnSeries, ...visibleDrawdownSeries]
                     });
                 });
