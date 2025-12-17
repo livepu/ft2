@@ -209,6 +209,46 @@
             border: 1px solid #e0e0e0;
             border-radius: 3px;
         }
+        
+        /* 时间轴样式 */
+        #timeAxis {
+            width: 100%;
+            height: 40px;
+            margin-top: -10px;
+            padding: 0; /* 移除padding，避免坐标轴超出显示 */
+        }
+        
+        /* 区间统计数据样式 */
+        .stats-container {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .positive {
+            color: #ff4d4f;
+        }
+        
+        .negative {
+            color: #00b300;
+        }
     </style>
 </head>
 
@@ -221,7 +261,28 @@
         <!-- 图表容器 -->
         <div class="report-container">
             <h3>业绩表现</h3>
-            <div id="chartContainer" style="width:100%;height:600px"></div>
+            <div id="chartContainer" style="width:100%;height:560px"></div>
+            <div id="timeAxis"></div>
+            
+            <!-- 区间统计数据 -->
+            <div class="stats-container">
+                <div class="stat-item">
+                    <div class="stat-value" id="startDate">-</div>
+                    <div class="stat-label">开始日期</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="endDate">-</div>
+                    <div class="stat-label">结束日期</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="returnRate">-</div>
+                    <div class="stat-label">区间收益</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="maxDrawdown">-</div>
+                    <div class="stat-label">最大回撤</div>
+                </div>
+            </div>
         </div>
         <div class="report-container">
             <div class="collapse-title" onclick="toggleCollapse(this)">
@@ -341,8 +402,78 @@
     </script>
 
     <script>
+        // 全局变量
+        let mainChart = null;
+        let timeAxisChart = null;
+        let fullData = []; // 存储完整的数据
+        
+        // 计算区间收益
+        function calculatePeriodReturn(startValue, endValue) {
+            return ((endValue - startValue) / startValue) * 100;
+        }
+        
+        // 计算最大回撤
+        function calculateMaxDrawdown(data) {
+            if (data.length === 0) return 0;
+            
+            let peak = data[0];
+            let maxDrawdown = 0;
+            
+            for (let i = 0; i < data.length; i++) {
+                if (data[i] > peak) {
+                    peak = data[i];
+                }
+                
+                const drawdown = (peak - data[i]) / peak * 100;
+                if (drawdown > maxDrawdown) {
+                    maxDrawdown = drawdown;
+                }
+            }
+            
+            return maxDrawdown;
+        }
+        
+        // 更新区间统计数据
+        function updateStats(startIndex, endIndex) {
+            if (fullData.length === 0) return;
+            
+            // 确保索引在有效范围内
+            startIndex = Math.max(0, Math.min(startIndex, fullData.length - 1));
+            endIndex = Math.max(startIndex, Math.min(endIndex, fullData.length - 1));
+            
+            // 更新日期显示
+            document.getElementById('startDate').textContent = fullData[startIndex].日期;
+            document.getElementById('endDate').textContent = fullData[endIndex].日期;
+            
+            // 计算区间收益
+            const startValue = parseFloat(fullData[startIndex].资产);
+            const endValue = parseFloat(fullData[endIndex].资产);
+            const periodReturn = calculatePeriodReturn(startValue, endValue);
+            
+            // 更新收益显示
+            const returnElement = document.getElementById('returnRate');
+            returnElement.textContent = periodReturn.toFixed(2) + '%';
+            returnElement.className = 'stat-value ' + (periodReturn >= 0 ? 'positive' : 'negative');
+            
+            // 计算最大回撤
+            const values = fullData.slice(startIndex, endIndex + 1).map(item => parseFloat(item.资产));
+            const maxDrawdown = calculateMaxDrawdown(values);
+            
+            // 更新最大回撤显示
+            const drawdownElement = document.getElementById('maxDrawdown');
+            drawdownElement.textContent = maxDrawdown.toFixed(2) + '%';
+            drawdownElement.className = 'stat-value negative';
+        }
+        
         (function initChart() {
             const container = document.getElementById('chartContainer');
+            const timeAxisContainer = document.getElementById('timeAxis');
+            
+            // 定义统一的左右边距
+            const echartPadding = {
+                left: '0%',
+                right: '0%'
+            };
 
             try {
                 if (!window.assetsData ||
@@ -351,7 +482,14 @@
                     throw new Error('数据不完整或格式错误');
                 }
 
-                const chart = echarts.init(container);
+                // 保存完整数据
+                fullData = window.assetsData;
+
+                // 初始化主图表
+                mainChart = echarts.init(container);
+                
+                // 初始化时间轴图表
+                timeAxisChart = echarts.init(timeAxisContainer);
 
                 // 动态获取第一个字段作为日期字段
                 const firstKey = Object.keys(window.assetsData[0])[0];
@@ -359,14 +497,12 @@
                 // 提取日期字段对应的值
                 const dates = window.assetsData.map(item => item[firstKey]);
 
-                const series = [];
-                const legendData = [];
-
                 // 获取累计收益率数据
                 const ecdatas = analyzer.getEchartsData();
-                console.log(ecdatas);//测试用
+                
                 // 获取除日期字段外的所有字段
                 const keys = Object.keys(ecdatas[0]).filter(key => key !== firstKey);
+                
                 // 构建系列数据和坐标系配置
                 const returnSeries = [];
                 const drawdownSeries = [];
@@ -405,26 +541,56 @@
                         },
                         {
                             data: drawdownSeries.map(s => s.name),
-                            top: '70%',  // 下方图例位置
+                            top: '70%',  // 调整下方图例位置
                         }
                     ],
                     grid: [
                         {
-                            left: '5%',
-                            right: '5%',
-                            height: '60%',  // 上方图表高度调整为60%
-                            top: '5%'
+                            left: '0%',  // 去除左边距以最大化利用空间
+                            right: 5, // 去除右边距以最大化利用空间
+                            top: '5%',
+                            bottom: '35%',  // 调整主图与回撤图之间的间距，减少间距
+                            containLabel: true
                         },
                         {
-                            left: '5%',
-                            right: '5%',
-                            height: '15%',
-                            top: '75%'
+                            left: '0%',  // 去除左边距以最大化利用空间
+                            right: 5, // 去除右边距以最大化利用空间
+                            top: '75%',  // 调整回撤图位置，使其更靠近主图
+                            bottom: '5%',
+                            containLabel: true
                         }
                     ],
                     xAxis: [
-                        { type: 'category', data: dates, gridIndex: 0 },
-                        { type: 'category', data: dates, gridIndex: 1, show: false, position: 'top' }
+                        { 
+                            type: 'category', 
+                            data: dates, 
+                            gridIndex: 0,
+                            axisLabel: {
+                                show: false // 隐藏X轴标签使其更贴近
+                            },
+                            axisTick: {
+                                show: false // 隐藏X轴刻度使其更贴近
+                            },
+                            axisLine: {
+                                onZero: true
+                            }
+                        },
+                        { 
+                            type: 'category', 
+                            data: dates, 
+                            gridIndex: 1, 
+                            show: false, 
+                            position: 'top',
+                            axisLabel: {
+                                show: false // 隐藏X轴标签使其更贴近
+                            },
+                            axisTick: {
+                                show: false // 隐藏X轴刻度使其更贴近
+                            },
+                            axisLine: {
+                                onZero: true
+                            }
+                        }
                     ],
                     yAxis: [
                         {
@@ -437,29 +603,151 @@
                             type: 'value',
                             gridIndex: 1,
                             name: '回撤率(%)',
-
+                            nameLocation: 'end',
+                            nameGap: 10,
                             axisLabel: { formatter: '{value}%' },
                             splitNumber: 3  // 新增：设置分割段数
                         }
                     ],
-                    series: [...returnSeries, ...drawdownSeries],
-                    dataZoom: [
-                        {
-                            type: 'slider', // 使用滑块式数据区域缩放组件
-                            start: 0,       // 初始显示范围起始百分比
-                            end: 100,       // 初始显示范围结束百分比
-                            xAxisIndex: [0, 1], // 控制两个 x 轴
-                            filterMode: 'empty' // 缩放时只过滤对应区域的数据
-                        }
-                    ]
+                    series: [...returnSeries, ...drawdownSeries]
                 };
 
+                // 设置主图表选项
+                mainChart.setOption(option);
 
-                chart.setOption(option);
+                // 配置时间轴图表选项
+                const timeAxisOption = {
+                    xAxis: {
+                        type: 'category',
+                        data: fullData.map(item => item.日期),
+                        boundaryGap: false,
+                        axisLabel: {
+                            show: false
+                        },
+                        axisLine: {
+                            show: false
+                        },
+                        axisTick: {
+                            show: false
+                        }
+                    },
+                    yAxis: {
+                        type: 'value',
+                        show: false
+                    },
+                    dataZoom: [{
+                        show: true,
+                        realtime: true,
+                        start: 0,
+                        end: 100,
+                        zoomLock: false,
+                        type: 'inside'
+                    }, {
+                        show: true,
+                        realtime: true,
+                        start: 0,
+                        end: 100,
+                        zoomLock: false,
+                        type: 'slider',
+                        bottom: 0,
+                        height: 40,
+                    }],
+                    grid: {
+                        // 不占用任何空间，完全用于时间轴
+                        height: 0,
+                        top: -10,
+                        left: 30,  // 去除左边距以最大化利用空间
+                        right: 5, // 去除右边距以最大化利用空间
+                    },
+                    series: [{
+                        name: '资产',
+                        type: 'line',
+                        data: fullData.map(item => parseFloat(item.资产)),
+                        lineStyle: {
+                            color: 'transparent',
+                            width: 0
+                        },
+                        itemStyle: {
+                            color: 'transparent'
+                            },
+                        symbol: 'none',
+                        silent: true,
+                        showSymbol: false
+                    }]
+                };
+
+                // 设置时间轴图表选项
+                timeAxisChart.setOption(timeAxisOption);
+                
+                // 初始化显示全部数据的统计数据
+                updateStats(0, fullData.length - 1);
+
+                // 监听时间轴dataZoom事件，同步更新主图表
+                timeAxisChart.on('datazoom', function (params) {
+                    const option = timeAxisChart.getOption();
+                    const dataZoom = option.dataZoom.find(zoom => zoom.type === 'slider') || option.dataZoom[0];
+                    
+                    // 获取当前显示的数据范围
+                    const startIdx = Math.floor(dataZoom.start / 100 * (fullData.length - 1));
+                    const endIdx = Math.floor(dataZoom.end / 100 * (fullData.length - 1));
+                    
+                    // 更新区间统计数据
+                    updateStats(startIdx, endIdx);
+                    
+                    // 提取当前显示范围内的数据
+                    const visibleData = fullData.slice(startIdx, endIdx + 1);
+                    const visibleDates = visibleData.map(item => item.日期);
+                    
+                    // 获取累计收益率数据
+                    const ecdatas = analyzer.getEchartsData();
+                    const visibleEcdatas = ecdatas.slice(startIdx, endIdx + 1);
+                    
+                    // 更新主图表数据
+                    const visibleKeys = Object.keys(visibleEcdatas[0]).filter(key => key !== firstKey);
+                    const visibleReturnSeries = [];
+                    const visibleDrawdownSeries = [];
+                    
+                    visibleKeys.forEach(key => {
+                        const isDrawdown = key.includes('回撤');
+                        const isSg = key.includes('策略');
+                        const isBech = key.includes('基准');
+                        const seriesConfig = {
+                            name: key,
+                            type: 'line',
+                            data: visibleEcdatas.map(item => item[key]),
+                            smooth: true,
+                            symbol: 'none',
+                            color: isSg ? '#c23531' : (isBech ? '#61a0a8' : '#2f4554')
+                        };
+
+                        if (isDrawdown) {
+                            seriesConfig.xAxisIndex = 1;
+                            seriesConfig.yAxisIndex = 1;
+                            visibleDrawdownSeries.push(seriesConfig);
+                        } else {
+                            seriesConfig.xAxisIndex = 0;
+                            seriesConfig.yAxisIndex = 0;
+                            visibleReturnSeries.push(seriesConfig);
+                        }
+                    });
+                    
+                    mainChart.setOption({
+                        xAxis: [{
+                            data: visibleDates
+                        }, {
+                            data: visibleDates
+                        }],
+                        series: [...visibleReturnSeries, ...visibleDrawdownSeries]
+                    });
+                });
+
                 // 监听窗口大小变化事件
                 window.addEventListener('resize', function () {
-                    if (chart) {
-                        chart.resize();
+                    if (mainChart) {
+                        mainChart.resize();
+                    }
+                    if (timeAxisChart) {
+                        timeAxisChart.resize();
                     }
                 });
             } catch (e) {
