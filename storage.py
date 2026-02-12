@@ -151,13 +151,13 @@ class _Cache:
 
     def get_data(self, symbol, freq, count, fields):
         key = (symbol, freq)
-        if key not in self._col_cache and key not in self._row_cache:
-             raise ValueError(f"请先订阅{symbol}的{freq}周期数据")  # 改用标准ValueError
-
+        # 优先查找列缓存，否则查找行缓存
         if key in self._col_cache:
             q = self._col_cache[key]
-        else:
+        elif key in self._row_cache:
             q = self._row_cache[key]
+        else:
+            raise ValueError(f"请先订阅{symbol}的{freq}周期数据")
 
         if key not in self._initialized:
             miss_count = q.miss_count(count)
@@ -214,11 +214,12 @@ class _RowQuote:
         self._data.append(newdata)
 
     def get_data(self, fields, count):
-        start = len(self._data)-count
+        data_len = len(self._data)
+        start = data_len - count
         if start < 0:
             start = 0
         result = []
-        for i in range(start, len(self._data)):
+        for i in range(start, data_len):
             if not fields:
                 result.append(self._data[i])
             else:
@@ -292,11 +293,12 @@ class _ColQuote:
                 result["symbol"] = self._symbol
                 continue
             q = self._data[field]
-            start = len(q) - count
+            q_len = len(q)
+            start = q_len - count
             if start < 0:
                 start = 0
             l = []
-            for i in range(start, len(q)):
+            for i in range(start, q_len):
                 l.append(q[i])
             result[field] = l
         return result

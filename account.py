@@ -37,6 +37,9 @@ class TradeRecord:
 # ---------- 核心账户类 ----------
 ##这个账户管理类，还得改动一下。初始化参数减少。让它作为全局变量放到引擎里面。这样时间轴才能真实有效。
 class AccountManager:
+    # 类常量：频率排序（从高频到低频），避免每次调用都创建
+    FREQ_ORDER = ['1m', '60s', '5m', '300s', '15m', '900s', '30m', '1800s', '60m', '3600s', '1d']
+    
     def __init__(
         self,
         init_cash: float = 1e6,
@@ -107,9 +110,8 @@ class AccountManager:
         if not subscribed_freqs:
             raise ValueError(f"品种 {symbol} 未订阅任何频率数据")
             
-        # 按频率从高到低排序（高频数据优先）
-        freq_order = [ '1m', '60s', '5m', '300s', '15m', '900s', '30m', '1800s', '60m', '3600s', '1d']
-        frequencies = [f for f in freq_order if f in subscribed_freqs]
+        # 使用类常量排序（高频数据优先）
+        frequencies = [f for f in self.FREQ_ORDER if f in subscribed_freqs]
         
         for freq in frequencies:
             try:
@@ -353,14 +355,14 @@ class AccountManager:
         end_query_time: datetime = None
     ) -> List[TradeRecord]:
         """获取历史订单"""
+        trades = self.trade_log
+        
+        if start_query_time:
+            trades = [t for t in trades if t.created_at >= start_query_time]
+        if end_query_time:
+            trades = [t for t in trades if t.created_at <= end_query_time]
             
-        if start_query_time and end_query_time:
-            return [t for t in self.trade_log if start_query_time <= t.created_at <= end_query_time]
-        elif start_query_time:
-            return [t for t in self.trade_log if t.created_at >= start_query_time]
-        elif end_query_time:
-            return [t for t in self.trade_log if t.created_at <= end_query_time]
-        return self.trade_log.copy()
+        return trades.copy()
 
 
     # ---------- 仿真专用方法 ----------

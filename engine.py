@@ -1,4 +1,5 @@
 #这个是回测引擎，尽量精简导入的模块
+from collections import OrderedDict
 from .storage import context  # 从data模块导入全局context
 from .account import account #导入账户
 import pandas as pd
@@ -6,7 +7,7 @@ import pandas as pd
 #回测的数据驱动引擎
 class Engine:
     def __init__(self):
-        self.timeline = {} #按照时间轴存放bars
+        self.timeline = OrderedDict() #按照时间轴存放bars，使用OrderedDict保持插入顺序
         self.cache_count=100
 
     #设置缓存长度
@@ -32,7 +33,7 @@ class Engine:
             sample_bar = data[0]
             fields = list(sample_bar.keys()) #提取全部字段
             count = self.cache_count
-            format=None
+            format_=None
         else:
             # 使用订阅参数中的字段和缓存大小
             sample_bar = data[0]
@@ -42,11 +43,11 @@ class Engine:
             # 取交集，确保只保留数据源存在的字段
             fields = [f for f in requested_fields if f in available_fields]
             count = params.get('count', self.cache_count)
-            format=params.get('format')
+            format_=params.get('format')
 
         # 只在缓存不存在时初始化
         if not context._has_cache(symbol, freq):
-            context._init_cache(symbol, freq, format=format, fields=fields, count=count)
+            context._init_cache(symbol, freq, format=format_, fields=fields, count=count)
 
         for bar in data:
             bar['symbol'] = symbol
@@ -57,39 +58,47 @@ class Engine:
                 
             # 检查是否已存在相同时间点的相同symbol数据
             if eob in self.timeline:
-                existing_bars = [b for b in self.timeline[eob] 
-                               if b['symbol'] == symbol and b['frequency'] == freq]
-                if existing_bars:
-                    # 更新现有bar数据（保留原始时间戳）
-                    existing_bars[0].update(bar)
-                    continue
-            
-            # 新增数据
-            if eob not in self.timeline:
-                self.timeline[eob] = []
-            self.timeline[eob].append(bar)
+                # 优化：直接遍历查找，避免创建临时列表
+                for b in self.timeline[eob]:
+                    if b['symbol'] == symbol and b['frequency'] == freq:
+                        b.update(bar)
+                        break
+                else:
+                    # 没找到，添加新bar
+                    self.timeline[eob].append(bar)
+            else:
+                # 新增时间点
+                self.timeline[eob] = [bar]
 
     def run(self,strategy_class,start_time, end_time):
         """
         按照时间轴，逐次给context._add_bar2bar_data_cache添加数据，当时间轴运行到start_time和end_time之间时，运行策略。
         """
         strategy = strategy_class()
-        sorted_times = sorted(self.timeline.keys())
+        
+        # 缓存方法引用，减少循环内的属性查找
+        _add_bar = context._add_bar2bar_data_cache
+        _snapshot = account.take_snapshot
+        
         begin_snapshot=0
         last_time=None
-        for current_time in sorted_times:
+        
+        # 多周期数据导入时，不同周期的时间点交错，必须排序
+        for current_time, bars in sorted(self.timeline.items()):
             context._current_time = current_time #传入时间点
-            bars_at_current_time = self.timeline[current_time]  #找到bars
-            for bar in bars_at_current_time:
-                context._add_bar2bar_data_cache(bar) #持续添加数据，直到在时间段内执行策略
+            
+            for bar in bars:
+                _add_bar(bar) #持续添加数据，直到在时间段内执行策略
+                
             if start_time <= current_time <= end_time: #时间段之外，自动补充。保证运行的数据足够长。时间段内，运行策略
                 if begin_snapshot==0 and last_time is not None:
-                    
-                    account.take_snapshot(last_time) #快照需要有插入时间的才行，不然没法按照前一交易日作为基准
+                    _snapshot(last_time) #快照需要有插入时间的才行，不然没法按照前一交易日作为基准
                     begin_snapshot=1
-                strategy.on_bar(context,bars_at_current_time)
+                    
+                strategy.on_bar(context,bars)
                 #on_bar之后，执行账户的快照。后续通过快照分析净值
-                account.take_snapshot()
+                _snapshot()
+                
             last_time=current_time
 
 engine=Engine() #全局的引擎实例，供策略调用。
