@@ -5,39 +5,32 @@ from typing import Dict, List
 import pandas as pd
 from .storage import context
 
-# ---------- 基础数据结构 ----------
 @dataclass
 class PositionSnapshot:
-    """持仓快照（支持任意时间粒度）"""
     symbol: str
-    volume: float            # 持仓数量
-    cost_price: float        # 持仓成本价
-    price: float             # 市场价格(掘金字段)
-    created_at: datetime     # 快照时间（严格使用datetime）
+    volume: float
+    cost_price: float
+    price: float
+    created_at: datetime
 
 @dataclass
 class AccountSnapshot:
-    """账户快照（与掘金account()返回值兼容）"""
-    cash: float              # 可用资金
-    nav: float               # 总资产价值(掘金字段)
-    created_at: datetime     # 快照时间（严格使用datetime）
+    cash: float
+    nav: float
+    created_at: datetime
     positions: Dict[str, PositionSnapshot] = field(default_factory=dict)
     
 @dataclass
 class TradeRecord:
-    """成交记录（兼容掘金接口）"""
-    created_at: datetime     # 成交时间（严格使用datetime）
+    created_at: datetime
     symbol: str
     price: float
     volume: float
-    side: str                # 'buy'/'sell'
-    fee: float               # 总手续费
-    order_id: str            # 模拟订单ID
+    side: str
+    fee: float
+    order_id: str
 
-# ---------- 核心账户类 ----------
-##这个账户管理类，还得改动一下。初始化参数减少。让它作为全局变量放到引擎里面。这样时间轴才能真实有效。
 class AccountManager:
-    # 类常量：频率排序（从高频到低频），避免每次调用都创建
     FREQ_ORDER = ['1m', '60s', '5m', '300s', '15m', '900s', '30m', '1800s', '60m', '3600s', '1d']
     
     def __init__(
@@ -45,30 +38,17 @@ class AccountManager:
         init_cash: float = 1e6,
         fee_config: Dict = None,
     ):
-        """
-        :param init_cash: 初始资金
-        :param fee_config: 手续费配置（默认股票费率）
-        """
-        # 账户状态
         self.cash = round(init_cash, 2)
-        self.positions: Dict[str, Dict] = {}  # {symbol: {'volume': x, 'cost_price': y}}
-        
-        # 历史记录
+        self.positions: Dict[str, Dict] = {}
         self.trade_log: List[TradeRecord] = []
         self.snapshots: List[AccountSnapshot] = []
-        
-        # 配置
         self.fee_config = fee_config or {
-            'commission_rate': 0.0003,  # 佣金率
-            'stamp_tax_rate': 0.001,    # 印花税（仅卖出）
-            'min_commission': 5.0       # 最低佣金
+            'commission_rate': 0.0003,
+            'stamp_tax_rate': 0.001,
+            'min_commission': 5.0
         }
-       
 
-
-    # ---------- 核心方法 ----------
     def take_snapshot(self,created_at: datetime=None) -> AccountSnapshot:
-        """记录账户快照"""
         if created_at is None:
             created_at = context.now
                 
@@ -90,27 +70,20 @@ class AccountManager:
         total_assets = round(total_assets, 2)
         snapshot = AccountSnapshot(
             cash=self.cash,
-            nav=total_assets, #改用掘金的字段名称，但保留这里的逻辑名
+            nav=total_assets,
             created_at=created_at,
             positions=pos_snapshots
         )
         self.snapshots.append(snapshot)
-
-
         
         return snapshot
 
-#获取价格函数，这个不再使用外部函数。通过比较context里面订阅的周期，选择时间最近的一个周期，计算价格。
     def _get_price(self, symbol: str) -> float:
-        """获取指定时间的市场价格（直接从context获取数据）"""
         action_time = context.now
-        
-        # 获取该品种已订阅的所有频率
         subscribed_freqs = {freq for (s, freq) in context._subscribed if s == symbol}
         if not subscribed_freqs:
             raise ValueError(f"品种 {symbol} 未订阅任何频率数据")
             
-        # 使用类常量排序（高频数据优先）
         frequencies = [f for f in self.FREQ_ORDER if f in subscribed_freqs]
         
         for freq in frequencies:
@@ -122,13 +95,11 @@ class AccountManager:
                     fields='close,eob',
                 )
                 
-                # 统一转换为字典列表格式
                 if isinstance(raw_data, pd.DataFrame):
                     data = raw_data.to_dict('records')
                 else:
                     data = raw_data
                 
-                # 后续处理保持不变
                 for d in reversed(data):
                     if d['eob'] <= action_time:
                         price = d['close']
@@ -136,7 +107,6 @@ class AccountManager:
                             raise ValueError(f"Invalid price {price} for {symbol} at {action_time}")
                         return float(price)
             except Exception:
-                #print(f"No valid price found for {symbol} at {action_time} in {freq} frequency") 保留测试
                 continue
                 
         raise ValueError(f"No valid price found for {symbol} at {action_time}")
@@ -147,59 +117,40 @@ class AccountManager:
         percent: float, 
         price: float = None, 
     ) -> str:
-        """
-        按总资产指定比例下单
-        注意：买入和卖出采用不同的计算基准
-        - 买入时：基于当前总资产计算目标金额
-        - 卖出时：基于当前持仓数量计算比例
-        :param symbol: 标的代码
-        :param percent: 下单比例，0-1 之间，正数买入，负数卖出
-        :param price: 指定价格（可选）
-        :return: 模拟订单ID
-        """
-       
         if not -1 <= percent <= 1:
             raise ValueError("Percent must be between -1 and 1")
             
         if percent == 0:
             raise ValueError("Order percent cannot be zero")
 
-        # 获取当前总资产，使用 get_account 方法避免额外记录快照
         account_info = self.get_account()
         nav = account_info['nav']
 
-        # 计算下单金额（买入时基于总资产）
         order_amount = nav * abs(percent)
 
-        if percent > 0:  # 买入
-            # 考虑手续费，计算可购买的最大金额
+        if percent > 0:
             available_amount = self.cash
             if order_amount > available_amount:
-                # 若下单金额超过可用金额，使用全部可用金额下单
                 order_amount = available_amount
 
-        # 获取当前价格
         price = price or self._get_price(symbol)
         if price <= 0:
             raise ValueError(f"Invalid price {price} for {symbol}")
 
-        # 计算下单数量
-        if percent > 0:  # 买入
-            # 考虑手续费，计算可购买的最大数量
+        if percent > 0:
             commission = max(
                 round(order_amount * self.fee_config['commission_rate'], 2),
                 self.fee_config['min_commission']
             )
             available_amount = order_amount - commission
             volume = int(available_amount / price)
-        else:  # 卖出（基于当前持仓数量计算比例）
+        else:
             current_pos = self.positions.get(symbol, {'volume': 0})
             volume = -int(current_pos['volume'] * abs(percent))
 
         if volume == 0:
             raise ValueError("Calculated order volume is zero")
 
-        # 调用按数量下单方法
         return self.order_volume(symbol, volume, price)
 
     def order_volume(
@@ -208,12 +159,6 @@ class AccountManager:
         volume: int, 
         price: float = None, 
     ) -> str:
-        """
-        按数量下单
-        :param volume: >0买入，<0卖出
-        :param price: 指定价格（可选）
-        :return: 模拟订单ID
-        """
         if volume == 0:
             raise ValueError("Order volume cannot be zero")
             
@@ -221,13 +166,10 @@ class AccountManager:
         if price <= 0:
             raise ValueError(f"Invalid price {price} for {symbol}")
 
-        # 生成订单ID
         order_id = f"order_{len(self.trade_log)+1}"
         
-        # 计算实际成交量（考虑持仓限制）
         executed_volume = self._process_order(symbol, volume, price, order_id)
         
-        # 记录成交
         if executed_volume != 0:
             self.take_snapshot()
         return order_id
@@ -239,8 +181,6 @@ class AccountManager:
         price: float, 
         order_id: str,
     ) -> int:
-        """处理订单成交（返回实际成交量）"""
-        # 计算手续费
         commission = max(
             round(price * abs(volume) * self.fee_config['commission_rate'], 2),
             self.fee_config['min_commission']
@@ -248,57 +188,47 @@ class AccountManager:
         stamp_tax = round(price * abs(volume) * self.fee_config['stamp_tax_rate'], 2) if volume < 0 else 0
         total_fee = round(commission + stamp_tax, 2)
         
-        # 买入逻辑
         if volume > 0:
             total_cost = round(volume * price + total_fee, 2)
             if self.cash < total_cost:
-                error_msg = f"订单 {order_id} 买入 {symbol} 失败，资金不足。需要 {total_cost}，可用资金 {self.cash}"
-                print(error_msg)
-                return 0  # 资金不足
+                print(f"订单 {order_id} 买入 {symbol} 失败，资金不足。需要 {total_cost}，可用资金 {self.cash}")
+                return 0
             self.cash = round(self.cash - total_cost, 2)
-        # 卖出逻辑
         else:
             current_pos = self.positions.get(symbol, {'volume': 0})
             if current_pos['volume'] < abs(volume):
-                error_msg = f"订单 {order_id} 卖出 {symbol} 失败，持仓不足。需要 {abs(volume)}，当前持仓 {current_pos['volume']}"
-                print(error_msg)
-                return 0  # 持仓不足
+                print(f"订单 {order_id} 卖出 {symbol} 失败，持仓不足。需要 {abs(volume)}，当前持仓 {current_pos['volume']}")
+                return 0
             self.cash = round(self.cash + abs(volume) * price - total_fee, 2)
         
-        # 更新持仓
-        self._update_position(symbol, volume, price, total_fee)  # 传递手续费参数
+        self._update_position(symbol, volume, price, total_fee)
         
-        # 记录交易
         self.trade_log.append(TradeRecord(
             symbol=symbol,
             volume=volume,
             price=price,
             side='buy' if volume>0 else 'sell',
-            created_at=context.now, #使用context.now
+            created_at=context.now,
             order_id=order_id,
             fee=total_fee
         ))
         return volume
 
     def _update_position(self, symbol: str, volume: int, price: float, total_fee: float):
-        """更新持仓成本（移动平均法，包含手续费）"""
         pos = self.positions.get(symbol, {'volume': 0, 'cost_price': 0})
-        if volume > 0:  # 买入
+        if volume > 0:
             new_volume = pos['volume'] + volume
-            # 把手续费分摊到每一股上
             total_purchase_cost = pos['volume'] * pos['cost_price'] + volume * price + total_fee
             new_cost = total_purchase_cost / new_volume
             pos.update(volume=new_volume, cost_price=round(new_cost, 3))
-        else:  # 卖出
-            pos['volume'] += volume  # volume为负数
+        else:
+            pos['volume'] += volume
             if pos['volume'] == 0:
                 del self.positions[symbol]
                 return
         self.positions[symbol] = pos
 
-    # ---------- 查询接口 ----------
     def get_account(self, query_time: datetime = None) -> Dict:
-        """获取当前账户信息"""
         query_time = context.now if query_time is None else query_time
 
         if not self.snapshots:
@@ -308,7 +238,6 @@ class AccountManager:
                 'created_at': query_time
             }
             
-        # 找到指定时间的最新快照
         snapshot = next(
             (s for s in reversed(self.snapshots) if s.created_at <= query_time),
             None
@@ -328,14 +257,10 @@ class AccountManager:
         }
 
     def get_position(self, symbol: str = None) -> Dict:
-        """获取持仓"""
         if not self.snapshots:
-            # 若没有快照，返回当前持仓
             positions = self.positions.copy()
         else:
-            # 获取最后一次快照
             last_snapshot = self.snapshots[-1]
-            # 从最后一次快照中提取持仓信息
             positions = {
                 sym: {'volume': pos.volume, 'cost_price': pos.cost_price}
                 for sym, pos in last_snapshot.positions.items()
@@ -354,7 +279,6 @@ class AccountManager:
         start_query_time: datetime = None, 
         end_query_time: datetime = None
     ) -> List[TradeRecord]:
-        """获取历史订单"""
         trades = self.trade_log
         
         if start_query_time:
@@ -364,16 +288,13 @@ class AccountManager:
             
         return trades.copy()
 
-
-    # ---------- 仿真专用方法 ----------
     def load_snapshot(self, snapshot: AccountSnapshot):
-        """加载账户快照（用于仿真初始化，使用掘金字段命名）"""
         self.cash = round(snapshot.cash, 2)
         self.positions = {
             sym: {'volume': pos.volume, 'cost_price': round(pos.cost_price, 3)}
             for sym, pos in snapshot.positions.items()
         }
-        self.current_time = self._validate_time(snapshot.created_at)
+        self.current_time = snapshot.created_at
 
 
-account = AccountManager(init_cash=1e6)#把账户管理类，独立出来。不再context里面。
+account = AccountManager(init_cash=1e6)

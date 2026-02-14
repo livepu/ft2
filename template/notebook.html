@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="css/layui.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        .notebook-container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .notebook-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .notebook-header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .notebook-header .meta {
+            font-size: 14px;
+            opacity: 0.8;
+        }
+        
+        /* 单元格样式 */
+        .cell {
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .cell-title {
+            padding: 20px;
+        }
+        .cell-title h1, .cell-title h2, .cell-title h3 {
+            color: #333;
+        }
+        .cell-text {
+            padding: 16px 20px;
+        }
+        .cell-text.text-heading {
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .cell-text.text-code {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background: #f8f9fa;
+            border-radius: 4px;
+            padding: 12px 16px;
+        }
+        .cell-code {
+            padding: 0;
+        }
+        .cell-code .code-input {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 16px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+        }
+        .cell-code .code-output {
+            background: #f8f9fa;
+            border-top: 1px solid #e0e0e0;
+            padding: 12px 16px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            color: #666;
+        }
+        .cell-table {
+            padding: 16px;
+        }
+        .cell-table h3 {
+            margin-bottom: 12px;
+            font-size: 16px;
+            color: #333;
+        }
+        .cell-metrics {
+            padding: 16px;
+        }
+        .cell-metrics h3 {
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(var(--columns, 4), 1fr);
+            gap: 12px;
+        }
+        .metric-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .metric-card .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        .metric-card.positive .metric-value { color: #e64340; }
+        .metric-card.negative .metric-value { color: #00b300; }
+        .metric-card .metric-label {
+            font-size: 12px;
+            color: #666;
+        }
+        .metric-card .metric-desc {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+        .cell-chart {
+            padding: 16px;
+        }
+        .cell-chart h3 {
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+        .chart-container {
+            width: 100%;
+            height: var(--height, 400px);
+        }
+        .cell-heatmap {
+            padding: 16px;
+        }
+        .cell-heatmap h3 {
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+        .heatmap-container {
+            width: 100%;
+            height: 300px;
+        }
+        .cell-divider {
+            height: 1px;
+            background: #e0e0e0;
+            margin: 8px 20px;
+        }
+        .cell-collapsible {
+            padding: 0;
+        }
+        .collapse-toggle {
+            width: 100%;
+            padding: 16px 20px;
+            background: #f8f9fa;
+            border: none;
+            text-align: left;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+        .collapse-toggle:hover {
+            background: #e9ecef;
+        }
+        .collapse-toggle .arrow {
+            transition: transform 0.2s;
+        }
+        .collapse-toggle.expanded .arrow {
+            transform: rotate(90deg);
+        }
+        .collapse-content {
+            padding: 16px 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .cell-html {
+            padding: 16px 20px;
+        }
+        
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .notebook-container {
+                padding: 10px;
+            }
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr) !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="notebook-container" x-data="notebookApp" x-init="init()">
+        <!-- 头部 -->
+        <div class="notebook-header">
+            <h1 x-text="title"></h1>
+            <div class="meta" x-text="'生成时间: ' + createdAt"></div>
+        </div>
+        
+        <!-- 单元格列表 -->
+        <template x-for="(cell, index) in cells" :key="index">
+            <div class="cell" :class="'cell-' + cell.type">
+                
+                <!-- 标题 -->
+                <template x-if="cell.type === 'title'">
+                    <div class="cell-title">
+                        <h1 x-show="cell.options.level === 1" x-text="cell.content"></h1>
+                        <h2 x-show="cell.options.level === 2" x-text="cell.content"></h2>
+                        <h3 x-show="cell.options.level === 3" x-text="cell.content"></h3>
+                    </div>
+                </template>
+                
+                <!-- 文本 -->
+                <template x-if="cell.type === 'text'">
+                    <div class="cell-text" :class="'text-' + cell.options.style" x-text="cell.content"></div>
+                </template>
+                
+                <!-- Markdown -->
+                <template x-if="cell.type === 'markdown'">
+                    <div class="cell-text" x-html="renderMarkdown(cell.content)"></div>
+                </template>
+                
+                <!-- 代码 -->
+                <template x-if="cell.type === 'code'">
+                    <div class="cell-code">
+                        <div class="code-input">
+                            <pre x-text="cell.content.code"></pre>
+                        </div>
+                        <div class="code-output" x-show="cell.content.output" x-text="cell.content.output"></div>
+                    </div>
+                </template>
+                
+                <!-- 表格 -->
+                <template x-if="cell.type === 'table'">
+                    <div class="cell-table">
+                        <h3 x-show="cell.title" x-text="cell.title"></h3>
+                        <div :id="'table-' + index"></div>
+                    </div>
+                </template>
+                
+                <!-- 指标卡片 -->
+                <template x-if="cell.type === 'metrics'">
+                    <div class="cell-metrics">
+                        <h3 x-show="cell.title" x-text="cell.title"></h3>
+                        <div class="metrics-grid" :style="'--columns: ' + (cell.options.columns || 4)">
+                            <template x-for="metric in cell.content" :key="metric.name">
+                                <div class="metric-card" :class="getMetricClass(metric.value)">
+                                    <div class="metric-value" x-text="metric.value"></div>
+                                    <div class="metric-label" x-text="metric.name"></div>
+                                    <div class="metric-desc" x-show="metric.desc" x-text="metric.desc"></div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                
+                <!-- 图表 -->
+                <template x-if="cell.type === 'chart'">
+                    <div class="cell-chart">
+                        <h3 x-show="cell.title" x-text="cell.title"></h3>
+                        <div :id="'chart-' + index" class="chart-container" 
+                             :style="'--height: ' + (cell.options.height || 400) + 'px'"></div>
+                    </div>
+                </template>
+                
+                <!-- 热力图 -->
+                <template x-if="cell.type === 'heatmap'">
+                    <div class="cell-heatmap">
+                        <h3 x-show="cell.title" x-text="cell.title"></h3>
+                        <div :id="'heatmap-' + index" class="heatmap-container"></div>
+                    </div>
+                </template>
+                
+                <!-- 分隔线 -->
+                <template x-if="cell.type === 'divider'">
+                    <div class="cell-divider"></div>
+                </template>
+                
+                <!-- 可折叠区域 -->
+                <template x-if="cell.type === 'collapsible'">
+                    <div class="cell-collapsible">
+                        <button class="collapse-toggle" 
+                                :class="{'expanded': !cell.options.collapsed}"
+                                @click="cell.options.collapsed = !cell.options.collapsed">
+                            <span x-text="cell.title"></span>
+                            <span class="arrow" x-text="cell.options.collapsed ? '▶' : '▼'"></span>
+                        </button>
+                        <div class="collapse-content" x-show="!cell.options.collapsed">
+                            <template x-for="(subCell, subIndex) in cell.content" :key="subIndex">
+                                <div x-html="renderSubCell(subCell)"></div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+                
+                <!-- HTML -->
+                <template x-if="cell.type === 'html'">
+                    <div class="cell-html" x-html="cell.content"></div>
+                </template>
+                
+            </div>
+        </template>
+    </div>
+    
+    <script src="js/echarts.min.js"></script>
+    <script src="js/alpine.min.js"></script>
+    <script src="js/layui.js"></script>
+    <script>
+    function notebookApp() {
+        return {
+            title: {{ title | tojson }},
+            createdAt: {{ created_at | tojson }},
+            cells: [],
+            
+            init() {
+                const data = {{ cells_json | safe }};
+                this.cells = data.cells;
+                
+                this.$nextTick(() => {
+                    this.renderAllComponents();
+                });
+            },
+            
+            renderAllComponents() {
+                this.cells.forEach((cell, index) => {
+                    if (cell.type === 'table') {
+                        this.renderTable('table-' + index, cell);
+                    } else if (cell.type === 'chart') {
+                        this.renderChart('chart-' + index, cell);
+                    } else if (cell.type === 'heatmap') {
+                        this.renderHeatmap('heatmap-' + index, cell);
+                    }
+                });
+            },
+            
+            renderTable(containerId, cell) {
+                layui.use(['table'], () => {
+                    const table = layui.table;
+                    const columns = cell.options.columns || Object.keys(cell.content[0] || {});
+                    table.render({
+                        elem: '#' + containerId,
+                        data: cell.content,
+                        cols: [columns.map(col => ({field: col, title: col}))],
+                        skin: 'line',
+                        page: cell.content.length > 20,
+                        limit: 20,
+                        even: true
+                    });
+                });
+            },
+            
+            renderChart(containerId, cell) {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+                
+                const chart = echarts.init(container);
+                const chartType = cell.content.chart_type;
+                const data = cell.content.data;
+                
+                let option = {};
+                
+                if (chartType === 'line' || chartType === 'area') {
+                    option = {
+                        tooltip: { trigger: 'axis' },
+                        legend: { data: data.series.map(s => s.name), bottom: 0 },
+                        grid: { left: '3%', right: '4%', bottom: '15%', top: '10%', containLabel: true },
+                        xAxis: { type: 'category', boundaryGap: false, data: data.dates },
+                        yAxis: { type: 'value' },
+                        series: data.series.map(s => ({
+                            name: s.name,
+                            type: 'line',
+                            data: s.data,
+                            smooth: true,
+                            areaStyle: chartType === 'area' ? {} : undefined,
+                            itemStyle: { color: s.color }
+                        }))
+                    };
+                } else if (chartType === 'bar') {
+                    option = {
+                        tooltip: { trigger: 'axis' },
+                        legend: { data: data.series.map(s => s.name), bottom: 0 },
+                        grid: { left: '3%', right: '4%', bottom: '15%', top: '10%', containLabel: true },
+                        xAxis: { type: 'category', data: data.categories },
+                        yAxis: { type: 'value' },
+                        series: data.series.map(s => ({
+                            name: s.name,
+                            type: 'bar',
+                            data: s.data
+                        }))
+                    };
+                } else if (chartType === 'pie') {
+                    option = {
+                        tooltip: { trigger: 'item' },
+                        legend: { bottom: 0 },
+                        series: [{
+                            type: 'pie',
+                            radius: ['40%', '70%'],
+                            data: data.data,
+                            label: { show: false }
+                        }]
+                    };
+                }
+                
+                option = { ...option, ...cell.options };
+                chart.setOption(option);
+                
+                window.addEventListener('resize', () => chart.resize());
+            },
+            
+            renderHeatmap(containerId, cell) {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+                
+                const chart = echarts.init(container);
+                const data = cell.content;
+                
+                // 转换数据格式
+                const years = Object.keys(data).sort();
+                const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+                
+                const heatmapData = [];
+                years.forEach((year, yIndex) => {
+                    months.forEach((month, mIndex) => {
+                        const value = data[year][month];
+                        if (value !== undefined) {
+                            heatmapData.push([mIndex, yIndex, (value * 100).toFixed(2)]);
+                        }
+                    });
+                });
+                
+                const option = {
+                    tooltip: {
+                        formatter: function(params) {
+                            return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2] + '%';
+                        }
+                    },
+                    grid: { left: '10%', right: '10%', top: '10%', bottom: '15%' },
+                    xAxis: { type: 'category', data: months, splitArea: { show: true } },
+                    yAxis: { type: 'category', data: years, splitArea: { show: true } },
+                    visualMap: {
+                        min: -10,
+                        max: 10,
+                        calculable: true,
+                        orient: 'horizontal',
+                        left: 'center',
+                        bottom: '0%',
+                        inRange: {
+                            color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8',
+                                    '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']
+                        }
+                    },
+                    series: [{
+                        type: 'heatmap',
+                        data: heatmapData,
+                        label: { show: true, formatter: '{@[2]}%' },
+                        emphasis: { itemStyle: { shadowBlur: 10 } }
+                    }]
+                };
+                
+                chart.setOption(option);
+                window.addEventListener('resize', () => chart.resize());
+            },
+            
+            getMetricClass(value) {
+                if (typeof value === 'string' && value.includes('%')) {
+                    const num = parseFloat(value);
+                    if (num > 0) return 'positive';
+                    if (num < 0) return 'negative';
+                }
+                return '';
+            },
+            
+            renderMarkdown(text) {
+                // 简单的Markdown渲染
+                return text
+                    .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+                    .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                    .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .replace(/\n/g, '<br>');
+            },
+            
+            renderSubCell(subCell) {
+                // 渲染子单元格（用于可折叠区域）
+                if (subCell.type === 'table') {
+                    return `<div x-data x-init="$nextTick(() => renderTable('sub-table-' + $id, ${JSON.stringify(subCell)}))">
+                        <div :id="'sub-table-' + $id"></div>
+                    </div>`;
+                }
+                return `<div>${JSON.stringify(subCell.content)}</div>`;
+            }
+        };
+    }
+    </script>
+</body>
+</html>

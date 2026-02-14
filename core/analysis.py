@@ -11,100 +11,61 @@ import inspect
 
 class AccountAnalyzer:
     def __init__(self, account=None, external_daily_total_assets=None):
-        """
-        初始化 AccountAnalyzer 实例。
-        
-        :param account: Account 实例，应包含：
-                        - snapshots: AccountSnapshot 列表（每个快照包含 created_at 和 total_assets）
-                        - trade_log: Trade 记录列表（需有 symbol, profit, open_time, close_time 等字段）
-        :param external_daily_total_assets: 外部导入的日度总资产数据，字典类型，键为日期，值为总资产
-        """
         self.account = account
         if account:
-            # 从 account 实例初始化日度资产数据
             self._daily_total_assets = self._compute_daily_total_assets(account.snapshots)
-            # 从 account.trade_log 中提取交易记录并计算每笔交易的盈亏，生成 self._trade_profits。整理过的交易记录，分析盈亏用的
             self._trade_profits = self._calculate_profit(account.trade_log) 
         elif external_daily_total_assets:
-            # 使用外部提供的日度总资产数据初始化
             self._daily_total_assets = external_daily_total_assets
-            self._trade_profits = []  # 若无交易记录，则不分析交易数据
+            self._trade_profits = []
         else:
-            # 如果没有传入任何数据，则初始化为空数据结构
             self._daily_total_assets = {}
             self._trade_profits = []
     @property
     def daily_total_assets(self):
-        return self._daily_total_assets.copy()  # 返回副本防止被修改
+        return self._daily_total_assets.copy()
 
     @property
     def trade_profits(self):
-        return self._trade_profits.copy()  # 返回副本防止被修改
+        return self._trade_profits.copy()
     def _compute_daily_total_assets(self, snapshots):
-        """
-        根据 AccountSnapshot 列表中的 created_at 时间戳，按天聚合获取每日最新的总资产。
-        
-        :param snapshots: AccountSnapshot 对象列表，每个对象包含 created_at（datetime）和 total_assets（float）
-        :return: 字典，键为日期（date），值为该日最后一笔快照的 total_assets 值
-        """
         daily_snapshots = defaultdict(list)
         for snapshot in snapshots:
             date = snapshot.created_at.date()
             daily_snapshots[date].append(snapshot)
 
         return {
-            date: snaps[-1].nav # 修改 total_assets -> nav
+            date: snaps[-1].nav
             for date, snaps in daily_snapshots.items()
         }
-    # ========== 资产相关方法 ==========
+    
     def get_daily_total_assets(self):
         return self._daily_total_assets
     
 
     def calculate_max_drawdown(self):
-        """
-        计算最大回撤（最大资产从峰值到谷值的跌幅）
-
-        :return: (max_drawdown: float, start_date: date, end_date: date)
-                max_drawdown 表示最大回撤比例（0~1）
-        :rtype: tuple(float, datetime.date, datetime.date)
-        """
-        # 如果每日总资产数据为空，则返回默认值
         if not self._daily_total_assets:
             return 0, None, None
 
-        # 对每日总资产的日期进行排序
         dates = sorted(self._daily_total_assets.keys())
-        # 初始化最大回撤为0，起始日期和结束日期为第一个日期
         max_drawdown = 0
         peak_value = self._daily_total_assets[dates[0]]
         start_date = end_date = peak_date = dates[0]
 
-        # 遍历所有日期计算最大回撤
         for date in dates:
             current_value = self._daily_total_assets[date]
-            # 如果当前值大于峰值，则更新峰值及其日期
             if current_value > peak_value:
                 peak_value = current_value
                 peak_date = date
-            # 计算当前回撤
             drawdown = (peak_value - current_value) / peak_value
-            # 如果当前回撤大于已知的最大回撤，则更新最大回撤及其起始和结束日期
             if drawdown > max_drawdown:
                 max_drawdown = drawdown
                 start_date = peak_date
                 end_date = date
         if max_drawdown == 0:
-            return 0, None, None  # 明确无回撤情况
-        # 返回最大回撤及其起始和结束日期
+            return 0, None, None
         return max_drawdown, start_date, end_date
     def calculate_return_rate(self, time_interval=None):
-        """
-        计算指定时间区间的收益率（结束资产 / 开始资产 - 1）。
-
-        :param time_interval: 可选的时间区间字符串，如 '1y'、'3m'，或 'all' 表示全周期
-        :return: 收益率（float），若数据不足则返回 None
-        """
         start_date, end_date = self._get_start_end_date(time_interval)
         if not start_date or not end_date:
             return None
@@ -117,12 +78,6 @@ class AccountAnalyzer:
     
 
     def calculate_annualized_return(self, time_interval=None):
-        """
-        计算年化收益率：(1 + 区间收益率) ^ (365 / 天数) - 1
-
-        :param time_interval: 可选的时间区间字符串
-        :return: 年化收益率（float），若数据不足则返回 None
-        """
         interval_return = self.calculate_return_rate(time_interval)
         if interval_return is None:
             return None
@@ -131,21 +86,12 @@ class AccountAnalyzer:
         days = (end_date - start_date).days
         if days == 0:
             return 0
-        if interval_return <= -1:  # 亏损超过100%，年化无意义
+        if interval_return <= -1:
             raise ValueError("亏损超过100%，无法计算年化收益率")
         return ((1 + interval_return) ** (365 / days)) - 1
     
 
     def calculate_volatility(self, time_interval=None):
-        """
-        计算给定时间区间内的年化波动率。
-        
-        参数:
-        time_interval (str, 可选): 时间区间，如"1Y"代表一年。默认为None，使用整个数据集。
-        
-        返回:
-        float: 年化波动率。如果数据不足或计算错误，返回None。
-        """
         start_date, end_date = self._get_start_end_date(time_interval)
         if not start_date or not end_date:
             return None
@@ -160,16 +106,9 @@ class AccountAnalyzer:
         daily_volatility = math.sqrt(variance)
         annualized_volatility = daily_volatility * math.sqrt(252)
 
-        return annualized_volatility#计算夏普比率
+        return annualized_volatility
     
     def calculate_sharpe_ratio(self, risk_free_rate=0.02, time_interval=None):
-        """
-        计算夏普比率：(年化收益率 - 无风险利率) / 波动率
-
-        :param risk_free_rate: 无风险利率，默认为 0.02（即 2%）
-        :param time_interval: 可选的时间区间字符串
-        :return: 夏普比率（float），若数据不足则返回 None
-        """
         annualized_return = self.calculate_annualized_return(time_interval)
         volatility = self.calculate_volatility(time_interval)
 
@@ -178,14 +117,134 @@ class AccountAnalyzer:
 
         return (annualized_return - risk_free_rate) / volatility
 
+    def calculate_sortino_ratio(self, risk_free_rate=0.02, time_interval=None):
+        annualized_return = self.calculate_annualized_return(time_interval)
+        if annualized_return is None:
+            return None
+
+        start_date, end_date = self._get_start_end_date(time_interval)
+        if not start_date or not end_date:
+            return None
+
+        interval_assets = {d: v for d, v in self._daily_total_assets.items() if start_date <= d <= end_date}
+        daily_returns = self._calculate_daily_returns(interval_assets)
+
+        if len(daily_returns) < 2:
+            return None
+
+        negative_returns = [r for r in daily_returns if r < 0]
+        if not negative_returns:
+            return float('inf')
+
+        downside_variance = sum(r ** 2 for r in negative_returns) / len(daily_returns)
+        downside_deviation = math.sqrt(downside_variance)
+        annualized_downside_deviation = downside_deviation * math.sqrt(252)
+
+        if annualized_downside_deviation == 0:
+            return float('inf')
+
+        return (annualized_return - risk_free_rate) / annualized_downside_deviation
+
+    def calculate_var(self, confidence=0.95, time_interval=None):
+        start_date, end_date = self._get_start_end_date(time_interval)
+        if not start_date or not end_date:
+            return None
+
+        interval_assets = {d: v for d, v in self._daily_total_assets.items() if start_date <= d <= end_date}
+        daily_returns = self._calculate_daily_returns(interval_assets)
+
+        if len(daily_returns) < 2:
+            return None
+
+        sorted_returns = sorted(daily_returns)
+        index = int((1 - confidence) * len(sorted_returns))
+        if index < 0:
+            index = 0
+
+        var = -sorted_returns[index]
+        return var
+
+    def calculate_cvar(self, confidence=0.95, time_interval=None):
+        start_date, end_date = self._get_start_end_date(time_interval)
+        if not start_date or not end_date:
+            return None
+
+        interval_assets = {d: v for d, v in self._daily_total_assets.items() if start_date <= d <= end_date}
+        daily_returns = self._calculate_daily_returns(interval_assets)
+
+        if len(daily_returns) < 2:
+            return None
+
+        sorted_returns = sorted(daily_returns)
+        index = int((1 - confidence) * len(sorted_returns))
+        if index < 1:
+            index = 1
+
+        tail_returns = sorted_returns[:index]
+        cvar = -sum(tail_returns) / len(tail_returns)
+        return cvar
+
+    def calculate_ulcer_index(self, time_interval=None):
+        start_date, end_date = self._get_start_end_date(time_interval)
+        if not start_date or not end_date:
+            return None
+
+        dates = sorted(self._daily_total_assets.keys())
+        interval_dates = [d for d in dates if start_date <= d <= end_date]
+
+        if len(interval_dates) < 2:
+            return None
+
+        peak = self._daily_total_assets[interval_dates[0]]
+        squared_drawdowns = []
+
+        for date in interval_dates:
+            value = self._daily_total_assets[date]
+            if value > peak:
+                peak = value
+            drawdown_pct = (peak - value) / peak * 100
+            squared_drawdowns.append(drawdown_pct ** 2)
+
+        ulcer_index = math.sqrt(sum(squared_drawdowns) / len(squared_drawdowns))
+        return ulcer_index
+
+    def calculate_upi(self, risk_free_rate=0.02, time_interval=None):
+        annualized_return = self.calculate_annualized_return(time_interval)
+        ulcer_index = self.calculate_ulcer_index(time_interval)
+
+        if annualized_return is None or ulcer_index is None or ulcer_index == 0:
+            return None
+
+        return (annualized_return - risk_free_rate) / (ulcer_index / 100)
+
+    def calculate_kelly_criterion(self, time_interval=None):
+        if not self._trade_profits:
+            return None
+
+        win_rate = self.calculate_win_rate()
+        if win_rate is None:
+            return None
+
+        avg_profit = self.calculate_avg_profit(mode='amount')
+        avg_loss = self.calculate_avg_loss(mode='amount')
+
+        if avg_profit is None or avg_loss is None or avg_loss == 0:
+            return None
+
+        profit_loss_ratio = abs(avg_profit / avg_loss)
+
+        kelly = win_rate - (1 - win_rate) / profit_loss_ratio
+
+        return kelly
+
+    def calculate_kelly_fraction(self, fraction=0.5, time_interval=None):
+        kelly = self.calculate_kelly_criterion(time_interval)
+        if kelly is None:
+            return None
+        return kelly * fraction
+
 
     def _calculate_daily_returns(self, daily_assets):
-        """
-        根据每日总资产数据，计算每日收益率（当前值 / 上一日值 - 1）
-
-        :param daily_assets: 字典，键为日期，值为总资产
-        :return: 列表，包含每日收益率
-        """
         dates = sorted(daily_assets.keys())
         returns = []
         for i in range(1, len(dates)):
@@ -196,12 +255,6 @@ class AccountAnalyzer:
 
 
     def _get_start_end_date(self, time_interval):
-        """
-        根据时间区间字符串，计算起止日期。
-
-        :param time_interval: 时间区间字符串，如 '1y', '3m'
-        :return: (start_date, end_date)，若无效则返回 (None, None)
-        """
         if not self._daily_total_assets:
             return None, None
 
@@ -233,27 +286,13 @@ class AccountAnalyzer:
 
         return start_date, end_date
 
-    # ========== 交易相关方法 ==========
-    #注意在初始化调用
     def _calculate_profit(self, trade_log):
-        """
-        计算每笔交易的盈亏，并返回格式化的交易记录。
-
-        :param trade_log: 原始交易记录列表，每个元素为一个 Trade 对象
-        :return: 包含盈亏信息的交易记录列表，每个元素是一个字典，包含：
-                - symbol: 交易标的
-                - profit: 盈亏金额
-                - open_time: 开仓时间
-                - close_time: 平仓时间
-                - volume: 交易数量（绝对值）
-                - original_trade: 原始交易对象
-        """
         positions = defaultdict(lambda: {'volume': 0, 'cost': 0, 'open_time': None, 'open_price': 0, 'open_fee': 0})
         processed_trades = []
 
         for trade in trade_log:
             if trade.volume == 0 or math.isnan(trade.price):
-                continue  # 跳过无效交易
+                continue
             symbol = trade.symbol
             volume = trade.volume
             abs_volume = abs(volume)
@@ -304,39 +343,28 @@ class AccountAnalyzer:
         return processed_trades
     
     def get_largest_profit_trades(self, n):
-        """获取盈利最大的 N 个交易"""
         if not self._trade_profits or n <= 0:
             return []
-        # 按盈利从大到小排序并取前 N 个
         return sorted(self._trade_profits, key=lambda t: t['profit'], reverse=True)[:n]
 
     def get_largest_loss_trades(self, n):
-        """获取亏损最大的 N 个交易"""
         if not self._trade_profits or n <= 0:
             return []
-        # 按盈利从小到大排序并取前 N 个
         return sorted(self._trade_profits, key=lambda t: t['profit'])[:n]
 
     def calculate_average_holding_period(self):
-        """计算平均持仓周期（天数）"""
         if not self._trade_profits:
             return None
         total_days = sum((t['close_time'] - t['open_time']).days for t in self._trade_profits)
         return total_days / len(self._trade_profits)
 
     def calculate_win_rate(self):
-        """胜率：盈利交易占比"""
         if not self._trade_profits:
             return None
         wins = sum(1 for t in self._trade_profits if t['profit'] > 0)
         return wins / len(self._trade_profits)
 
     def calculate_avg_profit(self, mode='amount') -> float:
-        """
-        计算平均盈利（支持金额或百分比模式）
-        :param mode: 'amount'（金额）或 'percentage'（百分比）
-        :return: 平均盈利，若无盈利交易则返回 None
-        """
         profitable_trades = [t for t in self._trade_profits if t['profit'] > 0]
         if not profitable_trades:
             return None
@@ -345,7 +373,7 @@ class AccountAnalyzer:
             profits = [t['profit'] for t in profitable_trades]
         elif mode == 'percentage':
             profits = [
-                t['profit'] / (abs(t['volume']) * t['open_price'])  # 盈利 / 开仓成本
+                t['profit'] / (abs(t['volume']) * t['open_price'])
                 for t in profitable_trades
             ]
         else:
@@ -354,46 +382,33 @@ class AccountAnalyzer:
         return sum(profits) / len(profits)
 
     def calculate_avg_loss(self, mode='amount') -> float:
-        """
-        计算平均亏损（支持金额或百分比模式）
-        :param mode: 'amount'（金额）或 'percentage'（百分比）
-        :return: 平均亏损，若无亏损交易则返回 None
-        """
         loss_trades = [t for t in self._trade_profits if t['profit'] < 0]
         if not loss_trades:
             return None
 
         if mode == 'amount':
-            losses = [t['profit'] for t in loss_trades]  # 亏损为负值
+            losses = [t['profit'] for t in loss_trades]
         elif mode == 'percentage':
             losses = [
-                t['profit'] / (abs(t['volume']) * t['open_price'])  # 亏损为负百分比
+                t['profit'] / (abs(t['volume']) * t['open_price'])
                 for t in loss_trades
             ]
         else:
             raise ValueError("mode 必须是 'amount' 或 'percentage'")
 
-        return sum(losses) / len(losses)  # 返回负值
+        return sum(losses) / len(losses)
 
     def calculate_avg_profit_loss_ratio(self, mode='amount') -> float:
-        """
-        计算平均盈亏比（支持金额或百分比模式）
-        :param mode: 'amount'（金额）或 'percentage'（百分比）
-        :return: 盈亏比（正数），若无盈利或亏损则返回 None
-        """
         avg_profit = self.calculate_avg_profit(mode)
         avg_loss = self.calculate_avg_loss(mode)
         
         if avg_profit is None or avg_loss is None:
             return None
         
-        return abs(avg_profit / avg_loss)  # 保证比值为正
+        return abs(avg_profit / avg_loss)
 
-    # ========== 新增类方法 ==========
     @staticmethod
     def translate_keys(data):
-        """将字典列表中的英文字段名替换为中文"""
-        # 字段映射表（英文 -> 中文）
         field_mapping = {
             "date": "日期",
             "value": "净值",
@@ -401,7 +416,6 @@ class AccountAnalyzer:
             "action": "操作",
             "code": "代码",
             "quantity": "数量",
-            ##对应account的key
             "price": "价格",
             "assets": "资产",
             "symbol": "标的",
@@ -415,15 +429,8 @@ class AccountAnalyzer:
     
     @staticmethod
     def format_transaction_log(transaction_records):
-        """
-        将 TradeRecord 对象列表转换为字典列表，保持字段名不变。
-
-        :param transaction_records: 列表，元素为 TradeRecord 对象或字典
-        :return: 格式化后的字典列表（字段名不变）
-        """
         result = []
         for record in transaction_records:
-            # 支持对象和字典两种格式
             if hasattr(record, '__dict__'):
                 data = record.__dict__
             else:
@@ -431,7 +438,6 @@ class AccountAnalyzer:
 
             formatted = {}
             for key, value in data.items():
-                # 特殊字段值处理
                 if key == 'volume':
                     formatted[key] = int(value)
                 elif key == 'price' or key == 'fee':
@@ -439,7 +445,6 @@ class AccountAnalyzer:
                 elif key == 'side':
                     formatted[key] = '买入' if value == 'buy' else '卖出'
                 elif key == 'created_at':
-                    # 处理 pandas.Timestamp 并格式化时间
                     formatted[key] = value.strftime("%Y-%m-%d")
                 else:
                     formatted[key] = value
@@ -453,23 +458,19 @@ class AccountAnalyzer:
         original_trade = trade['original_trade']
         return {
             'symbol': original_trade.symbol,
-            'profit': f"{trade['profit']:.2f}",  # 盈亏，不转换绝对值
+            'profit': f"{trade['profit']:.2f}",
             'open_time': trade['open_time'].strftime('%Y-%m-%d'),
-            'open_price': f"{trade['open_price']:.2f}",  # 开仓价格
-            'open_fee': f"{trade['open_fee']:.2f}",  # 开仓费用
+            'open_price': f"{trade['open_price']:.2f}",
+            'open_fee': f"{trade['open_fee']:.2f}",
             'close_time': trade['close_time'].strftime('%Y-%m-%d'),
-            'close_price': f"{trade['close_price']:.2f}",  # 平仓价格
-            'close_fee': f"{trade['close_fee']:.2f}",  # 平仓费用
-            'volume': f"{abs(trade['volume']):d}"  # 将 volume 转换为绝对值并格式化输出
+            'close_price': f"{trade['close_price']:.2f}",
+            'close_fee': f"{trade['close_fee']:.2f}",
+            'volume': f"{abs(trade['volume']):d}"
         }
-    # ========== 输出结果 相关方法 ==========
 
     def format_daily_assets(self):
-
         result = []
-        #print(self._daily_total_assets)
-        for date,assets in self._daily_total_assets.items(): #这里不是字典，而是对象
-              # 时间格式化（如果是 pandas.Timestamp）
+        for date,assets in self._daily_total_assets.items():
             if hasattr(date, 'strftime'):
                 date_str = date.strftime("%Y-%m-%d")
             else:
@@ -483,89 +484,77 @@ class AccountAnalyzer:
 
 
     def to_html_report(self, report_name="回测报告", output_dir="."):
-        """
-        将回测结果生成HTML报告。
-
-        参数:
-        - report_name: str, 报告的名称，默认为"回测报告"。
-        - output_dir: str, 报告输出的目录，默认为当前目录"."。
-
-        返回值:
-        无直接返回值，但会生成HTML报告并保存到指定路径。
-        """
-        # 获取初始资金和最终资产值
         initial_cash = self.account.snapshots[0].cash if self.account.snapshots else 0
-        final_assets = self.account.snapshots[-1].nav if self.account.snapshots else 0 # 修改 total_assets -> nav
-        # 计算累计收益率
+        final_assets = self.account.snapshots[-1].nav if self.account.snapshots else 0
         return_rate = self.calculate_return_rate() * 100
-        # 年化收益
         an_return_rate = self.calculate_annualized_return()*100
-        # 计算夏普比率
         sharpe_ratio = self.calculate_sharpe_ratio()
-        # 计算最大回撤及其时段
         max_drawdown, max_drawdown_start_date, max_drawdown_end_date = self.calculate_max_drawdown()
-        # 计算平均盈利和平均亏损
         avg_profit = self.calculate_avg_profit()
         avg_loss = self.calculate_avg_loss()
 
-        # 计算平均盈亏比
         avg_profit_loss_ratio = self.calculate_avg_profit_loss_ratio()
-        # 计算平均持仓时间
         avg_holding_period = self.calculate_average_holding_period()
+        
+        sortino_ratio = self.calculate_sortino_ratio()
+        var_95 = self.calculate_var(confidence=0.95)
+        cvar_95 = self.calculate_cvar(confidence=0.95)
+        ulcer_index = self.calculate_ulcer_index()
+        upi = self.calculate_upi()
+        kelly = self.calculate_kelly_criterion()
+        half_kelly = self.calculate_kelly_fraction(fraction=0.5)
 
-        # 格式化最大回撤时段
         max_drawdown_period = f"{max_drawdown_start_date.strftime('%Y-%m-%d')} 至 {max_drawdown_end_date.strftime('%Y-%m-%d')}" if max_drawdown_start_date and max_drawdown_end_date else "N/A"
-        # 获取回测的日期范围
         dates = sorted(self._daily_total_assets.keys())
         start_date = dates[1] if dates else None
         end_date = dates[-1] if dates else None
 
-        # 格式化回测区间
         backtest_period = f"{start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}" if start_date and end_date else "N/A"
 
-        # 准备业绩指标数据
         metrics = [
-            {"name": "回测区间", "value": backtest_period},  # 新增的回测区间指标
+            {"name": "回测区间", "value": backtest_period},
             {"name": "初始资金", "value": f"{initial_cash:.2f}"},
             {"name": "最终资产", "value": f"{final_assets:.2f}"},
             {"name": "累计收益率", "value": f"{return_rate:.2f}%"},
             {"name": "年化收益率", "value": f"{an_return_rate:.2f}%"},
             {"name":"年化波动率", "value": f"{self.calculate_volatility()*100:.2f}%"},
-            {"name": "夏普比率", "value": f"{sharpe_ratio:.2f}"},
+            {"name": "夏普比率", "value": f"{sharpe_ratio:.2f}" if sharpe_ratio is not None else "N/A"},
+            {"name": "索提诺比率", "value": f"{sortino_ratio:.2f}" if sortino_ratio is not None and sortino_ratio != float('inf') else "N/A"},
             {"name": "最大回撤", "value": f"{max_drawdown * 100:.2f}%，时段：{max_drawdown_period}"},
+            {"name": "VaR(95%)", "value": f"{var_95*100:.2f}%" if var_95 is not None else "N/A"},
+            {"name": "CVaR(95%)", "value": f"{cvar_95*100:.2f}%" if cvar_95 is not None else "N/A"},
+            {"name": "Ulcer Index", "value": f"{ulcer_index:.2f}" if ulcer_index is not None else "N/A"},
+            {"name": "UPI", "value": f"{upi:.2f}" if upi is not None else "N/A"},
             {
                 "name": "平均盈亏比",
                 "value": f"{avg_profit_loss_ratio:.2f}（平均盈利{avg_profit * 100:.2f}%，平均亏损{abs(avg_loss) * 100:.2f}%）" 
                         if avg_profit_loss_ratio is not None and avg_profit is not None and avg_loss is not None 
                         else "N/A"
             },
+            {"name": "胜率", "value": f"{self.calculate_win_rate()*100:.2f}%" if self.calculate_win_rate() is not None else "N/A"},
+            {"name": "凯利公式最优仓位", "value": f"{kelly*100:.2f}%" if kelly is not None and kelly > 0 else f"不建议投资（{kelly*100:.2f}%）" if kelly is not None else "N/A"},
+            {"name": "半凯利仓位", "value": f"{half_kelly*100:.2f}%" if half_kelly is not None and half_kelly > 0 else "N/A"},
             {"name": "平均持仓时间（天）", "value": f"{avg_holding_period:.2f}" if avg_holding_period is not None else "N/A"},
         ]
 
-        # 准备净值数据、最大盈利和亏损交易
         assets_data = self.format_daily_assets()
         largest_profit_trades = self.get_largest_profit_trades(5)
         largest_loss_trades = self.get_largest_loss_trades(5)
 
-        # 格式化交易日志和盈亏交易
         formatted_transaction_log=self.format_transaction_log(self.account.trade_log)
         formatted_profit_trades = [self.format_trade(trade) for trade in largest_profit_trades]
         formatted_loss_trades = [self.format_trade(trade) for trade in largest_loss_trades]
-        # 中文化翻译
         assets_data_zh=self.translate_keys(assets_data)
         formatted_transaction_log_zh=self.translate_keys(formatted_transaction_log)
 
-        # 使用 json.dumps 处理数据，自动换行
         assets_data_json = json.dumps(assets_data_zh, indent=4, ensure_ascii=False)
         formatted_transaction_log_json = json.dumps(formatted_transaction_log_zh, indent=4, ensure_ascii=False)
         formatted_profit_trades_json = json.dumps(formatted_profit_trades, indent=4, ensure_ascii=False)
         formatted_loss_trades_json = json.dumps(formatted_loss_trades, indent=4, ensure_ascii=False)
 
-        # 获取分析类所在文件的绝对路径，计算模板目录的绝对路径
         current_file_path = Path(__file__).resolve()
-        template_dir = current_file_path.parent / "template"
+        template_dir = current_file_path.parent.parent / "template"
 
-        # 输出部分
         env = Environment(loader=FileSystemLoader(template_dir))
         template = env.get_template("analyzer.html")
 
@@ -578,19 +567,15 @@ class AccountAnalyzer:
             largest_loss_trades=formatted_loss_trades_json
         )
 
-        # 获取调用该方法的文件所在目录
         frame = inspect.currentframe().f_back
         caller_file = frame.f_code.co_filename
         caller_dir = Path(caller_file).resolve().parent
 
-        # 获取当前日期和时间（精确到分钟）
         current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
 
-        # 计算输出文件的路径，基于调用文件的目录，添加日期和时间到文件名
         output_path = caller_dir / output_dir / f"{report_name}_{current_datetime}.html"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 写入HTML报告
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_content)
         print(f"报告已生成至: {output_path}")

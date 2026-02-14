@@ -1,23 +1,18 @@
 import datetime
-#import collections
 from collections import defaultdict, deque
 from typing import Dict, List,Union
 import pandas as pd
 import logging
 logger = logging.getLogger(__name__)
-#我这个类，不嵌入账户管理
+
 class Context:
     def __init__(self):
-        # 数据存储
-        self._cache = _Cache()  # 直接使用原版Cache实现
-        self._subscribed = {}  # 改为字典存储订阅详情
-        self.bar_data_set = set()  # 添加bar数据去重集合
-        
-        # 状态管理
-        self.mode = None  # 'backtest'/'live'
+        self._cache = _Cache()
+        self._subscribed = {}
+        self.bar_data_set = set()
+        self.mode = None
         self._current_time = None
   
-
     def is_backtest_model(self):
         return self.mode == 'backtest'
 
@@ -26,7 +21,6 @@ class Context:
         return self._current_time if self.mode == 'backtest' else datetime.datetime.now()
     
     def subscribe(self, symbols: Union[str, List[str]], freq='1d', count=100, fields=None,format='df'):
-        """记录订阅参数"""
         if isinstance(symbols, str):
             symbols = [symbols]
             
@@ -36,14 +30,11 @@ class Context:
                 'count': count,
                 'format': format
             }
-            # 注意：这里不调用_init_cache
 
     def get_subscribe_params(self, symbol: str, freq: str) -> dict:
-        """获取订阅参数"""
         return self._subscribed.get((symbol, freq))
 
     def unsubscribe(self, symbols: Union[str, List[str]], freq='1d'):
-        """取消订阅"""
         if isinstance(symbols, str):
             symbols = [symbols]
             
@@ -53,13 +44,11 @@ class Context:
                 self._rm_cache(symbol, freq)
     @property  
     def symbols(self, freq=None):
-        """获取已订阅的品种列表"""
         if freq:
             return {s[0] for s in self._subscribed if s[1] == freq}
         return {s[0] for s in self._subscribed}
     
     def _add_bar2bar_data_cache(self, bar):
-        # type: (Text, Dict[Text, Any]) -> None
         kk = (bar["symbol"], bar["frequency"], bar["eob"])
         if kk in self.bar_data_set:
             logger.debug("bar data %s 已存在, 跳过不加入", kk)
@@ -67,24 +56,13 @@ class Context:
             context._add_data_to_cache(bar["symbol"], bar["frequency"], bar)
             self.bar_data_set.add(kk)
 
-    #这里和掘金的不同，返回dict。可以自行转换
     def data(self, symbol: str, frequency: str, count: int = 1,fields: Union[str, List[str]] = None):
-        """
-        获取数据滑窗（与掘金API兼容）
-        :param symbol: 标的代码
-        :param frequency: 频率
-        :param count: 获取条数
-        :param fields: 需要返回的字段，可以是字符串或列表
-        :param format: 返回格式 'row'/'col'/'pd'
-        :return: 字典列表或DataFrame
-        """
         if not frequency:
             frequency = "1d"
         
         if count < 1:
             count = 1
             
-        # 获取原始数据
         raw_data = self._cache.get_data(symbol, frequency, count, fields)
                 
         return raw_data
@@ -104,16 +82,14 @@ class Context:
             return
         self._cache.add_data(symbol, freq, data)
 
-# 以下是原版Cache类的实现，保持不变。管理的是字典数据
 class _Cache:
     def __init__(self):
-        self._col_cache = {} # type: Dict[str, _ColQuote]
-        self._row_cache = {} # type: Dict[str, _RowQuote]
+        self._col_cache = {}
+        self._row_cache = {}
         self._initialized = set()
-        self._data_loader = None  # 新增数据加载器
+        self._data_loader = None
 
     def set_data_loader(self, loader):
-        """设置自定义数据加载器"""
         self._data_loader = loader
     def init_cache(self, symbol, freq, format, fields, count):
         key = (symbol, freq)
@@ -151,7 +127,6 @@ class _Cache:
 
     def get_data(self, symbol, freq, count, fields):
         key = (symbol, freq)
-        # 优先查找列缓存，否则查找行缓存
         if key in self._col_cache:
             q = self._col_cache[key]
         elif key in self._row_cache:
@@ -161,7 +136,7 @@ class _Cache:
 
         if key not in self._initialized:
             miss_count = q.miss_count(count)
-            if miss_count != 0 and self._data_loader:  # 使用数据加载器
+            if miss_count != 0 and self._data_loader:
                 data = self._data_loader.load_history(
                     symbol=symbol,
                     frequency=freq,
@@ -170,7 +145,7 @@ class _Cache:
                 )
                 if freq == "1d":
                     for item in data[::-1]:
-                        if 'eob' in item:  # 确保包含时间字段
+                        if 'eob' in item:
                             item["eob"] = item["eob"].replace(hour=15, minute=15, second=1)
                             if context.now < item["eob"]:
                                 continue
@@ -190,7 +165,7 @@ class _RowQuote:
         self._format = format
         self._fields = fields
         self._earliest_time = None
-        self._data = deque(maxlen=count) #collections.deque
+        self._data = deque(maxlen=count)
 
     def add_data(self, data: Dict, left=False):
         if left and self.full():
@@ -247,11 +222,11 @@ class _ColQuote:
         self._format = format
         self._fields = fields
         self._earliest_time = None
-        self._data = {} # type: Dict[str, collections.deque]
+        self._data = {}
         for field in fields:
             if field == "symbol":
                 continue
-            self._data[field] = deque(maxlen=count) #collections.deque
+            self._data[field] = deque(maxlen=count)
 
     def add_data(self, data: Dict, left=False):
         if left and self.full():
@@ -267,7 +242,7 @@ class _ColQuote:
             else:
                 self._earliest_time = data["eob"]
         for field in self._fields:
-            if field == "symbol": # 所有的symbol都一样,不需要队列保存
+            if field == "symbol":
                 continue
             if field in ["bid_p", "bid_v", "ask_p", "ask_v"]:
                 quotes = data.get("quotes")
@@ -317,6 +292,4 @@ class _ColQuote:
             return len(q) == q.maxlen
 
 
-
-
-context=Context() # 全局上下文实例
+context=Context()

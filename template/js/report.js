@@ -289,6 +289,164 @@ class AssetAnalyzer {
         return (annualized_return - risk_free_rate) / volatility || 0;
     }
 
+    // 计算索提诺比率（只惩罚下行风险）
+    calculate_sortino_ratio(risk_free_rate=0.02, time_interval=null) {
+        const annualized_return = this.calculate_annualized_return(time_interval);
+        if (annualized_return === null) return null;
+
+        const [startDate, endDate] = this._get_start_end_date(time_interval);
+        const startIndex = this.dates.findIndex(d => d >= startDate);
+        const endIndex = this.dates.findIndex(d => d >= endDate);
+        
+        if (startIndex === -1 || endIndex === -1) return null;
+
+        // 计算日收益率
+        const returns = [];
+        for (let i = startIndex + 1; i <= endIndex; i++) {
+            returns.push((this.assets[i] - this.assets[i-1]) / this.assets[i-1]);
+        }
+
+        if (returns.length < 2) return null;
+
+        // 计算下行偏差（只考虑负收益）
+        const negativeReturns = returns.filter(r => r < 0);
+        if (negativeReturns.length === 0) return Infinity;
+
+        const downsideVariance = negativeReturns.reduce((sum, r) => sum + r * r, 0) / returns.length;
+        const downsideDeviation = Math.sqrt(downsideVariance);
+        const annualizedDownsideDeviation = downsideDeviation * Math.sqrt(252);
+
+        if (annualizedDownsideDeviation === 0) return Infinity;
+
+        return (annualized_return - risk_free_rate) / annualizedDownsideDeviation;
+    }
+
+    // 计算VaR (Value at Risk) - 历史模拟法
+    calculate_var(confidence=0.95, time_interval=null) {
+        const [startDate, endDate] = this._get_start_end_date(time_interval);
+        const startIndex = this.dates.findIndex(d => d >= startDate);
+        const endIndex = this.dates.findIndex(d => d >= endDate);
+        
+        if (startIndex === -1 || endIndex === -1) return null;
+
+        // 计算日收益率
+        const returns = [];
+        for (let i = startIndex + 1; i <= endIndex; i++) {
+            returns.push((this.assets[i] - this.assets[i-1]) / this.assets[i-1]);
+        }
+
+        if (returns.length < 2) return null;
+
+        // 排序收益率
+        const sortedReturns = [...returns].sort((a, b) => a - b);
+        
+        // 计算分位数索引
+        let index = Math.floor((1 - confidence) * sortedReturns.length);
+        if (index < 0) index = 0;
+
+        // VaR为负值，返回绝对值表示损失
+        return -sortedReturns[index];
+    }
+
+    // 计算CVaR (Conditional VaR) / Expected Shortfall
+    calculate_cvar(confidence=0.95, time_interval=null) {
+        const [startDate, endDate] = this._get_start_end_date(time_interval);
+        const startIndex = this.dates.findIndex(d => d >= startDate);
+        const endIndex = this.dates.findIndex(d => d >= endDate);
+        
+        if (startIndex === -1 || endIndex === -1) return null;
+
+        // 计算日收益率
+        const returns = [];
+        for (let i = startIndex + 1; i <= endIndex; i++) {
+            returns.push((this.assets[i] - this.assets[i-1]) / this.assets[i-1]);
+        }
+
+        if (returns.length < 2) return null;
+
+        // 排序收益率
+        const sortedReturns = [...returns].sort((a, b) => a - b);
+        
+        // 计算分位数索引
+        let index = Math.floor((1 - confidence) * sortedReturns.length);
+        if (index < 1) index = 1;
+
+        // CVaR为最坏情况下的平均损失
+        const tailReturns = sortedReturns.slice(0, index);
+        return -tailReturns.reduce((sum, r) => sum + r, 0) / tailReturns.length;
+    }
+
+    // 计算Ulcer Index（溃疡指数）
+    calculate_ulcer_index(time_interval=null) {
+        const [startDate, endDate] = this._get_start_end_date(time_interval);
+        const startIndex = this.dates.findIndex(d => d >= startDate);
+        const endIndex = this.dates.findIndex(d => d >= endDate);
+        
+        if (startIndex === -1 || endIndex === -1) return null;
+
+        // 计算每个时点的回撤
+        let peak = this.assets[startIndex];
+        const squaredDrawdowns = [];
+
+        for (let i = startIndex; i <= endIndex; i++) {
+            if (this.assets[i] > peak) {
+                peak = this.assets[i];
+            }
+            const drawdownPct = (peak - this.assets[i]) / peak * 100;
+            squaredDrawdowns.push(drawdownPct * drawdownPct);
+        }
+
+        // Ulcer Index = sqrt(平均平方回撤)
+        const avgSquaredDrawdown = squaredDrawdowns.reduce((sum, d) => sum + d, 0) / squaredDrawdowns.length;
+        return Math.sqrt(avgSquaredDrawdown);
+    }
+
+    // 计算UPI (Ulcer Performance Index)
+    calculate_upi(risk_free_rate=0.02, time_interval=null) {
+        const annualized_return = this.calculate_annualized_return(time_interval);
+        const ulcer_index = this.calculate_ulcer_index(time_interval);
+
+        if (annualized_return === null || ulcer_index === null || ulcer_index === 0) {
+            return null;
+        }
+
+        return (annualized_return - risk_free_rate) / (ulcer_index / 100);
+    }
+
+    // 计算凯利公式最优仓位比例
+    calculate_kelly_criterion() {
+        if (!this._trade_profits || this._trade_profits.length === 0) {
+            return null;
+        }
+
+        // 计算胜率
+        const winRate = this.calculate_win_rate();
+        if (winRate === null) return null;
+
+        // 计算盈亏比
+        const avgProfit = this.calculate_avg_profit('amount');
+        const avgLoss = this.calculate_avg_loss('amount');
+
+        if (avgProfit === null || avgLoss === null || avgLoss === 0) {
+            return null;
+        }
+
+        // 盈亏比 = 平均盈利 / 平均亏损的绝对值
+        const profitLossRatio = Math.abs(avgProfit / avgLoss);
+
+        // 凯利公式: f* = p - (1-p)/b
+        const kelly = (winRate / 100) - (1 - winRate / 100) / profitLossRatio;
+
+        return kelly;
+    }
+
+    // 计算分数凯利（半凯利、四分之一凯利等）
+    calculate_kelly_fraction(fraction=0.5) {
+        const kelly = this.calculate_kelly_criterion();
+        if (kelly === null) return null;
+        return kelly * fraction;
+    }
+
 
     // 计算平均持仓周期（交易日）
     calculate_average_holding_period() {
@@ -429,6 +587,16 @@ class AssetAnalyzer {
         const avgHoldingPeriod = this.calculate_average_holding_period();
         const winRate = this.calculate_win_rate();
         const profitLossRatio = this.calculate_avg_profit_loss_ratio();
+        
+        // 新增指标
+        const sortinoRatio = this.calculate_sortino_ratio();
+        const var95 = this.calculate_var(0.95);
+        const cvar95 = this.calculate_cvar(0.95);
+        const ulcerIndex = this.calculate_ulcer_index();
+        const upi = this.calculate_upi();
+        const kelly = this.calculate_kelly_criterion();
+        const halfKelly = this.calculate_kelly_fraction(0.5);
+        
         return [
             {name: '回测区间', value: `${this.dates[1].toISOString().split('T')[0]} 至 ${this.dates[this.dates.length-1].toISOString().split('T')[0]}`, desc: '区间开始前一交易日，作为基准日'},
             {name: '初始资金', value: this.assets[0].toFixed(2)},
@@ -437,8 +605,16 @@ class AssetAnalyzer {
             {name: '年化收益率', value: `${(this.calculate_annualized_return() * 100).toFixed(2)}%`},
             {name: '年化波动率', value: `${(this.calculate_volatility() * 100).toFixed(2)}%`},
             {name: '夏普比率', value: this.calculate_sharpe_ratio().toFixed(2)},
+            {name: '索提诺比率', value: sortinoRatio !== null && sortinoRatio !== Infinity ? sortinoRatio.toFixed(2) : 'N/A'},
             {name: '最大回撤', value: `${maxDrawdown.toFixed(2)}%，时段：${drawdownPeriod}`},
+            {name: 'VaR(95%)', value: var95 !== null ? `${(var95 * 100).toFixed(2)}%` : 'N/A'},
+            {name: 'CVaR(95%)', value: cvar95 !== null ? `${(cvar95 * 100).toFixed(2)}%` : 'N/A'},
+            {name: 'Ulcer Index', value: ulcerIndex !== null ? ulcerIndex.toFixed(2) : 'N/A'},
+            {name: 'UPI', value: upi !== null ? upi.toFixed(2) : 'N/A'},
             {name: '平均盈亏比', value: profitLossRatio !== null ? `${profitLossRatio.toFixed(2)}` : 'N/A'},
+            {name: '胜率', value: winRate !== null ? `${winRate.toFixed(2)}%` : 'N/A'},
+            {name: '凯利公式最优仓位', value: kelly !== null ? (kelly > 0 ? `${(kelly * 100).toFixed(2)}%` : `不建议投资（${(kelly * 100).toFixed(2)}%）`) : 'N/A'},
+            {name: '半凯利仓位', value: halfKelly !== null && halfKelly > 0 ? `${(halfKelly * 100).toFixed(2)}%` : 'N/A'},
             {name: '平均持仓时间(天)', value: avgHoldingPeriod !== null ? `${avgHoldingPeriod.toFixed(2)}` : 'N/A'}
         ];
     }
