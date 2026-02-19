@@ -59,13 +59,29 @@ class Notebook:
         """退出 Section"""
         return self._section_stack.pop()
     
-    def _add_cell(self, cell: Cell) -> 'Notebook':
-        """添加单元格并返回self以支持链式调用"""
+    def _add_cell(self, cell: Cell, title: str = None) -> 'Notebook':
+        """
+        添加单元格并返回self以支持链式调用
+
+        逻辑:
+        1. 如果在 with 内 -> 添加到当前 Section（Cell 保留 title 作为小标题）
+        2. 如果不在 with 内但有 title -> 自动创建 Section（Cell 清空 title，避免重复）
+        3. 如果不在 with 内且无 title -> 普通 Cell 添加到顶层
+        """
         self._cell_counter += 1
+
         if self._section_stack:
+            # 在 with 内：添加到当前 Section，Cell 保留 title
             self._section_stack[-1].cells.append(cell)
+        elif title:
+            # 不在 with 内但有 title：自动创建 Section，Cell 清空 title 避免重复
+            cell.title = None
+            section_cell = CellBuilder.section(title, [cell], level=1)
+            self.cells.append(section_cell)
         else:
+            # 不在 with 内且无 title：普通 Cell
             self.cells.append(cell)
+
         return self
     
     def section(self, title: str, level: int = None) -> SectionContext:
@@ -113,10 +129,10 @@ class Notebook:
     
     # ========== 表格 ==========
     
-    def add_table(self, data: List[dict], columns: List[str] = None, 
+    def add_table(self, data: List[dict], columns: List[str] = None,
                   title: str = None) -> 'Notebook':
         """添加表格"""
-        return self._add_cell(CellBuilder.table(data, columns, title))
+        return self._add_cell(CellBuilder.table(data, columns, title), title)
     
     def add_dataframe(self, df, title: str = None, columns: List[str] = None) -> 'Notebook':
         """添加DataFrame表格"""
@@ -131,61 +147,61 @@ class Notebook:
     
     # ========== 指标卡片 ==========
     
-    def add_metrics(self, data: List[dict], title: str = None, 
+    def add_metrics(self, data: List[dict], title: str = None,
                     columns: int = 4) -> 'Notebook':
         """
         添加指标卡片
-        
+
         data格式: [{'name': '指标名', 'value': '指标值', 'desc': '说明'}, ...]
         """
-        return self._add_cell(CellBuilder.metrics(data, title, columns))
+        return self._add_cell(CellBuilder.metrics(data, title, columns), title)
     
     # ========== 图表 ==========
     
     def add_chart(self, chart_type: str, data: dict, title: str = None,
                   height: int = 400, **options) -> 'Notebook':
         """添加图表（通用）"""
-        return self._add_cell(CellBuilder.chart(chart_type, data, title, height, **options))
+        return self._add_cell(CellBuilder.chart(chart_type, data, title, height, **options), title)
     
-    def add_line_chart(self, dates: List, series: List[dict], 
+    def add_line_chart(self, dates: List, series: List[dict],
                        title: str = None, **options) -> 'Notebook':
         """添加折线图"""
-        return self._add_cell(CellBuilder.line_chart(dates, series, title, **options))
-    
+        return self._add_cell(CellBuilder.line_chart(dates, series, title, **options), title)
+
     def add_area_chart(self, dates: List, series: List[dict],
                        title: str = None, **options) -> 'Notebook':
         """添加面积图"""
-        return self._add_cell(CellBuilder.area_chart(dates, series, title, **options))
-    
+        return self._add_cell(CellBuilder.area_chart(dates, series, title, **options), title)
+
     def add_bar_chart(self, categories: List, series: List[dict],
                       title: str = None, **options) -> 'Notebook':
         """添加柱状图"""
-        return self._add_cell(CellBuilder.bar_chart(categories, series, title, **options))
-    
+        return self._add_cell(CellBuilder.bar_chart(categories, series, title, **options), title)
+
     def add_pie_chart(self, data: List[dict], title: str = None,
                       **options) -> 'Notebook':
         """添加饼图"""
-        return self._add_cell(CellBuilder.pie_chart(data, title, **options))
-    
+        return self._add_cell(CellBuilder.pie_chart(data, title, **options), title)
+
     def add_heatmap(self, data: dict, title: str = None, **options) -> 'Notebook':
         """添加热力图"""
-        return self._add_cell(CellBuilder.heatmap(data, title, **options))
+        return self._add_cell(CellBuilder.heatmap(data, title, **options), title)
     
-    def add_pyecharts(self, chart, title: str = None, height: int = 400, 
+    def add_pyecharts(self, chart, title: str = None, height: int = 400,
                       width: str = '100%') -> 'Notebook':
         """
         添加 pyecharts 图表
-        
+
         Args:
             chart: pyecharts 图表对象（Kline, Line, Bar, Pie 等）
             title: 可选标题
             height: 图表高度（像素）
             width: 图表宽度（默认100%）
-        
+
         Returns:
             Notebook: 支持链式调用
         """
-        return self._add_cell(CellBuilder.pyecharts(chart, title, height, width))
+        return self._add_cell(CellBuilder.pyecharts(chart, title, height, width), title)
     
     # ========== 权益曲线快捷方法 ==========
     

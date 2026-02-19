@@ -18,19 +18,28 @@
             padding: 20px;
         }
         .notebook-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
+            background: linear-gradient(90deg, #ffffff 0%, #f3e8ff 100%);
+            border: 1px solid #e9d5ff;
+            padding: 28px 24px;
+            margin-bottom: 24px;
             border-radius: 8px;
-            margin-bottom: 20px;
         }
         .notebook-header h1 {
             font-size: 28px;
-            margin-bottom: 10px;
+            font-weight: 600;
+            color: #6b21a8;
+            margin: 0 0 10px 0;
         }
         .notebook-header .meta {
-            font-size: 14px;
-            opacity: 0.8;
+            font-size: 13px;
+            color: #a855f7;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .notebook-header .meta::before {
+            content: "📄";
+            font-size: 12px;
         }
         
         .cell {
@@ -648,6 +657,23 @@
                                     </template>
                                     <template x-if="subCell.type === 'divider'">
                                         <div class="cell-divider"></div>
+                                    </template>
+                                    <template x-if="subCell.type === 'collapsible'">
+                                        <div class="cell-collapsible">
+                                            <button class="collapse-toggle" :class="{'expanded': !subCell.options.collapsed}" @click="subCell.options.collapsed = !subCell.options.collapsed">
+                                                <span x-text="subCell.title"></span>
+                                                <span class="arrow" x-text="subCell.options.collapsed ? '▶' : '▼'"></span>
+                                            </button>
+                                            <div class="collapse-content" x-show="!subCell.options.collapsed">
+                                                <template x-for="(collCell, collIndex) in subCell.content" :key="collIndex">
+                                                    <div>
+                                                        <template x-if="collCell.type === 'table'">
+                                                            <div x-data="table({id: 'coll-table-' + index + '-' + subIndex + '-' + collIndex, data: collCell.content, cols: getTableCols(collCell)})"></div>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
                                     </template>
                                     <template x-if="subCell.type === 'section'">
                                         <div class="section nested-section">
