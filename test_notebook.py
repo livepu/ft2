@@ -111,11 +111,11 @@ def main():
     
     # ==================== 报告头部 ====================
     print("\n[1] 报告头部...")
-    nb.add_title("策略回测分析报告", level=1)
-    nb.add_text("本报告展示了策略的回测结果，包括收益分析、风险指标等内容。")
-    nb.add_markdown("""
+    with nb.section("报告概述"):
+        nb.add_text("本报告展示了策略的回测结果，包括收益分析、风险指标等内容。")
+        nb.add_markdown("""
 **策略类型**: 趋势跟踪策略 | **回测区间**: 2024-01-01 至 2024-04-10 | **初始资金**: 1,000,000 元
-    """)
+        """)
     
     # ==================== Section 1: 核心指标概览 ====================
     print("[2] 核心指标概览...")
@@ -238,20 +238,20 @@ def on_bar(bar):
                 ], title="版本迭代")
     
     # ==================== 独立内容（不使用 Section） ====================
-    print("[8] 独立内容...")
-    nb.add_divider()
-    nb.add_title("附录", level=2)
-    
-    # 可折叠区域
-    nb.add_collapsible_table(
-        title="历史交易明细（点击展开）",
-        data=trades * 3,
-        columns=["日期", "方向", "价格", "数量", "金额"],
-        collapsed=True
-    )
-    
-    # HTML 内容
-    nb.add_html("""
+    print("[8] 附录...")
+    with nb.section("附录"):
+        #nb.add_title("历史记录", level=2)
+        
+        # 可折叠区域
+        nb.add_collapsible_table(
+            title="历史交易明细（点击展开）",
+            data=trades * 3,
+            columns=["日期", "方向", "价格", "数量", "金额"],
+            collapsed=True
+        )
+        
+        # HTML 内容
+        nb.add_html("""
     <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                 color: white; padding: 20px; border-radius: 8px; margin: 10px 0;">
         <h3 style="margin: 0 0 10px 0;">风险提示</h3>
@@ -281,5 +281,130 @@ def on_bar(bar):
     print("  - 附录: 独立内容")
 
 
+def test_auto_section():
+    """测试：无 with，有 title 自动创建 Section"""
+    print("\n" + "=" * 60)
+    print("测试：自动创建 Section 模式")
+    print("=" * 60)
+    
+    nb = Notebook("自动 Section 测试")
+    
+    # 方式1: 无 with，有 title -> 自动创建 Section
+    nb.add_metrics([
+        {"name": "收益率", "value": "25.6%"},
+        {"name": "夏普", "value": "1.65"},
+    ], title="核心指标")  # 自动创建 Section
+    
+    nb.add_line_chart(
+        dates=["1月", "2月", "3月"],
+        series=[{"name": "净值", "data": [1.0, 1.1, 1.25]}],
+        title="净值曲线"  # 自动创建 Section
+    )
+    
+    # 方式2: 无 with，无 title -> 普通 Cell
+    nb.add_text("这是普通文本，无 Section 包裹")
+    
+    nb.export_html("d:/01-Doc/程序化/ft2/test_auto_section.html")
+    print("输出: test_auto_section.html")
+
+
+def test_mixed_mode():
+    """测试：混合模式（with + 自动 Section）"""
+    print("\n" + "=" * 60)
+    print("测试：混合模式")
+    print("=" * 60)
+    
+    nb = Notebook("混合模式测试")
+    
+    # 顶层自动 Section
+    nb.add_metrics([{"name": "总收益", "value": "30%"}], title="概览")
+    
+    # with Section 嵌套
+    with nb.section("详细分析"):
+        nb.add_bar_chart(
+            categories=["A", "B", "C"],
+            series=[{"name": "收益", "data": [10, 20, 15]}],
+            title="分类收益"  # Section 内的小标题
+        )
+        
+        # 嵌套子 Section
+        with nb.section("子分析"):
+            nb.add_text("嵌套内容")
+    
+    # 顶层再自动 Section
+    nb.add_pie_chart(
+        data=[{"name": "股票", "value": 60}, {"name": "债券", "value": 40}],
+        title="资产配置"
+    )
+    
+    nb.export_html("d:/01-Doc/程序化/ft2/test_mixed.html")
+    print("输出: test_mixed.html")
+
+
+def test_chain_call():
+    """测试：链式调用"""
+    print("\n" + "=" * 60)
+    print("测试：链式调用")
+    print("=" * 60)
+    
+    nb = Notebook("链式调用测试")
+    
+    # 链式调用（在 with 内）
+    with nb.section("链式操作"):
+        nb.add_metrics([{"name": "M1", "value": "10"}], title="指标") \
+          .add_line_chart(["1", "2"], [{"name": "L", "data": [1, 2]}], title="曲线") \
+          .add_text("链式文本")
+    
+    # 链式调用（自动 Section）
+    nb.add_metrics([{"name": "M2", "value": "20"}], title="独立指标") \
+      .add_bar_chart(["A", "B"], [{"name": "V", "data": [5, 8]}], title="独立图表")
+    
+    nb.export_html("d:/01-Doc/程序化/ft2/test_chain.html")
+    print("输出: test_chain.html")
+
+
+def test_simple_report():
+    """测试：简单报告（无 with，纯自动 Section）"""
+    print("\n" + "=" * 60)
+    print("测试：简单报告模式")
+    print("=" * 60)
+    
+    nb = Notebook("日报")
+    
+    # 简单报告：不需要 with，有 title 就自动成 Section
+    nb.add_markdown("**日期**: 2024-02-19 | **策略**: 双均线")
+    
+    nb.add_metrics([
+        {"name": "今日收益", "value": "+2.5%", "desc": "日收益"},
+        {"name": "累计收益", "value": "+15.8%", "desc": "总收益"},
+        {"name": "持仓", "value": "60%", "desc": "仓位"},
+    ], title="今日表现")
+    
+    nb.add_line_chart(
+        dates=["周一", "周二", "周三", "周四", "周五"],
+        series=[{"name": "净值", "data": [1.0, 1.02, 1.01, 1.03, 1.025]}],
+        title="本周走势"
+    )
+    
+    nb.add_table([
+        {"股票": "A", "收益": "+5%"},
+        {"股票": "B", "收益": "-2%"},
+    ], title="持仓明细")
+    
+    nb.export_html("d:/01-Doc/程序化/ft2/test_simple.html")
+    print("输出: test_simple.html")
+
+
 if __name__ == '__main__':
+    # 主测试
     main()
+    
+    # 其他测试模式
+    test_auto_section()
+    test_mixed_mode()
+    test_chain_call()
+    test_simple_report()
+    
+    print("\n" + "=" * 60)
+    print("所有测试完成！")
+    print("=" * 60)
