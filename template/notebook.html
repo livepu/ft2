@@ -34,11 +34,10 @@
         }
         
         .cell {
-            background: white;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            overflow: hidden;
+            background: #f7f6f3;
+            border-radius: 6px;
+            margin: 8px 0;
+            padding: 12px 14px;
         }
         
         /* ========== Section 样式 (Notion 风格) ========== */
@@ -101,14 +100,143 @@
         .nested-section .nested-section .section-content .cell {
             background: #fff;
         }
-        .cell-title {
-            padding: 20px;
+        
+        /* ========== 代码块样式 (新式风格) ========== */
+        .code-block {
+            border-radius: 6px;
+            overflow: hidden;
+            margin: 8px 0;
+            background: #282c34;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
         }
-        .cell-title h1, .cell-title h2, .cell-title h3 {
+        .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 14px;
+            background: #21252b;
+            border-bottom: 1px solid #3a3f4b;
+        }
+        .code-header .code-lang {
+            font-size: 12px;
+            color: #abb2bf;
+            font-weight: 500;
+        }
+        .code-block .code-input {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 12px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            line-height: 1.5;
+        }
+        .code-block .code-output {
+            background: #21252b;
+            border-top: 1px solid #3a3f4b;
+            padding: 10px 12px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            color: #98c379;
+        }
+        
+        /* ========== 表格样式 (新式风格) ========== */
+        .data-table-container {
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            text-align: left;
+            background: #fff;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .data-table th {
+            background: #f7f6f3;
+            padding: 12px 14px;
+            font-weight: 600;
+            border-bottom: 2px solid #e9e9e9;
+            color: #37352f;
+        }
+        .data-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #eee;
             color: #333;
         }
+        .data-table tr:hover td {
+            background: #fafafa;
+        }
+        .data-table .sort-asc::after { content: ' ▲'; font-size: 10px; }
+        .data-table .sort-desc::after { content: ' ▼'; font-size: 10px; }
+        .data-table .positive { color: #e64340; }
+        .data-table .negative { color: #00b300; }
+        
+        /* ========== 图表占位符样式 ========== */
+        .chart-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fafafa;
+            border: 2px dashed #e0e0e0;
+            border-radius: 6px;
+            min-height: 200px;
+            color: #999;
+            font-size: 14px;
+        }
+        
+        /* ========== HTML块样式 ========== */
+        .html-block {
+            border-radius: 6px;
+            margin: 8px 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1px;
+        }
+        .html-block-inner {
+            background: #fff;
+            padding: 14px;
+            border-radius: 5px;
+        }
+        
+        /* ========== Markdown 样式 ========== */
+        .markdown-content h1 { font-size: 20px; margin: 0 0 10px; color: #37352f; }
+        .markdown-content h2 { font-size: 18px; margin: 0 0 8px; color: #37352f; }
+        .markdown-content h3 { font-size: 16px; margin: 0 0 6px; color: #37352f; }
+        .markdown-content p { margin: 0 0 8px; }
+        .markdown-content strong { color: #37352f; }
+        .markdown-content em { color: #666; }
+        .markdown-content ul, .markdown-content ol { margin: 0 0 8px 20px; }
+        .markdown-content li { margin: 4px 0; }
+        .markdown-content a { color: #667eea; text-decoration: none; }
+        .markdown-content a:hover { text-decoration: underline; }
+        .markdown-content blockquote {
+            border-left: 3px solid #e9e9e9;
+            padding-left: 12px;
+            margin: 8px 0;
+            color: #666;
+            font-style: italic;
+        }
+        .markdown-content hr {
+            border: none;
+            border-top: 1px solid #e9e9e9;
+            margin: 12px 0;
+        }
+        
+        .cell-title {
+            padding: 0;
+        }
+        .cell-title h1, .cell-title h2, .cell-title h3 {
+            color: #37352f;
+            margin: 0;
+        }
+        .cell-title h1 { font-size: 20px; }
+        .cell-title h2 { font-size: 18px; }
+        .cell-title h3 { font-size: 16px; }
         .cell-text {
-            padding: 16px 20px;
+            padding: 0;
         }
         .cell-text.text-heading {
             font-weight: bold;
@@ -116,43 +244,101 @@
         }
         .cell-text.text-code {
             font-family: 'Consolas', 'Monaco', monospace;
-            background: #f8f9fa;
+            background: #f0efe9;
             border-radius: 4px;
-            padding: 12px 16px;
+            padding: 8px 12px;
         }
+        
+        /* ========== 代码块样式 (cell-code 使用新式风格) ========== */
         .cell-code {
             padding: 0;
+        }
+        .cell-code .code-block {
+            border-radius: 6px;
+            overflow: hidden;
+            background: #282c34;
+        }
+        .cell-code .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: #21252b;
+            font-size: 12px;
+            color: #abb2bf;
+        }
+        .cell-code .code-header .code-lang {
+            font-weight: 500;
         }
         .cell-code .code-input {
             background: #282c34;
             color: #abb2bf;
-            padding: 16px;
+            padding: 12px;
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 13px;
             overflow-x: auto;
+            line-height: 1.5;
         }
         .cell-code .code-output {
             background: #f8f9fa;
-            border-top: 1px solid #e0e0e0;
-            padding: 12px 16px;
+            border-top: 1px solid #3a3f4b;
+            padding: 10px 12px;
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 13px;
-            color: #666;
-        }
-        .cell-table {
-            padding: 16px;
-        }
-        .cell-table h3 {
-            margin-bottom: 12px;
-            font-size: 16px;
             color: #333;
         }
+        .cell-table {
+            padding: 0;
+        }
+        .cell-table h3 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            color: #37352f;
+        }
+        
+        /* ========== 表格样式 (新式风格) ========== */
+        .cell-table .data-table-container {
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+        .cell-table .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            text-align: left;
+            background: #fff;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .cell-table .data-table th {
+            background: #f7f6f3;
+            padding: 12px 14px;
+            font-weight: 600;
+            border-bottom: 2px solid #e9e9e9;
+            color: #37352f;
+        }
+        .cell-table .data-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #eee;
+            color: #333;
+        }
+        .cell-table .data-table tr:hover td {
+            background: #fafafa;
+        }
+        .cell-table .data-table .positive { color: #e64340; }
+        .cell-table .data-table .negative { color: #00b300; }
+        
+        /* 保留原有的 Alpine 表格样式以兼容旧版 */
+        .alpine-table-container {
+            overflow-x: auto;
+        }
         .cell-metrics {
-            padding: 16px;
+            padding: 0;
         }
         .cell-metrics h3 {
-            margin-bottom: 12px;
-            font-size: 16px;
+            margin: 0 0 8px;
+            font-size: 14px;
+            color: #37352f;
         }
         .metrics-grid {
             display: grid;
@@ -160,18 +346,14 @@
             gap: 12px;
         }
         .metric-card {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 16px;
+            background: #fff;
+            border-radius: 6px;
+            padding: 14px;
             text-align: center;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .metric-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border: 1px solid #eee;
         }
         .metric-card .metric-value {
-            font-size: 24px;
+            font-size: 22px;
             font-weight: bold;
             color: #333;
             margin-bottom: 4px;
@@ -188,23 +370,38 @@
             margin-top: 4px;
         }
         .cell-chart {
-            padding: 16px;
+            padding: 0;
         }
         .cell-chart h3 {
-            margin-bottom: 12px;
-            font-size: 16px;
+            margin: 0 0 8px;
+            font-size: 14px;
+            color: #37352f;
         }
         .chart-container {
             width: 100%;
             height: var(--height, 400px);
         }
         
+        /* ========== 图表占位符样式 (新式风格) ========== */
+        .cell-chart .chart-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+            border-radius: 6px;
+            min-height: 200px;
+            color: #999;
+            font-size: 13px;
+            border: 2px dashed #ddd;
+        }
+        
         .cell-heatmap {
-            padding: 16px;
+            padding: 0;
         }
         .cell-heatmap h3 {
-            margin-bottom: 12px;
-            font-size: 16px;
+            margin: 0 0 8px;
+            font-size: 14px;
+            color: #37352f;
         }
         .heatmap-container {
             width: 100%;
@@ -212,28 +409,32 @@
         }
         .cell-divider {
             height: 1px;
-            background: #e0e0e0;
-            margin: 8px 20px;
+            background: #e9e9e9;
+            margin: 12px 0;
         }
+        
+        /* ========== 可折叠区域样式 (新式风格) ========== */
         .cell-collapsible {
             padding: 0;
+            border: 1px solid #e9e9e9;
+            border-radius: 6px;
+            overflow: hidden;
         }
         .collapse-toggle {
             width: 100%;
-            padding: 16px 20px;
-            background: #f8f9fa;
+            padding: 12px 14px;
+            background: #f7f6f3;
             border: none;
             text-align: left;
             cursor: pointer;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 500;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: background 0.2s;
         }
         .collapse-toggle:hover {
-            background: #e9ecef;
+            background: #f0efe9;
         }
         .collapse-toggle .arrow {
             transition: transform 0.2s;
@@ -242,56 +443,76 @@
             transform: rotate(90deg);
         }
         .collapse-content {
-            padding: 16px 20px;
-            border-top: 1px solid #e0e0e0;
-        }
-        .cell-html {
-            padding: 16px 20px;
+            padding: 14px;
+            border-top: 1px solid #e9e9e9;
         }
         
+        /* ========== HTML块样式 (新式风格) ========== */
+        .cell-html {
+            padding: 0;
+        }
+        .cell-html .html-block {
+            border-radius: 6px;
+            margin: 8px 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1px;
+        }
+        .cell-html .html-block-inner {
+            background: #fff;
+            padding: 14px;
+            border-radius: 5px;
+        }
+        .cell-html .html-block h4 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            color: #37352f;
+        }
+        .cell-html .html-block p {
+            margin: 0;
+            font-size: 13px;
+            color: #666;
+        }
+        
+        /* ========== 代码语法高亮样式 (新式风格) ========== */
+        .code-keyword { color: #c678dd; }
+        .code-string { color: #98c379; }
+        .code-comment { color: #5c6370; }
+        .code-function { color: #61afef; }
+        .code-number { color: #d19a66; }
+        .code-operator { color: #56b6c2; }
+        .code-builtin { color: #e5c07b; }
+        
+        /* ========== 表格样式 ========== */
         .alpine-table-container {
             overflow-x: auto;
         }
-        
         .alpine-table {
             width: 100%;
             border-collapse: collapse;
-            margin: 10px 0;
             font-size: 14px;
             text-align: left;
         }
-        
         .alpine-table th {
-            background-color: #f5f5f5;
-            color: #333;
-            font-weight: bold;
-            padding: 12px 8px;
-            border: 1px solid #e0e0e0;
-            cursor: pointer;
+            background: #f7f6f3;
+            padding: 10px 12px;
+            font-weight: 600;
+            border-bottom: 2px solid #e9e9e9;
         }
-        
-        .alpine-table th:hover {
-            background-color: #e8e8e8;
-        }
-        
         .alpine-table td {
-            padding: 10px 8px;
-            border: 1px solid #e0e0e0;
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
         }
-        
-        .alpine-table tr:nth-child(even) {
-            background-color: #fafafa;
+        .alpine-table tr:hover td {
+            background: #fafafa;
         }
-        
-        .alpine-table tr:hover {
-            background-color: #f0f0f0;
-        }
-        
         .alpine-table .sort-asc, .alpine-table .sort-desc {
             margin-left: 5px;
             font-size: 12px;
             color: #e64340;
         }
+        .alpine-table .positive { color: #e64340; }
+        .alpine-table .negative { color: #00b300; }
         
         .alpine-table-pagination {
             display: flex;
@@ -300,10 +521,9 @@
             margin: 10px 0;
             gap: 10px;
         }
-        
         .alpine-table-pagination .pagination-btn {
             padding: 5px 10px;
-            border: 1px solid #e0e0e0;
+            border: 1px solid #e9e9e9;
             background-color: #fff;
             color: #333;
             cursor: pointer;
@@ -360,13 +580,18 @@
                                         <div class="cell"><div class="cell-text" :class="'text-' + subCell.options.style" x-text="subCell.content"></div></div>
                                     </template>
                                     <template x-if="subCell.type === 'markdown'">
-                                        <div class="cell"><div class="cell-text" x-html="renderMarkdown(subCell.content)"></div></div>
+                                        <div class="cell"><div class="markdown-content" x-html="renderMarkdown(subCell.content)"></div></div>
                                     </template>
                                     <template x-if="subCell.type === 'code'">
-                                        <div class="cell">
+                                        <div class="cell" style="padding: 0; overflow: hidden;">
                                             <div class="cell-code">
-                                                <div class="code-input"><pre x-text="subCell.content.code"></pre></div>
-                                                <div class="code-output" x-show="subCell.content.output" x-text="subCell.content.output"></div>
+                                                <div class="code-block">
+                                                    <div class="code-header">
+                                                        <span class="code-lang" x-text="subCell.content.lang || 'Python'"></span>
+                                                    </div>
+                                                    <div class="code-input"><pre x-text="subCell.content.code"></pre></div>
+                                                    <div class="code-output" x-show="subCell.content.output" x-text="subCell.content.output"></div>
+                                                </div>
                                             </div>
                                         </div>
                                     </template>
@@ -473,9 +698,14 @@
                                                             <div class="cell"><div class="cell-text" x-text="deepCell.content"></div></div>
                                                         </template>
                                                         <template x-if="deepCell.type === 'code'">
-                                                            <div class="cell">
+                                                            <div class="cell" style="padding: 0; overflow: hidden;">
                                                                 <div class="cell-code">
-                                                                    <div class="code-input"><pre x-text="deepCell.content.code"></pre></div>
+                                                                    <div class="code-block">
+                                                                        <div class="code-header">
+                                                                            <span class="code-lang" x-text="deepCell.content.lang || 'Python'"></span>
+                                                                        </div>
+                                                                        <div class="code-input"><pre x-text="deepCell.content.code"></pre></div>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </template>
@@ -540,12 +770,17 @@
                             <div class="cell-text" :class="'text-' + cell.options.style" x-text="cell.content"></div>
                         </template>
                         <template x-if="cell.type === 'markdown'">
-                            <div class="cell-text" x-html="renderMarkdown(cell.content)"></div>
+                            <div class="markdown-content" x-html="renderMarkdown(cell.content)"></div>
                         </template>
                         <template x-if="cell.type === 'code'">
-                            <div class="cell-code">
-                                <div class="code-input"><pre x-text="cell.content.code"></pre></div>
-                                <div class="code-output" x-show="cell.content.output" x-text="cell.content.output"></div>
+                            <div class="cell-code" style="padding: 0;">
+                                <div class="code-block">
+                                    <div class="code-header">
+                                        <span class="code-lang" x-text="cell.content.lang || 'Python'"></span>
+                                    </div>
+                                    <div class="code-input"><pre x-text="cell.content.code"></pre></div>
+                                    <div class="code-output" x-show="cell.content.output" x-text="cell.content.output"></div>
+                                </div>
                             </div>
                         </template>
                         <template x-if="cell.type === 'table'">
@@ -841,6 +1076,8 @@
                     .replace(/^# (.*$)/gm, '<h1>$1</h1>')
                     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                     .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .trim()
+                    .replace(/\n+/g, '\n')
                     .replace(/\n/g, '<br>');
             }
         };

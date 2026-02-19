@@ -22,10 +22,18 @@
             margin-bottom: 30px;
             color: #333;
         }
+        h2.section-title-main {
+            margin: 40px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
         .styles-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 30px;
+        }
+        .styles-grid.single {
+            grid-template-columns: 1fr;
         }
         .style-card {
             background: white;
@@ -43,115 +51,6 @@
             margin-bottom: 15px;
             padding-bottom: 15px;
             border-bottom: 1px solid #eee;
-        }
-        
-        /* ========== JupyterLab 风格 ========== */
-        .jupyterlab .section {
-            border-radius: 3px;
-            margin: 10px 0;
-            background: #fff;
-            border: 1px solid #e0e0e0;
-        }
-        .jupyterlab .section-title {
-            font-size: 14px;
-            font-weight: 600;
-            padding: 10px 12px;
-            background: #f7f7f7;
-            border-bottom: 1px solid #e0e0e0;
-            border-radius: 3px 3px 0 0;
-        }
-        .jupyterlab .section-content {
-            padding: 12px;
-        }
-        .jupyterlab .cell {
-            background: #fafafa;
-            border: 1px solid #e8e8e8;
-            border-radius: 2px;
-            padding: 10px;
-            margin: 6px 0;
-        }
-        .jupyterlab .nested-section {
-            border-radius: 3px;
-            margin: 8px 0;
-            border-left: 3px solid #1976d2;
-        }
-        .jupyterlab .nested-section .section-title {
-            background: #f0f7ff;
-            font-size: 13px;
-        }
-        
-        /* ========== VS Code Notebook 风格 ========== */
-        .vscode .section {
-            border-radius: 0;
-            margin: 0;
-            background: #fff;
-            border: none;
-            border-top: 1px solid #e0e0e0;
-        }
-        .vscode .section:first-child {
-            border-top: none;
-        }
-        .vscode .section-title {
-            font-size: 13px;
-            font-weight: 600;
-            padding: 8px 0;
-            background: transparent;
-            color: #333;
-        }
-        .vscode .section-content {
-            padding: 0 0 12px 0;
-        }
-        .vscode .cell {
-            background: #fafafa;
-            border: none;
-            border-left: 3px solid #007acc;
-            padding: 10px 12px;
-            margin: 8px 0;
-        }
-        .vscode .nested-section {
-            border-left: 3px solid #007acc;
-            padding-left: 12px;
-            margin-top: 10px;
-        }
-        .vscode .nested-section .section-title {
-            font-size: 12px;
-            color: #555;
-        }
-        
-        /* ========== Google Colab 风格 ========== */
-        .colab .section {
-            border-radius: 4px;
-            margin: 12px 0;
-            background: #fff;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-            border: 1px solid #e8e8e8;
-        }
-        .colab .section-title {
-            font-size: 14px;
-            font-weight: 500;
-            padding: 12px 14px;
-            background: #f8f9fa;
-            border-radius: 4px 4px 0 0;
-            color: #202124;
-        }
-        .colab .section-content {
-            padding: 14px;
-        }
-        .colab .cell {
-            background: #f8f9fa;
-            border-radius: 4px;
-            padding: 12px;
-            margin: 8px 0;
-        }
-        .colab .nested-section {
-            border-radius: 4px;
-            margin: 10px 0;
-            border-left: 4px solid #4285f4;
-        }
-        .colab .nested-section .section-title {
-            background: #e8f0fe;
-            font-size: 13px;
-            color: #1967d2;
         }
         
         /* ========== Notion 风格 ========== */
@@ -190,185 +89,232 @@
             font-size: 14px;
             color: #6b5b95;
         }
+        .notion .nested-section .nested-section {
+            border-left-color: #ff9500;
+        }
+        .notion .nested-section .nested-section .section-title {
+            color: #c68a00;
+        }
         
-        /* 通用内容样式 */
-        .metrics {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
+        /* ========== Markdown 样式 ========== */
+        .markdown-content h1 { font-size: 20px; margin: 0 0 10px; color: #37352f; }
+        .markdown-content h2 { font-size: 18px; margin: 0 0 8px; color: #37352f; }
+        .markdown-content h3 { font-size: 16px; margin: 0 0 6px; color: #37352f; }
+        .markdown-content p { margin: 0 0 8px; }
+        .markdown-content strong { color: #37352f; }
+        .markdown-content em { color: #666; }
+        .markdown-content ul, .markdown-content ol { margin: 0 0 8px 20px; }
+        .markdown-content li { margin: 4px 0; }
+        .markdown-content a { color: #667eea; text-decoration: none; }
+        .markdown-content a:hover { text-decoration: underline; }
+        .markdown-content blockquote {
+            border-left: 3px solid #e9e9e9;
+            padding-left: 12px;
+            margin: 8px 0;
+            color: #666;
+            font-style: italic;
         }
-        .metric {
-            background: inherit;
+        .markdown-content hr {
+            border: none;
+            border-top: 1px solid #e9e9e9;
+            margin: 12px 0;
+        }
+        
+        /* ========== 代码块样式 ========== */
+        .code-block {
+            background: #282c34;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .code-block .code-header {
+            background: #21252b;
             padding: 8px 12px;
-            border-radius: 4px;
+            font-size: 12px;
+            color: #abb2bf;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .code-block .code-header .lang {
+            font-weight: 500;
+        }
+        .code-block pre {
+            margin: 0;
+            padding: 12px;
+            color: #abb2bf;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            line-height: 1.5;
+        }
+        .code-block .code-output {
+            background: #f8f9fa;
+            border-top: 1px solid #e0e0e0;
+            padding: 10px 12px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            color: #333;
+        }
+        .code-keyword { color: #c678dd; }
+        .code-string { color: #98c379; }
+        .code-comment { color: #5c6370; }
+        .code-function { color: #61afef; }
+        .code-number { color: #d19a66; }
+        
+        /* ========== 表格样式 ========== */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .data-table th {
+            background: #f7f6f3;
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #e9e9e9;
+        }
+        .data-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .data-table tr:hover td {
+            background: #fafafa;
+        }
+        .data-table .positive { color: #e64340; }
+        .data-table .negative { color: #00b300; }
+        
+        /* ========== 指标卡片样式 ========== */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+        .metric-card {
+            background: #fff;
+            border-radius: 6px;
+            padding: 14px;
             text-align: center;
-            min-width: 80px;
+            border: 1px solid #eee;
         }
-        .metric-value {
-            font-size: 18px;
+        .metric-card .metric-value {
+            font-size: 22px;
             font-weight: bold;
+            color: #333;
+            margin-bottom: 4px;
         }
-        .metric-label {
-            font-size: 11px;
+        .metric-card .metric-label {
+            font-size: 12px;
             color: #666;
         }
+        .metric-card .metric-desc {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+        .metric-card.positive .metric-value { color: #e64340; }
+        .metric-card.negative .metric-value { color: #00b300; }
+        
+        /* ========== 图表占位 ========== */
         .chart-placeholder {
             background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
-            height: 80px;
-            border-radius: 4px;
+            height: 120px;
+            border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: #999;
-            font-size: 12px;
+            font-size: 13px;
         }
-        .table-placeholder {
-            font-size: 12px;
-            color: #666;
+        
+        /* ========== 分隔线 ========== */
+        .divider {
+            height: 1px;
+            background: #e9e9e9;
+            margin: 12px 0;
         }
-        .table-placeholder div {
-            padding: 4px 0;
-            border-bottom: 1px dashed #ddd;
+        
+        /* ========== 可折叠区域 ========== */
+        .collapsible {
+            border: 1px solid #e9e9e9;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .collapsible-header {
+            background: #f7f6f3;
+            padding: 12px 14px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 500;
+        }
+        .collapsible-header:hover {
+            background: #f0efe9;
+        }
+        .collapsible-content {
+            padding: 14px;
+            border-top: 1px solid #e9e9e9;
+        }
+        
+        /* ========== HTML 自定义块 ========== */
+        .html-block {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px;
+            border-radius: 6px;
+        }
+        .html-block h4 {
+            margin: 0 0 8px;
+            font-size: 14px;
+        }
+        .html-block p {
+            margin: 0;
+            font-size: 13px;
+            opacity: 0.9;
+        }
+        
+        @media (max-width: 768px) {
+            .styles-grid {
+                grid-template-columns: 1fr;
+            }
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Notebook Section 风格对比</h1>
+        <h1>Notebook 内容类型示例 (Notion 风格)</h1>
         
-        <div class="styles-grid">
-            <!-- JupyterLab 风格 -->
+        <!-- 基础结构 -->
+        <h2 class="section-title-main">1. 基础结构：Section + Cell</h2>
+        <div class="styles-grid single">
             <div class="style-card">
-                <h2>JupyterLab 风格</h2>
-                <div class="desc">小圆角(2-4px) | 现代、扁平、轻量边框</div>
-                
-                <div class="jupyterlab">
-                    <div class="section">
-                        <div class="section-title">▶ 核心指标概览</div>
-                        <div class="section-content">
-                            <div class="cell">
-                                <div class="metrics">
-                                    <div class="metric">
-                                        <div class="metric-value">45.6%</div>
-                                        <div class="metric-label">总收益率</div>
-                                    </div>
-                                    <div class="metric">
-                                        <div class="metric-value">1.85</div>
-                                        <div class="metric-label">夏普比率</div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="section nested-section">
-                                <div class="section-title">▶ 收益统计</div>
-                                <div class="section-content">
-                                    <div class="cell">
-                                        <div class="chart-placeholder">[折线图区域]</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- VS Code Notebook 风格 -->
-            <div class="style-card">
-                <h2>VS Code Notebook 风格</h2>
-                <div class="desc">直角/微圆角 | 极简、无边框、靠分隔线</div>
-                
-                <div class="vscode">
-                    <div class="section">
-                        <div class="section-title">▼ 核心指标概览</div>
-                        <div class="section-content">
-                            <div class="cell">
-                                <div class="metrics">
-                                    <div class="metric">
-                                        <div class="metric-value">45.6%</div>
-                                        <div class="metric-label">总收益率</div>
-                                    </div>
-                                    <div class="metric">
-                                        <div class="metric-value">1.85</div>
-                                        <div class="metric-label">夏普比率</div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="section nested-section">
-                                <div class="section-title">▼ 收益统计</div>
-                                <div class="section-content">
-                                    <div class="cell">
-                                        <div class="chart-placeholder">[折线图区域]</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Google Colab 风格 -->
-            <div class="style-card">
-                <h2>Google Colab 风格</h2>
-                <div class="desc">小圆角(4px) | 卡片式、阴影轻</div>
-                
-                <div class="colab">
-                    <div class="section">
-                        <div class="section-title">▼ 核心指标概览</div>
-                        <div class="section-content">
-                            <div class="cell">
-                                <div class="metrics">
-                                    <div class="metric">
-                                        <div class="metric-value">45.6%</div>
-                                        <div class="metric-label">总收益率</div>
-                                    </div>
-                                    <div class="metric">
-                                        <div class="metric-value">1.85</div>
-                                        <div class="metric-label">夏普比率</div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="section nested-section">
-                                <div class="section-title">▼ 收益统计</div>
-                                <div class="section-content">
-                                    <div class="cell">
-                                        <div class="chart-placeholder">[折线图区域]</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Notion 风格 -->
-            <div class="style-card">
-                <h2>Notion 风格</h2>
-                <div class="desc">中圆角(6-8px) | 块状、柔和、现代</div>
+                <h2>Section 嵌套结构</h2>
+                <div class="desc">Section 作为模块容器，Cell 作为内容块</div>
                 
                 <div class="notion">
                     <div class="section">
-                        <div class="section-title">▼ 核心指标概览</div>
+                        <div class="section-title">▼ 策略详情</div>
                         <div class="section-content">
                             <div class="cell">
-                                <div class="metrics">
-                                    <div class="metric">
-                                        <div class="metric-value">45.6%</div>
-                                        <div class="metric-label">总收益率</div>
-                                    </div>
-                                    <div class="metric">
-                                        <div class="metric-value">1.85</div>
-                                        <div class="metric-label">夏普比率</div>
-                                    </div>
-                                </div>
+                                <div style="color: #666;">这是普通文本内容块</div>
                             </div>
-                            
                             <div class="section nested-section">
-                                <div class="section-title">▼ 收益统计</div>
+                                <div class="section-title">▼ 参数配置</div>
                                 <div class="section-content">
                                     <div class="cell">
-                                        <div class="chart-placeholder">[折线图区域]</div>
+                                        <div style="color: #666;">嵌套内容块</div>
+                                    </div>
+                                    <div class="section nested-section">
+                                        <div class="section-title">▼ 优化记录</div>
+                                        <div class="section-content">
+                                            <div class="cell">
+                                                <div style="color: #666;">三级嵌套内容</div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -378,147 +324,429 @@
             </div>
         </div>
         
-        <!-- 完整示例对比 -->
-        <h2 style="margin-top: 40px; margin-bottom: 20px;">完整示例对比（三层嵌套）</h2>
+        <!-- Markdown 内容 -->
+        <h2 class="section-title-main">2. Markdown 内容</h2>
         <div class="styles-grid">
-            <!-- JupyterLab 完整示例 -->
             <div class="style-card">
-                <h2>JupyterLab 完整示例</h2>
-                <div class="jupyterlab">
-                    <div class="section">
-                        <div class="section-title">▶ 策略详情</div>
-                        <div class="section-content">
-                            <div class="cell">
-                                <div class="table-placeholder">
-                                    <div>参数: MA周期 | 值: 20</div>
-                                    <div>参数: 止损比例 | 值: 5%</div>
-                                </div>
-                            </div>
-                            <div class="section nested-section">
-                                <div class="section-title">▶ 参数配置</div>
-                                <div class="section-content">
-                                    <div class="cell">
-                                        <div class="chart-placeholder">[柱状图]</div>
-                                    </div>
-                                    <div class="section nested-section" style="border-left-color: #388e3c;">
-                                        <div class="section-title" style="background: #f1f8e9;">▶ 优化记录</div>
-                                        <div class="section-content">
-                                            <div class="cell">
-                                                <div class="table-placeholder">
-                                                    <div>v1.0 | 收益: 32%</div>
-                                                    <div>v2.0 | 收益: 45%</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- VS Code 完整示例 -->
-            <div class="style-card">
-                <h2>VS Code 完整示例</h2>
-                <div class="vscode">
-                    <div class="section">
-                        <div class="section-title">▼ 策略详情</div>
-                        <div class="section-content">
-                            <div class="cell">
-                                <div class="table-placeholder">
-                                    <div>参数: MA周期 | 值: 20</div>
-                                    <div>参数: 止损比例 | 值: 5%</div>
-                                </div>
-                            </div>
-                            <div class="section nested-section">
-                                <div class="section-title">▼ 参数配置</div>
-                                <div class="section-content">
-                                    <div class="cell">
-                                        <div class="chart-placeholder">[柱状图]</div>
-                                    </div>
-                                    <div class="section nested-section" style="border-left-color: #6ab04c;">
-                                        <div class="section-title" style="color: #6ab04c;">▼ 优化记录</div>
-                                        <div class="section-content">
-                                            <div class="cell">
-                                                <div class="table-placeholder">
-                                                    <div>v1.0 | 收益: 32%</div>
-                                                    <div>v2.0 | 收益: 45%</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Colab 完整示例 -->
-            <div class="style-card">
-                <h2>Google Colab 完整示例</h2>
-                <div class="colab">
-                    <div class="section">
-                        <div class="section-title">▼ 策略详情</div>
-                        <div class="section-content">
-                            <div class="cell">
-                                <div class="table-placeholder">
-                                    <div>参数: MA周期 | 值: 20</div>
-                                    <div>参数: 止损比例 | 值: 5%</div>
-                                </div>
-                            </div>
-                            <div class="section nested-section">
-                                <div class="section-title">▼ 参数配置</div>
-                                <div class="section-content">
-                                    <div class="cell">
-                                        <div class="chart-placeholder">[柱状图]</div>
-                                    </div>
-                                    <div class="section nested-section" style="border-left-color: #34a853;">
-                                        <div class="section-title" style="background: #e6f4ea; color: #137333;">▼ 优化记录</div>
-                                        <div class="section-content">
-                                            <div class="cell">
-                                                <div class="table-placeholder">
-                                                    <div>v1.0 | 收益: 32%</div>
-                                                    <div>v2.0 | 收益: 45%</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Notion 完整示例 -->
-            <div class="style-card">
-                <h2>Notion 完整示例</h2>
+                <h2>Markdown 基础语法</h2>
                 <div class="notion">
                     <div class="section">
-                        <div class="section-title">▼ 策略详情</div>
+                        <div class="section-title">▼ Markdown 示例</div>
                         <div class="section-content">
                             <div class="cell">
-                                <div class="table-placeholder">
-                                    <div>参数: MA周期 | 值: 20</div>
-                                    <div>参数: 止损比例 | 值: 5%</div>
+                                <div class="markdown-content">
+                                    <h1>一级标题</h1>
+                                    <h2>二级标题</h2>
+                                    <h3>三级标题</h3>
+                                    <p>这是<strong>粗体</strong>和<em>斜体</em>文本。</p>
+                                    <p>这是<a href="#">链接示例</a>。</p>
+                                    <ul>
+                                        <li>无序列表项 1</li>
+                                        <li>无序列表项 2</li>
+                                    </ul>
+                                    <ol>
+                                        <li>有序列表项 1</li>
+                                        <li>有序列表项 2</li>
+                                    </ol>
+                                    <blockquote>这是引用文本块</blockquote>
+                                    <hr>
+                                    <p>分隔线后的内容</p>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="style-card">
+                <h2>Markdown 内联样式</h2>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">▼ 内联格式</div>
+                        <div class="section-content">
+                            <div class="cell">
+                                <div class="markdown-content">
+                                    <p><strong>策略类型</strong>: 趋势跟踪策略</p>
+                                    <p><strong>回测区间</strong>: 2024-01-01 至 2024-04-10</p>
+                                    <p><strong>初始资金</strong>: 1,000,000 元</p>
+                                    <hr>
+                                    <p>收益分析显示策略表现<em>优于基准</em>，年化收益达到<strong>18.2%</strong>。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 代码块 -->
+        <h2 class="section-title-main">3. 代码块</h2>
+        <div class="styles-grid">
+            <div class="style-card">
+                <h2>代码块 + 输出</h2>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">▼ 策略代码</div>
+                        <div class="section-content">
+                            <div class="cell" style="padding: 0; overflow: hidden;">
+                                <div class="code-block">
+                                    <div class="code-header">
+                                        <span class="lang">Python</span>
+                                        <span>▶ 运行</span>
+                                    </div>
+                                    <pre><span class="code-keyword">def</span> <span class="code-function">calculate_returns</span>(prices):
+    <span class="code-comment"># 计算收益率</span>
+    returns = prices.pct_change()
+    <span class="code-keyword">return</span> returns.fillna(<span class="code-number">0</span>)
+
+<span class="code-comment"># 执行回测</span>
+returns = calculate_returns(df[<span class="code-string">'close'</span>])
+<span class="code-function">print</span>(<span class="code-string">f"总收益: {returns.sum():.2%}"</span>)</pre>
+                                    <div class="code-output">
+                                        总收益: 45.60%<br>
+                                        回测完成，共 100 个交易日
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="style-card">
+                <h2>纯代码块</h2>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">▼ 配置代码</div>
+                        <div class="section-content">
+                            <div class="cell" style="padding: 0; overflow: hidden;">
+                                <div class="code-block">
+                                    <div class="code-header">
+                                        <span class="lang">Python</span>
+                                    </div>
+                                    <pre><span class="code-comment"># 策略参数配置</span>
+CONFIG = {
+    <span class="code-string">"ma_period"</span>: <span class="code-number">20</span>,
+    <span class="code-string">"stop_loss"</span>: <span class="code-number">0.05</span>,
+    <span class="code-string">"take_profit"</span>: <span class="code-number">0.10</span>,
+    <span class="code-string">"position_size"</span>: <span class="code-number">0.1</span>
+}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 表格 -->
+        <h2 class="section-title-main">4. 数据表格</h2>
+        <div class="styles-grid">
+            <div class="style-card">
+                <h2>数据表格</h2>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">▼ 交易记录</div>
+                        <div class="section-content">
+                            <div class="cell" style="padding: 0; overflow: hidden;">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>日期</th>
+                                            <th>方向</th>
+                                            <th>价格</th>
+                                            <th>数量</th>
+                                            <th>盈亏</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>2024-01-05</td>
+                                            <td>买入</td>
+                                            <td>102.50</td>
+                                            <td>1,000</td>
+                                            <td>-</td>
+                                        </tr>
+                                        <tr>
+                                            <td>2024-01-12</td>
+                                            <td>卖出</td>
+                                            <td>108.30</td>
+                                            <td>1,000</td>
+                                            <td class="positive">+5,800</td>
+                                        </tr>
+                                        <tr>
+                                            <td>2024-01-20</td>
+                                            <td>买入</td>
+                                            <td>105.20</td>
+                                            <td>1,500</td>
+                                            <td>-</td>
+                                        </tr>
+                                        <tr>
+                                            <td>2024-02-01</td>
+                                            <td>卖出</td>
+                                            <td>112.80</td>
+                                            <td>1,500</td>
+                                            <td class="positive">+11,400</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="style-card">
+                <h2>参数表格</h2>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">▼ 策略参数</div>
+                        <div class="section-content">
+                            <div class="cell" style="padding: 0; overflow: hidden;">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>参数</th>
+                                            <th>值</th>
+                                            <th>说明</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>MA周期</td>
+                                            <td>20</td>
+                                            <td>均线计算周期</td>
+                                        </tr>
+                                        <tr>
+                                            <td>止损比例</td>
+                                            <td>5%</td>
+                                            <td>单笔最大亏损</td>
+                                        </tr>
+                                        <tr>
+                                            <td>止盈比例</td>
+                                            <td>10%</td>
+                                            <td>单笔目标收益</td>
+                                        </tr>
+                                        <tr>
+                                            <td>仓位比例</td>
+                                            <td>10%</td>
+                                            <td>单笔资金占比</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 指标卡片 -->
+        <h2 class="section-title-main">5. 指标卡片</h2>
+        <div class="styles-grid single">
+            <div class="style-card">
+                <h2>指标卡片网格</h2>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">▼ 核心指标</div>
+                        <div class="section-content">
+                            <div class="cell">
+                                <div class="metrics-grid">
+                                    <div class="metric-card positive">
+                                        <div class="metric-value">45.6%</div>
+                                        <div class="metric-label">总收益率</div>
+                                        <div class="metric-desc">策略期间累计</div>
+                                    </div>
+                                    <div class="metric-card positive">
+                                        <div class="metric-value">18.2%</div>
+                                        <div class="metric-label">年化收益</div>
+                                        <div class="metric-desc">复利计算</div>
+                                    </div>
+                                    <div class="metric-card negative">
+                                        <div class="metric-value">-12.3%</div>
+                                        <div class="metric-label">最大回撤</div>
+                                        <div class="metric-desc">2024-03-15</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">1.85</div>
+                                        <div class="metric-label">夏普比率</div>
+                                        <div class="metric-desc">风险调整后收益</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="divider"></div>
+                            <div class="cell">
+                                <div class="metrics-grid">
+                                    <div class="metric-card">
+                                        <div class="metric-value">58.3%</div>
+                                        <div class="metric-label">胜率</div>
+                                        <div class="metric-desc">盈利交易占比</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">1.82</div>
+                                        <div class="metric-label">盈亏比</div>
+                                        <div class="metric-desc">平均盈利/亏损</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">156</div>
+                                        <div class="metric-label">交易次数</div>
+                                        <div class="metric-desc">总交易次数</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">45</div>
+                                        <div class="metric-label">持仓天数</div>
+                                        <div class="metric-desc">平均持仓</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 图表 -->
+        <h2 class="section-title-main">6. 图表区域</h2>
+        <div class="styles-grid">
+            <div class="style-card">
+                <h2>折线图</h2>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">▼ 净值曲线</div>
+                        <div class="section-content">
+                            <div class="cell">
+                                <div class="chart-placeholder">📈 折线图 - 策略净值 vs 基准净值</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="style-card">
+                <h2>K线图</h2>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">▼ K线分析</div>
+                        <div class="section-content">
+                            <div class="cell">
+                                <div class="chart-placeholder">📊 K线图 + 均线</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 其他类型 -->
+        <h2 class="section-title-main">7. 其他内容类型</h2>
+        <div class="styles-grid">
+            <div class="style-card">
+                <h2>可折叠区域</h2>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">▼ 详细数据</div>
+                        <div class="section-content">
+                            <div class="collapsible">
+                                <div class="collapsible-header">
+                                    <span>▶ 历史交易明细（点击展开）</span>
+                                    <span>共 156 条</span>
+                                </div>
+                                <div class="collapsible-content">
+                                    <table class="data-table">
+                                        <tr><td>2024-01-05</td><td>买入</td><td>102.50</td></tr>
+                                        <tr><td>2024-01-12</td><td>卖出</td><td>108.30</td></tr>
+                                        <tr><td>2024-01-20</td><td>买入</td><td>105.20</td></tr>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="style-card">
+                <h2>HTML 自定义块</h2>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">▼ 提示信息</div>
+                        <div class="section-content">
+                            <div class="html-block">
+                                <h4>⚠️ 风险提示</h4>
+                                <p>本报告仅供参考，不构成投资建议。历史业绩不代表未来表现。投资有风险，入市需谨慎。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 综合示例 -->
+        <h2 class="section-title-main">8. 综合示例</h2>
+        <div class="styles-grid single">
+            <div class="style-card">
+                <h2>完整报告结构</h2>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">▼ 策略回测报告</div>
+                        <div class="section-content">
+                            <div class="cell">
+                                <div class="markdown-content">
+                                    <p><strong>策略类型</strong>: 趋势跟踪策略 | <strong>回测区间</strong>: 2024-01-01 至 2024-04-10</p>
+                                </div>
+                            </div>
+                            
                             <div class="section nested-section">
-                                <div class="section-title">▼ 参数配置</div>
+                                <div class="section-title">▼ 核心指标</div>
                                 <div class="section-content">
                                     <div class="cell">
-                                        <div class="chart-placeholder">[柱状图]</div>
+                                        <div class="metrics-grid">
+                                            <div class="metric-card positive">
+                                                <div class="metric-value">45.6%</div>
+                                                <div class="metric-label">总收益率</div>
+                                            </div>
+                                            <div class="metric-card">
+                                                <div class="metric-value">1.85</div>
+                                                <div class="metric-label">夏普比率</div>
+                                            </div>
+                                            <div class="metric-card negative">
+                                                <div class="metric-value">-12.3%</div>
+                                                <div class="metric-label">最大回撤</div>
+                                            </div>
+                                            <div class="metric-card">
+                                                <div class="metric-value">58.3%</div>
+                                                <div class="metric-label">胜率</div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="section nested-section" style="border-left-color: #ff9500;">
-                                        <div class="section-title" style="color: #c68a00;">▼ 优化记录</div>
+                                </div>
+                            </div>
+                            
+                            <div class="section nested-section">
+                                <div class="section-title">▼ 收益分析</div>
+                                <div class="section-content">
+                                    <div class="cell">
+                                        <div class="chart-placeholder">📈 净值曲线图</div>
+                                    </div>
+                                    
+                                    <div class="section nested-section">
+                                        <div class="section-title">▼ 月度统计</div>
                                         <div class="section-content">
-                                            <div class="cell">
-                                                <div class="table-placeholder">
-                                                    <div>v1.0 | 收益: 32%</div>
-                                                    <div>v2.0 | 收益: 45%</div>
-                                                </div>
+                                            <div class="cell" style="padding: 0; overflow: hidden;">
+                                                <table class="data-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>月份</th>
+                                                            <th>收益</th>
+                                                            <th>交易次数</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <tr><td>1月</td><td class="positive">+5.2%</td><td>38</td></tr>
+                                                        <tr><td>2月</td><td class="negative">-2.1%</td><td>42</td></tr>
+                                                        <tr><td>3月</td><td class="positive">+8.5%</td><td>45</td></tr>
+                                                        <tr><td>4月</td><td class="positive">+3.2%</td><td>31</td></tr>
+                                                    </tbody>
+                                                </table>
                                             </div>
                                         </div>
                                     </div>

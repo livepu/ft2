@@ -270,7 +270,7 @@ class Notebook:
             'createdAt': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'cells': [cell.to_dict() for cell in self.cells]
         }
-        data_json = json.dumps(data, ensure_ascii=False, default=str)
+        data_json = json.dumps(data, ensure_ascii=False, default=str, indent=2)
         
         html_content = template.render(data_json=data_json)
         
