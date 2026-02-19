@@ -17,6 +17,8 @@ class CellType(Enum):
     DIVIDER = "divider"
     COLLAPSIBLE = "collapsible"
     HTML = "html"
+    PYECHARTS = "pyecharts"
+    SECTION = "section"
 
 
 @dataclass
@@ -37,6 +39,8 @@ class Cell:
             'options': self.options,
         }
         if self.type == CellType.COLLAPSIBLE and isinstance(self.content, list):
+            result['content'] = [c.to_dict() if isinstance(c, Cell) else c for c in self.content]
+        if self.type == CellType.SECTION and isinstance(self.content, list):
             result['content'] = [c.to_dict() if isinstance(c, Cell) else c for c in self.content]
         return result
 
@@ -166,3 +170,48 @@ class CellBuilder:
     def html(html_content: str) -> Cell:
         """创建HTML单元格"""
         return Cell(type=CellType.HTML, content=html_content)
+    
+    @staticmethod
+    def pyecharts(chart, title: str = None, height: int = 400, width: str = '100%') -> Cell:
+        """
+        创建 pyecharts 图表单元格
+        
+        Args:
+            chart: pyecharts 图表对象（Kline, Line, Bar, Pie 等）
+            title: 可选标题
+            height: 图表高度（像素）
+            width: 图表宽度（默认100%）
+        
+        Returns:
+            Cell: 封装后的单元格
+        """
+        return Cell(
+            type=CellType.PYECHARTS,
+            content={
+                'option': chart.dump_options(),
+                'width': width,
+                'height': f'{height}px'
+            },
+            title=title,
+            options={'height': height, 'width': width}
+        )
+    
+    @staticmethod
+    def section(title: str, cells: List['Cell'] = None, level: int = 1) -> Cell:
+        """
+        创建 Section 容器
+        
+        Args:
+            title: Section 标题
+            cells: 子单元格列表
+            level: 层级（用于样式）
+        
+        Returns:
+            Cell: Section 单元格
+        """
+        return Cell(
+            type=CellType.SECTION,
+            content=cells or [],
+            title=title,
+            options={'level': level}
+        )

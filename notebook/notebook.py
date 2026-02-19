@@ -7,6 +7,26 @@ from jinja2 import Environment, FileSystemLoader
 from .cell import Cell, CellType, CellBuilder
 
 
+class SectionContext:
+    """Section 上下文管理器"""
+    
+    def __init__(self, notebook: 'Notebook', title: str, level: int = 1):
+        self.notebook = notebook
+        self.title = title
+        self.level = level
+        self.cells: List[Cell] = []
+    
+    def __enter__(self) -> 'Notebook':
+        self.notebook._push_section(self)
+        return self.notebook
+    
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        section_cell = CellBuilder.section(self.title, self.cells, self.level)
+        self.notebook._pop_section()
+        self.notebook._add_cell(section_cell)
+        return False
+
+
 class Notebook:
     """
     Notebook风格输出类
@@ -17,6 +37,11 @@ class Notebook:
         nb.add_metrics(metrics_data)
         nb.add_line_chart(dates, [{'name': '净值', 'data': values}])
         nb.export_html("report.html")
+        
+        # Section 容器
+        with nb.section("收益分析"):
+            nb.add_metrics([...], title="核心指标")
+            nb.add_line_chart(dates, series, title="净值曲线")
     """
     
     def __init__(self, title: str = "Notebook Report"):
@@ -24,12 +49,43 @@ class Notebook:
         self.cells: List[Cell] = []
         self.created_at = datetime.now()
         self._cell_counter = 0
+        self._section_stack: List[SectionContext] = []
+    
+    def _push_section(self, section: SectionContext):
+        """进入 Section"""
+        self._section_stack.append(section)
+    
+    def _pop_section(self) -> SectionContext:
+        """退出 Section"""
+        return self._section_stack.pop()
     
     def _add_cell(self, cell: Cell) -> 'Notebook':
         """添加单元格并返回self以支持链式调用"""
         self._cell_counter += 1
-        self.cells.append(cell)
+        if self._section_stack:
+            self._section_stack[-1].cells.append(cell)
+        else:
+            self.cells.append(cell)
         return self
+    
+    def section(self, title: str, level: int = None) -> SectionContext:
+        """
+        创建 Section 容器（上下文管理器）
+        
+        Args:
+            title: Section 标题
+            level: 层级（自动计算）
+        
+        Returns:
+            SectionContext: 上下文管理器
+        
+        Usage:
+            with nb.section("收益分析"):
+                nb.add_metrics([...], title="核心指标")
+        """
+        if level is None:
+            level = len(self._section_stack) + 1
+        return SectionContext(self, title, level)
     
     # ========== 标题和文本 ==========
     
@@ -115,6 +171,22 @@ class Notebook:
         """添加热力图"""
         return self._add_cell(CellBuilder.heatmap(data, title, **options))
     
+    def add_pyecharts(self, chart, title: str = None, height: int = 400, 
+                      width: str = '100%') -> 'Notebook':
+        """
+        添加 pyecharts 图表
+        
+        Args:
+            chart: pyecharts 图表对象（Kline, Line, Bar, Pie 等）
+            title: 可选标题
+            height: 图表高度（像素）
+            width: 图表宽度（默认100%）
+        
+        Returns:
+            Notebook: 支持链式调用
+        """
+        return self._add_cell(CellBuilder.pyecharts(chart, title, height, width))
+    
     # ========== 权益曲线快捷方法 ==========
     
     def add_equity_curve(self, dates: List, values: List, 
@@ -193,11 +265,14 @@ class Notebook:
         env = Environment(loader=FileSystemLoader(str(template_dir)))
         template = env.get_template(Path(template_path).name)
         
-        html_content = template.render(
-            title=self.title,
-            created_at=self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            cells_json=self.to_json()
-        )
+        data = {
+            'title': self.title,
+            'createdAt': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'cells': [cell.to_dict() for cell in self.cells]
+        }
+        data_json = json.dumps(data, ensure_ascii=False, default=str)
+        
+        html_content = template.render(data_json=data_json)
         
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
-    <link rel="stylesheet" href="css/layui.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -34,13 +33,73 @@
             opacity: 0.8;
         }
         
-        /* 单元格样式 */
         .cell {
             background: white;
             border-radius: 8px;
             margin-bottom: 16px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
             overflow: hidden;
+        }
+        
+        /* ========== Section 样式 (Notion 风格) ========== */
+        .section {
+            border-radius: 6px;
+            margin: 12px 0;
+            background: #fff;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+            border: 1px solid #e9e9e9;
+        }
+        .section-title {
+            font-size: 15px;
+            font-weight: 600;
+            padding: 14px 16px;
+            background: linear-gradient(90deg, #fafafa 0%, #fff 100%);
+            border-radius: 6px 6px 0 0;
+            color: #37352f;
+        }
+        .section-content {
+            padding: 14px 16px;
+        }
+        .section-content .cell {
+            background: #f7f6f3;
+            border-radius: 6px;
+            padding: 12px 14px;
+            margin: 8px 0;
+            box-shadow: none;
+            border: none;
+        }
+        
+        /* 嵌套 Section - 二级 */
+        .nested-section {
+            border-radius: 6px;
+            margin: 10px 0;
+            border-left: 4px solid #9b51e0;
+            background: #faf9f7;
+        }
+        .nested-section .section-title {
+            background: transparent;
+            font-size: 14px;
+            color: #6b5b95;
+            padding: 12px 14px;
+        }
+        .nested-section .section-content {
+            padding: 10px 14px;
+        }
+        .nested-section .section-content .cell {
+            background: #fff;
+            border: 1px solid #eee;
+        }
+        
+        /* 嵌套 Section - 三级 */
+        .nested-section .nested-section {
+            border-left-color: #ff9500;
+            background: #fffdf7;
+        }
+        .nested-section .nested-section .section-title {
+            color: #c68a00;
+        }
+        .nested-section .nested-section .section-content .cell {
+            background: #fff;
         }
         .cell-title {
             padding: 20px;
@@ -139,6 +198,7 @@
             width: 100%;
             height: var(--height, 400px);
         }
+        
         .cell-heatmap {
             padding: 16px;
         }
@@ -189,7 +249,79 @@
             padding: 16px 20px;
         }
         
-        /* 响应式 */
+        .alpine-table-container {
+            overflow-x: auto;
+        }
+        
+        .alpine-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            font-size: 14px;
+            text-align: left;
+        }
+        
+        .alpine-table th {
+            background-color: #f5f5f5;
+            color: #333;
+            font-weight: bold;
+            padding: 12px 8px;
+            border: 1px solid #e0e0e0;
+            cursor: pointer;
+        }
+        
+        .alpine-table th:hover {
+            background-color: #e8e8e8;
+        }
+        
+        .alpine-table td {
+            padding: 10px 8px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .alpine-table tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+        
+        .alpine-table tr:hover {
+            background-color: #f0f0f0;
+        }
+        
+        .alpine-table .sort-asc, .alpine-table .sort-desc {
+            margin-left: 5px;
+            font-size: 12px;
+            color: #e64340;
+        }
+        
+        .alpine-table-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 10px 0;
+            gap: 10px;
+        }
+        
+        .alpine-table-pagination .pagination-btn {
+            padding: 5px 10px;
+            border: 1px solid #e0e0e0;
+            background-color: #fff;
+            color: #333;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        
+        .alpine-table-pagination .pagination-btn:disabled {
+            background-color: #f5f5f5;
+            color: #999;
+            cursor: not-allowed;
+        }
+        
+        .alpine-table-pagination .pagination-select {
+            padding: 5px;
+            border: 1px solid #e0e0e0;
+            border-radius: 3px;
+        }
+        
         @media (max-width: 768px) {
             .notebook-container {
                 padding: 10px;
@@ -202,130 +334,301 @@
 </head>
 <body>
     <div class="notebook-container" x-data="notebookApp" x-init="init()">
-        <!-- 头部 -->
         <div class="notebook-header">
             <h1 x-text="title"></h1>
             <div class="meta" x-text="'生成时间: ' + createdAt"></div>
         </div>
         
-        <!-- 单元格列表 -->
         <template x-for="(cell, index) in cells" :key="index">
-            <div class="cell" :class="'cell-' + cell.type">
-                
-                <!-- 标题 -->
-                <template x-if="cell.type === 'title'">
-                    <div class="cell-title">
-                        <h1 x-show="cell.options.level === 1" x-text="cell.content"></h1>
-                        <h2 x-show="cell.options.level === 2" x-text="cell.content"></h2>
-                        <h3 x-show="cell.options.level === 3" x-text="cell.content"></h3>
-                    </div>
-                </template>
-                
-                <!-- 文本 -->
-                <template x-if="cell.type === 'text'">
-                    <div class="cell-text" :class="'text-' + cell.options.style" x-text="cell.content"></div>
-                </template>
-                
-                <!-- Markdown -->
-                <template x-if="cell.type === 'markdown'">
-                    <div class="cell-text" x-html="renderMarkdown(cell.content)"></div>
-                </template>
-                
-                <!-- 代码 -->
-                <template x-if="cell.type === 'code'">
-                    <div class="cell-code">
-                        <div class="code-input">
-                            <pre x-text="cell.content.code"></pre>
-                        </div>
-                        <div class="code-output" x-show="cell.content.output" x-text="cell.content.output"></div>
-                    </div>
-                </template>
-                
-                <!-- 表格 -->
-                <template x-if="cell.type === 'table'">
-                    <div class="cell-table">
-                        <h3 x-show="cell.title" x-text="cell.title"></h3>
-                        <div :id="'table-' + index"></div>
-                    </div>
-                </template>
-                
-                <!-- 指标卡片 -->
-                <template x-if="cell.type === 'metrics'">
-                    <div class="cell-metrics">
-                        <h3 x-show="cell.title" x-text="cell.title"></h3>
-                        <div class="metrics-grid" :style="'--columns: ' + (cell.options.columns || 4)">
-                            <template x-for="metric in cell.content" :key="metric.name">
-                                <div class="metric-card" :class="getMetricClass(metric.value)">
-                                    <div class="metric-value" x-text="metric.value"></div>
-                                    <div class="metric-label" x-text="metric.name"></div>
-                                    <div class="metric-desc" x-show="metric.desc" x-text="metric.desc"></div>
+            <div>
+                <template x-if="cell.type === 'section'">
+                    <div class="section">
+                        <div class="section-title" x-show="cell.title" x-text="cell.title"></div>
+                        <div class="section-content">
+                            <template x-for="(subCell, subIndex) in cell.content" :key="subIndex">
+                                <div>
+                                    <template x-if="subCell.type === 'title'">
+                                        <div class="cell">
+                                            <div class="cell-title">
+                                                <h1 x-show="subCell.options.level === 1" x-text="subCell.content"></h1>
+                                                <h2 x-show="subCell.options.level === 2" x-text="subCell.content"></h2>
+                                                <h3 x-show="subCell.options.level === 3" x-text="subCell.content"></h3>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'text'">
+                                        <div class="cell"><div class="cell-text" :class="'text-' + subCell.options.style" x-text="subCell.content"></div></div>
+                                    </template>
+                                    <template x-if="subCell.type === 'markdown'">
+                                        <div class="cell"><div class="cell-text" x-html="renderMarkdown(subCell.content)"></div></div>
+                                    </template>
+                                    <template x-if="subCell.type === 'code'">
+                                        <div class="cell">
+                                            <div class="cell-code">
+                                                <div class="code-input"><pre x-text="subCell.content.code"></pre></div>
+                                                <div class="code-output" x-show="subCell.content.output" x-text="subCell.content.output"></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'table'">
+                                        <div class="cell">
+                                            <div class="cell-table">
+                                                <h3 x-show="subCell.title" x-text="subCell.title"></h3>
+                                                <div x-data="table({id: 'table-' + index + '-' + subIndex, data: subCell.content, cols: getTableCols(subCell)})"></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'metrics'">
+                                        <div class="cell">
+                                            <div class="cell-metrics">
+                                                <h3 x-show="subCell.title" x-text="subCell.title"></h3>
+                                                <div class="metrics-grid" :style="'--columns: ' + (subCell.options.columns || 4)">
+                                                    <template x-for="metric in subCell.content" :key="metric.name">
+                                                        <div class="metric-card" :class="getMetricClass(metric.value)">
+                                                            <div class="metric-value" x-text="metric.value"></div>
+                                                            <div class="metric-label" x-text="metric.name"></div>
+                                                            <div class="metric-desc" x-show="metric.desc" x-text="metric.desc"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'chart'">
+                                        <div class="cell">
+                                            <div class="cell-chart">
+                                                <h3 x-show="subCell.title" x-text="subCell.title"></h3>
+                                                <div :id="'chart-' + index + '-' + subIndex" class="chart-container" :style="'--height: ' + (subCell.options.height || 400) + 'px'"></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'heatmap'">
+                                        <div class="cell">
+                                            <div class="cell-heatmap">
+                                                <h3 x-show="subCell.title" x-text="subCell.title"></h3>
+                                                <div :id="'heatmap-' + index + '-' + subIndex" class="heatmap-container"></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'pyecharts'">
+                                        <div class="cell">
+                                            <div class="cell-chart">
+                                                <h3 x-show="subCell.title" x-text="subCell.title"></h3>
+                                                <div :id="'pyecharts-' + index + '-' + subIndex" class="chart-container" :style="'--height: ' + subCell.content.height"></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'html'">
+                                        <div class="cell"><div class="cell-html" x-html="subCell.content"></div></div>
+                                    </template>
+                                    <template x-if="subCell.type === 'divider'">
+                                        <div class="cell-divider"></div>
+                                    </template>
+                                    <template x-if="subCell.type === 'section'">
+                                        <div class="section nested-section">
+                                            <div class="section-title" x-show="subCell.title" x-text="subCell.title"></div>
+                                            <div class="section-content">
+                                                <template x-for="(deepCell, deepIndex) in subCell.content" :key="deepIndex">
+                                                    <div>
+                                                        <template x-if="deepCell.type === 'table'">
+                                                            <div class="cell">
+                                                                <div class="cell-table">
+                                                                    <h3 x-show="deepCell.title" x-text="deepCell.title"></h3>
+                                                                    <div x-data="table({id: 'table-' + index + '-' + subIndex + '-' + deepIndex, data: deepCell.content, cols: getTableCols(deepCell)})"></div>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'metrics'">
+                                                            <div class="cell">
+                                                                <div class="cell-metrics">
+                                                                    <h3 x-show="deepCell.title" x-text="deepCell.title"></h3>
+                                                                    <div class="metrics-grid" :style="'--columns: ' + (deepCell.options.columns || 4)">
+                                                                        <template x-for="metric in deepCell.content" :key="metric.name">
+                                                                            <div class="metric-card" :class="getMetricClass(metric.value)">
+                                                                                <div class="metric-value" x-text="metric.value"></div>
+                                                                                <div class="metric-label" x-text="metric.name"></div>
+                                                                            </div>
+                                                                        </template>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'chart'">
+                                                            <div class="cell">
+                                                                <div class="cell-chart">
+                                                                    <h3 x-show="deepCell.title" x-text="deepCell.title"></h3>
+                                                                    <div :id="'chart-' + index + '-' + subIndex + '-' + deepIndex" class="chart-container" :style="'--height: ' + (deepCell.options.height || 400) + 'px'"></div>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'pyecharts'">
+                                                            <div class="cell">
+                                                                <div class="cell-chart">
+                                                                    <h3 x-show="deepCell.title" x-text="deepCell.title"></h3>
+                                                                    <div :id="'pyecharts-' + index + '-' + subIndex + '-' + deepIndex" class="chart-container" :style="'--height: ' + deepCell.content.height"></div>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'text'">
+                                                            <div class="cell"><div class="cell-text" x-text="deepCell.content"></div></div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'code'">
+                                                            <div class="cell">
+                                                                <div class="cell-code">
+                                                                    <div class="code-input"><pre x-text="deepCell.content.code"></pre></div>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'section'">
+                                                            <div class="section nested-section" style="border-left-color: #ff9500;">
+                                                                <div class="section-title" style="color: #c68a00;" x-show="deepCell.title" x-text="deepCell.title"></div>
+                                                                <div class="section-content">
+                                                                    <template x-for="(lv3Cell, lv3Index) in deepCell.content" :key="lv3Index">
+                                                                        <div>
+                                                                            <template x-if="lv3Cell.type === 'table'">
+                                                                                <div class="cell">
+                                                                                    <div class="cell-table">
+                                                                                        <h3 x-show="lv3Cell.title" x-text="lv3Cell.title"></h3>
+                                                                                        <div x-data="table({id: 'table-' + index + '-' + subIndex + '-' + deepIndex + '-' + lv3Index, data: lv3Cell.content, cols: getTableCols(lv3Cell)})"></div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </template>
+                                                                            <template x-if="lv3Cell.type === 'metrics'">
+                                                                                <div class="cell">
+                                                                                    <div class="cell-metrics">
+                                                                                        <h3 x-show="lv3Cell.title" x-text="lv3Cell.title"></h3>
+                                                                                        <div class="metrics-grid" :style="'--columns: ' + (lv3Cell.options.columns || 4)">
+                                                                                            <template x-for="m in lv3Cell.content" :key="m.name">
+                                                                                                <div class="metric-card">
+                                                                                                    <div class="metric-value" x-text="m.value"></div>
+                                                                                                    <div class="metric-label" x-text="m.name"></div>
+                                                                                                </div>
+                                                                                            </template>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </template>
+                                                                            <template x-if="lv3Cell.type === 'text'">
+                                                                                <div class="cell"><div class="cell-text" x-text="lv3Cell.content"></div></div>
+                                                                            </template>
+                                                                        </div>
+                                                                    </template>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
                                 </div>
                             </template>
                         </div>
                     </div>
                 </template>
                 
-                <!-- 图表 -->
-                <template x-if="cell.type === 'chart'">
-                    <div class="cell-chart">
-                        <h3 x-show="cell.title" x-text="cell.title"></h3>
-                        <div :id="'chart-' + index" class="chart-container" 
-                             :style="'--height: ' + (cell.options.height || 400) + 'px'"></div>
+                <template x-if="cell.type !== 'section'">
+                    <div class="cell">
+                        <template x-if="cell.type === 'title'">
+                            <div class="cell-title">
+                                <h1 x-show="cell.options.level === 1" x-text="cell.content"></h1>
+                                <h2 x-show="cell.options.level === 2" x-text="cell.content"></h2>
+                                <h3 x-show="cell.options.level === 3" x-text="cell.content"></h3>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'text'">
+                            <div class="cell-text" :class="'text-' + cell.options.style" x-text="cell.content"></div>
+                        </template>
+                        <template x-if="cell.type === 'markdown'">
+                            <div class="cell-text" x-html="renderMarkdown(cell.content)"></div>
+                        </template>
+                        <template x-if="cell.type === 'code'">
+                            <div class="cell-code">
+                                <div class="code-input"><pre x-text="cell.content.code"></pre></div>
+                                <div class="code-output" x-show="cell.content.output" x-text="cell.content.output"></div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'table'">
+                            <div class="cell-table">
+                                <h3 x-show="cell.title" x-text="cell.title"></h3>
+                                <div x-data="table({id: 'table-' + index, data: cell.content, cols: getTableCols(cell)})"></div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'metrics'">
+                            <div class="cell-metrics">
+                                <h3 x-show="cell.title" x-text="cell.title"></h3>
+                                <div class="metrics-grid" :style="'--columns: ' + (cell.options.columns || 4)">
+                                    <template x-for="metric in cell.content" :key="metric.name">
+                                        <div class="metric-card" :class="getMetricClass(metric.value)">
+                                            <div class="metric-value" x-text="metric.value"></div>
+                                            <div class="metric-label" x-text="metric.name"></div>
+                                            <div class="metric-desc" x-show="metric.desc" x-text="metric.desc"></div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'chart'">
+                            <div class="cell-chart">
+                                <h3 x-show="cell.title" x-text="cell.title"></h3>
+                                <div :id="'chart-' + index" class="chart-container" :style="'--height: ' + (cell.options.height || 400) + 'px'"></div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'heatmap'">
+                            <div class="cell-heatmap">
+                                <h3 x-show="cell.title" x-text="cell.title"></h3>
+                                <div :id="'heatmap-' + index" class="heatmap-container"></div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'pyecharts'">
+                            <div class="cell-chart">
+                                <h3 x-show="cell.title" x-text="cell.title"></h3>
+                                <div :id="'pyecharts-' + index" class="chart-container" :style="'--height: ' + cell.content.height"></div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'divider'">
+                            <div class="cell-divider"></div>
+                        </template>
+                        <template x-if="cell.type === 'html'">
+                            <div class="cell-html" x-html="cell.content"></div>
+                        </template>
+                        <template x-if="cell.type === 'collapsible'">
+                            <div class="cell-collapsible">
+                                <button class="collapse-toggle" :class="{'expanded': !cell.options.collapsed}" @click="cell.options.collapsed = !cell.options.collapsed">
+                                    <span x-text="cell.title"></span>
+                                    <span class="arrow" x-text="cell.options.collapsed ? '▶' : '▼'"></span>
+                                </button>
+                                <div class="collapse-content" x-show="!cell.options.collapsed">
+                                    <template x-for="(subCell, subIndex) in cell.content" :key="subIndex">
+                                        <div>
+                                            <template x-if="subCell.type === 'table'">
+                                                <div x-data="table({id: 'coll-table-' + index + '-' + subIndex, data: subCell.content, cols: getTableCols(subCell)})"></div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </template>
-                
-                <!-- 热力图 -->
-                <template x-if="cell.type === 'heatmap'">
-                    <div class="cell-heatmap">
-                        <h3 x-show="cell.title" x-text="cell.title"></h3>
-                        <div :id="'heatmap-' + index" class="heatmap-container"></div>
-                    </div>
-                </template>
-                
-                <!-- 分隔线 -->
-                <template x-if="cell.type === 'divider'">
-                    <div class="cell-divider"></div>
-                </template>
-                
-                <!-- 可折叠区域 -->
-                <template x-if="cell.type === 'collapsible'">
-                    <div class="cell-collapsible">
-                        <button class="collapse-toggle" 
-                                :class="{'expanded': !cell.options.collapsed}"
-                                @click="cell.options.collapsed = !cell.options.collapsed">
-                            <span x-text="cell.title"></span>
-                            <span class="arrow" x-text="cell.options.collapsed ? '▶' : '▼'"></span>
-                        </button>
-                        <div class="collapse-content" x-show="!cell.options.collapsed">
-                            <template x-for="(subCell, subIndex) in cell.content" :key="subIndex">
-                                <div x-html="renderSubCell(subCell)"></div>
-                            </template>
-                        </div>
-                    </div>
-                </template>
-                
-                <!-- HTML -->
-                <template x-if="cell.type === 'html'">
-                    <div class="cell-html" x-html="cell.content"></div>
-                </template>
-                
             </div>
         </template>
     </div>
     
-    <script src="js/echarts.min.js"></script>
-    <script src="js/alpine.min.js"></script>
-    <script src="js/layui.js"></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/alpine-table.js"></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/alpine.min.js" defer></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/echarts.min.js"></script>
+    <script id="notebook-data" type="application/json">{{ data_json | safe }}</script>
     <script>
     function notebookApp() {
+        const config = JSON.parse(document.getElementById('notebook-data').textContent);
         return {
-            title: {{ title | tojson }},
-            createdAt: {{ created_at | tojson }},
+            title: config.title,
+            createdAt: config.createdAt,
             cells: [],
             
             init() {
-                const data = {{ cells_json | safe }};
-                this.cells = data.cells;
+                this.cells = config.cells;
                 
                 this.$nextTick(() => {
                     this.renderAllComponents();
@@ -334,30 +637,70 @@
             
             renderAllComponents() {
                 this.cells.forEach((cell, index) => {
-                    if (cell.type === 'table') {
-                        this.renderTable('table-' + index, cell);
-                    } else if (cell.type === 'chart') {
+                    if (cell.type === 'chart') {
                         this.renderChart('chart-' + index, cell);
                     } else if (cell.type === 'heatmap') {
                         this.renderHeatmap('heatmap-' + index, cell);
+                    } else if (cell.type === 'pyecharts') {
+                        this.renderPyecharts('pyecharts-' + index, cell);
+                    } else if (cell.type === 'section') {
+                        this.renderSectionComponents(cell, index);
                     }
                 });
             },
             
-            renderTable(containerId, cell) {
-                layui.use(['table'], () => {
-                    const table = layui.table;
-                    const columns = cell.options.columns || Object.keys(cell.content[0] || {});
-                    table.render({
-                        elem: '#' + containerId,
-                        data: cell.content,
-                        cols: [columns.map(col => ({field: col, title: col}))],
-                        skin: 'line',
-                        page: cell.content.length > 20,
-                        limit: 20,
-                        even: true
+            renderSectionComponents(section, parentIndex, depth = 1) {
+                if (section.content && Array.isArray(section.content)) {
+                    section.content.forEach((subCell, subIndex) => {
+                        const idPrefix = depth === 1 
+                            ? parentIndex + '-' + subIndex
+                            : parentIndex + '-' + subIndex;
+                        
+                        if (subCell.type === 'chart') {
+                            this.renderChart('chart-' + idPrefix, subCell);
+                        } else if (subCell.type === 'heatmap') {
+                            this.renderHeatmap('heatmap-' + idPrefix, subCell);
+                        } else if (subCell.type === 'pyecharts') {
+                            this.renderPyecharts('pyecharts-' + idPrefix, subCell);
+                        } else if (subCell.type === 'section') {
+                            if (subCell.content && Array.isArray(subCell.content)) {
+                                subCell.content.forEach((deepCell, deepIndex) => {
+                                    const deepId = idPrefix + '-' + deepIndex;
+                                    if (deepCell.type === 'chart') {
+                                        this.renderChart('chart-' + deepId, deepCell);
+                                    } else if (deepCell.type === 'heatmap') {
+                                        this.renderHeatmap('heatmap-' + deepId, deepCell);
+                                    } else if (deepCell.type === 'pyecharts') {
+                                        this.renderPyecharts('pyecharts-' + deepId, deepCell);
+                                    } else if (deepCell.type === 'section') {
+                                        if (deepCell.content && Array.isArray(deepCell.content)) {
+                                            deepCell.content.forEach((lv3Cell, lv3Index) => {
+                                                const lv3Id = deepId + '-' + lv3Index;
+                                                if (lv3Cell.type === 'chart') {
+                                                    this.renderChart('chart-' + lv3Id, lv3Cell);
+                                                } else if (lv3Cell.type === 'heatmap') {
+                                                    this.renderHeatmap('heatmap-' + lv3Id, lv3Cell);
+                                                } else if (lv3Cell.type === 'pyecharts') {
+                                                    this.renderPyecharts('pyecharts-' + lv3Id, lv3Cell);
+                                                }
+                                            });
+                                        }
+                                    }
+                                });
+                            }
+                        }
                     });
-                });
+                }
+            },
+            
+            getTableCols(cell) {
+                if (cell.options && cell.options.columns) {
+                    return cell.options.columns.map(col => ({field: col, title: col}));
+                }
+                if (cell.content && cell.content.length > 0) {
+                    return Object.keys(cell.content[0]).map(col => ({field: col, title: col}));
+                }
+                return [];
             },
             
             renderChart(containerId, cell) {
@@ -425,7 +768,6 @@
                 const chart = echarts.init(container);
                 const data = cell.content;
                 
-                // 转换数据格式
                 const years = Object.keys(data).sort();
                 const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
                 
@@ -472,6 +814,17 @@
                 window.addEventListener('resize', () => chart.resize());
             },
             
+            renderPyecharts(containerId, cell) {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+                
+                const chart = echarts.init(container);
+                const option = JSON.parse(cell.content.option);
+                chart.setOption(option);
+                
+                window.addEventListener('resize', () => chart.resize());
+            },
+            
             getMetricClass(value) {
                 if (typeof value === 'string' && value.includes('%')) {
                     const num = parseFloat(value);
@@ -482,7 +835,6 @@
             },
             
             renderMarkdown(text) {
-                // 简单的Markdown渲染
                 return text
                     .replace(/^### (.*$)/gm, '<h3>$1</h3>')
                     .replace(/^## (.*$)/gm, '<h2>$1</h2>')
@@ -490,16 +842,6 @@
                     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                     .replace(/\*(.*?)\*/g, '<em>$1</em>')
                     .replace(/\n/g, '<br>');
-            },
-            
-            renderSubCell(subCell) {
-                // 渲染子单元格（用于可折叠区域）
-                if (subCell.type === 'table') {
-                    return `<div x-data x-init="$nextTick(() => renderTable('sub-table-' + $id, ${JSON.stringify(subCell)}))">
-                        <div :id="'sub-table-' + $id"></div>
-                    </div>`;
-                }
-                return `<div>${JSON.stringify(subCell.content)}</div>`;
             }
         };
     }
