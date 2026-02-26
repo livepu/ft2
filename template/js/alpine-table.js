@@ -1,5 +1,5 @@
 /**
- * Alpine.js 表格组件 v2.2.20260226
+ * Alpine.js 表格组件 v2.3.20260226
  * 版本号说明：主版本.次版本.日期（YYYYMMDD）
  * @author kingf_c@foxmail.com
  *
@@ -15,11 +15,12 @@
  * - 自动渲染：支持一键自动生成表格和分页控件
  *
  * 【核心改进】
- * - 代码量减少：从约930行减少到约300行
+ * - 代码量减少：从约930行减少到约350行
  * - 性能提升：利用响应式系统，避免不必要的渲染
  * - 可维护性增强：功能模块化，职责清晰
  * - 用户体验优化：添加加载、错误、空状态
  * - 智能渲染：有自定义模板则用用户的，没有则自动使用内置模板
+ * - 冻结列：支持左侧/右侧列冻结，使用 CSS sticky + ResizeObserver
  *
  * ============================================================================
  * 功能特性
@@ -37,10 +38,12 @@
  * - 多实例独立运行，互不干扰
  * - 加载状态、错误状态、空状态
  * - 自动渲染表格和分页控件（有自定义模板则用用户的，没有则用内置的）
+ * - 冻结列（可选）：支持左侧/右侧列冻结，表头固定，自动适配宽度变化
  *
  * 【重要】
  * - 此组件需要挂载到 window.table，供 Alpine.js 通过 x-data="table({...})" 调用
  * - 不支持服务端分页，当前版本仅支持前端分页和前端排序
+ * - 冻结列使用 CSS position: sticky 实现，兼容现代浏览器
  *
  * ============================================================================
  * 使用示例
@@ -58,37 +61,22 @@
  *   <!-- 自动渲染表格和分页 -->
  * </div>
  *
- * 【场景 2：纯本地数据 + 自定义模板】
+ * 【场景 2：冻结列（左侧冻结2列，右侧冻结1列）】
  * <div x-data="table({
- *   data: [{ id: 1, name: '张三', age: 25 }, ...],
+ *   data: [{ code: '000001', name: '基金A', type: '股票型', ... }, ...],
  *   cols: [
- *     { field: 'id', title: 'ID' },
- *     { field: 'name', title: '姓名' },
- *     { field: 'age', title: '年龄' }
- *   ]
+ *     { field: 'code', title: '代码' },
+ *     { field: 'name', title: '名称' },
+ *     { field: 'type', title: '类型' },
+ *     { field: 'nav', title: '净值' },
+ *     { field: 'status', title: '状态' }
+ *   ],
+ *   freeze: { left: 2, right: 1 }
  * })">
- *   <!-- 自定义表格模板 -->
- *   <table>
- *     <thead>
- *       <tr>
- *         <template x-for="col in cols">
- *           <th @click="sort(col.field, $event)" x-text="col.title"></th>
- *         </template>
- *       </tr>
- *     </thead>
- *     <tbody>
- *       <template x-for="row in pageData">
- *         <tr>
- *           <template x-for="col in cols">
- *             <td x-text="getNestedValue(row, col.field)"></td>
- *           </template>
- *         </tr>
- *       </template>
- *     </tbody>
- *   </table>
+ *   <!-- 自动渲染带冻结列的表格 -->
  * </div>
  *
- * 【场景 2：远程数据 + 外部筛选】
+ * 【场景 3：远程数据 + 外部筛选】
  * <div x-data="table({
  *   id: 'etf-table',
  *   url: '/home/etf/data',
@@ -128,7 +116,7 @@
  *   <button @click="updateData()">更新数据</button>
  * </div>
  *
- * 【场景 3：不分页显示全部数据】
+ * 【场景 4：不分页显示全部数据】
  * <div x-data="table({
  *   id: 'all-data-table',
  *   data: [{ id: 1, name: '张三', age: 25 }, ...],
@@ -161,7 +149,7 @@
  *   </table>
  * </div>
  *
- * 【场景 4：支持分页和不分页切换】
+ * 【场景 5：支持分页和不分页切换】
  * <div x-data="table({
  *   id: 'switch-table',
  *   data: [{ id: 1, name: '张三', age: 25 }, ...],
@@ -187,6 +175,28 @@
  * </div>
  *
  * ============================================================================
+ * 配置项说明
+ * ============================================================================
+ *
+ * 【基础配置】
+ * - id: 表格唯一标识（可选）
+ * - data: 本地数据数组
+ * - url: 远程数据接口地址
+ * - urlParams: URL参数映射
+ * - cols: 列配置数组 [{ field, title }, ...]
+ * - parseData: 自定义数据解析函数
+ *
+ * 【冻结配置】
+ * - freeze: { left: 0, right: 0 }
+ *   - left: 左侧冻结列数（默认0）
+ *   - right: 右侧冻结列数（默认0）
+ *   - 技术实现：CSS sticky + ResizeObserver 自动适配宽度
+ *
+ * 【分页配置】
+ * - page: { curr: 1, limit: 10, limits: [10, 20, 50] }
+ *   - limit 为 null 或 0 时显示全部数据
+ *
+ * ============================================================================
  * 核心方法
  * ============================================================================
  *
@@ -204,6 +214,10 @@
  * - prevPage()              上一页
  * - nextPage()              下一页
  * - goToPage(page)          跳转到指定页
+ *
+ * 【冻结管理】
+ * - applyFreezeStyles()     应用冻结列样式
+ * - destroyFreeze()         销毁冻结监听器（组件销毁时调用）
  *
  * 【数据访问】
  * - getNestedValue(obj, path) 获取嵌套属性值
@@ -305,30 +319,41 @@ function injectFreezeStyles() {
   const style = document.createElement('style');
   style.id = styleId;
   style.textContent = `
+    /* 冻结容器 */
     .alpine-table-freeze {
       overflow-x: auto;
       position: relative;
     }
-    .freeze-col {
+    /* 冻结列单元格 */
+    .alpine-table-freeze .freeze-col {
       position: sticky;
       background: inherit;
     }
-    thead .freeze-col {
+    /* 表头整体冻结在顶部（仅冻结模式） */
+    .alpine-table-freeze thead th {
+      position: sticky;
+      top: 0;
       background: #f9fafb;
+      z-index: 10;
+    }
+    /* 表头中的冻结列需要更高的 z-index */
+    .alpine-table-freeze thead .freeze-col {
       z-index: 100;
     }
-    tbody .freeze-col {
+    .alpine-table-freeze tbody .freeze-col {
       z-index: 50;
     }
-    tbody tr:hover .freeze-col {
+    .alpine-table-freeze tbody tr:hover .freeze-col {
       background: #f3f4f6;
     }
-    .alpine-table {
+    /* 表格边框（仅冻结模式需要 separate） */
+    .alpine-table-freeze .alpine-table {
       border-collapse: separate;
       border-spacing: 0;
     }
-    .alpine-table th,
-    .alpine-table td {
+    /* 冻结列背景色 */
+    .alpine-table-freeze .alpine-table th,
+    .alpine-table-freeze .alpine-table td {
       background: white;
     }
   `;
