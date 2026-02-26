@@ -295,6 +295,46 @@ function getNestedValue(obj, path) {
   return result;
 }
 
+/**
+ * 注入冻结列所需的CSS样式
+ */
+function injectFreezeStyles() {
+  const styleId = 'alpine-table-freeze-styles';
+  if (document.getElementById(styleId)) return;
+
+  const style = document.createElement('style');
+  style.id = styleId;
+  style.textContent = `
+    .alpine-table-freeze {
+      overflow-x: auto;
+      position: relative;
+    }
+    .freeze-col {
+      position: sticky;
+      background: inherit;
+    }
+    thead .freeze-col {
+      background: #f9fafb;
+      z-index: 100;
+    }
+    tbody .freeze-col {
+      z-index: 50;
+    }
+    tbody tr:hover .freeze-col {
+      background: #f3f4f6;
+    }
+    .alpine-table {
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    .alpine-table th,
+    .alpine-table td {
+      background: white;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 // ============================================================================
 // 主组件定义
 // ============================================================================
@@ -311,6 +351,9 @@ window.table = function table(config = {}) {
     urlParams: config.urlParams || {},
     currentParams: {},
     parseData: config.parseData || ((res) => Array.isArray(res) ? res : (res.data || [])),
+    
+    // 固定列配置 freeze: {left: 1, right: 0}
+    freeze: config.freeze || {left: 0, right: 0},
     
     // ============================================================================
     // 数据状态
@@ -431,6 +474,7 @@ window.table = function table(config = {}) {
     // ============================================================================
     
     init() {
+      injectFreezeStyles();
       this.loadDataFromConfig();
       
       this.$nextTick(() => {
@@ -482,6 +526,10 @@ window.table = function table(config = {}) {
         
         const rawData = await response.json();
         this.data = this.parseData(rawData);
+        
+        this.$nextTick(() => {
+          this._updateFreezeOffsets();
+        });
       } catch (error) {
         this.error = error.message;
         console.error('加载数据失败:', error);
@@ -728,29 +776,63 @@ window.table = function table(config = {}) {
         const existingTableContainer = rootElement.querySelector('.alpine-table-container');
         if (existingTableContainer) return;
         
+        const freezeLeft = (this.freeze?.left || 0);
+        const freezeRight = (this.freeze?.right || 0);
+        const hasFreeze = freezeLeft > 0 || freezeRight > 0;
+        
+        const renderCols = (isHeader = false) => {
+          return this.cols.map((col, index) => {
+            let className = 'sortable';
+            let styleAttr = '';
+            let dataAttr = '';
+
+            if (index < freezeLeft) {
+              // 左侧冻结：越靠左 z-index 越高（100, 99, 98...）
+              const zIndex = 100 - index;
+              className = 'freeze-col freeze-left ' + className;
+              styleAttr = `style="left: var(--freeze-left-${index}, 0); z-index: ${zIndex};"`;
+              dataAttr = `data-freeze-index="${index}"`;
+            }
+            else if (index >= this.cols.length - freezeRight) {
+              // 右侧冻结：越靠右 z-index 越高（100, 99, 98...）
+              const rightIndex = this.cols.length - index - 1;
+              const zIndex = 100 - rightIndex;
+              className = 'freeze-col freeze-right ' + className;
+              styleAttr = `style="right: var(--freeze-right-${rightIndex}, 0); z-index: ${zIndex};"`;
+              dataAttr = `data-freeze-right="${rightIndex}"`;
+            }
+
+            if (isHeader) {
+              return `<th ${dataAttr} class="${className}" ${styleAttr} @click="sort('${col.field}', $event)">
+                <span x-text="'${col.title}'"></span>
+                <template x-if="getSortPriority('${col.field}') > 0">
+                  <span class="sort-indicator">
+                    <span x-text="getSortIcon('${col.field}')" :class="getSortDirection('${col.field}') === 'asc' ? 'sort-asc' : 'sort-desc'"></span>
+                    <span class="sort-priority" x-text="getSortPriority('${col.field}')"></span>
+                  </span>
+                </template>
+              </th>`;
+            } else {
+              return `<td ${dataAttr} class="${className}" ${styleAttr} x-text="getNestedValue(row, '${col.field}')"></td>`;
+            }
+          }).join('');
+        };
+        
+        const containerClass = hasFreeze ? 'alpine-table-container alpine-table-freeze' : 'alpine-table-container';
+        const tableRef = hasFreeze ? 'x-ref="freezeTable"' : '';
+        
         const tableHTML = `
-          <div class="alpine-table-container">
-            <table class="alpine-table">
+          <div class="${containerClass}">
+            <table class="alpine-table" ${tableRef}>
               <thead>
                 <tr>
-                  ${this.cols.map(col => `
-                    <th @click="sort('${col.field}', $event)" class="sortable">
-                      <span x-text="'${col.title}'"></span>
-                      <template x-if="getSortPriority('${col.field}') > 0">
-                        <span class="sort-indicator">
-                          <span x-text="getSortIcon('${col.field}')" 
-                                :class="getSortDirection('${col.field}') === 'asc' ? 'sort-asc' : 'sort-desc'"></span>
-                          <span class="sort-priority" x-text="getSortPriority('${col.field}')"></span>
-                        </span>
-                      </template>
-                    </th>
-                  `).join('')}
+                  ${renderCols(true)}
                 </tr>
               </thead>
               <tbody>
                 <template x-for="(row, rowIndex) in pageData" :key="rowIndex + '-' + (row.id || row[Object.keys(row)[0]] || rowIndex)">
                   <tr>
-                    ${this.cols.map(col => `<td x-text="getNestedValue(row, '${col.field}')"></td>`).join('')}
+                    ${renderCols(false)}
                   </tr>
                 </template>
               </tbody>
@@ -766,8 +848,74 @@ window.table = function table(config = {}) {
             window.Alpine.initTree(newTable);
           }
         }
+        
+        // 如果有冻结列，在渲染完成后计算列宽并设置left值
+        if (hasFreeze) {
+          this.$nextTick(() => {
+            this.applyFreezeStyles();
+          });
+        }
       } catch (error) {
         console.error('Error in renderTable:', error);
+      }
+    },
+    
+    // 应用冻结列样式（CSS变量 + ResizeObserver）
+    applyFreezeStyles() {
+      const table = this.$refs.freezeTable;
+      if (!table) return;
+      
+      const freezeLeft = this.freeze?.left || 0;
+      const freezeRight = this.freeze?.right || 0;
+      if (freezeLeft === 0 && freezeRight === 0) return;
+      
+      this._updateFreezeOffsets();
+      
+      if (!this._freezeObserver) {
+        this._freezeObserver = new ResizeObserver(() => {
+          this._updateFreezeOffsets();
+        });
+        this._freezeObserver.observe(table);
+        
+        this._freezeResizeHandler = () => this._updateFreezeOffsets();
+        window.addEventListener('resize', this._freezeResizeHandler);
+      }
+    },
+    
+    _updateFreezeOffsets() {
+      const table = this.$refs.freezeTable;
+      if (!table) return;
+      
+      const freezeLeft = this.freeze?.left || 0;
+      const freezeRight = this.freeze?.right || 0;
+      if (freezeLeft === 0 && freezeRight === 0) return;
+      
+      const headerCells = table.querySelectorAll('thead th');
+      const colWidths = Array.from(headerCells).map(th => th.offsetWidth);
+      const root = this.getRootElement();
+      if (!root) return;
+      
+      let accLeft = 0;
+      for (let i = 0; i < freezeLeft; i++) {
+        root.style.setProperty(`--freeze-left-${i}`, accLeft + 'px');
+        accLeft += colWidths[i] || 100;
+      }
+      
+      let accRight = 0;
+      for (let i = 0; i < freezeRight; i++) {
+        root.style.setProperty(`--freeze-right-${i}`, accRight + 'px');
+        accRight += colWidths[colWidths.length - 1 - i] || 100;
+      }
+    },
+    
+    destroyFreeze() {
+      if (this._freezeObserver) {
+        this._freezeObserver.disconnect();
+        this._freezeObserver = null;
+      }
+      if (this._freezeResizeHandler) {
+        window.removeEventListener('resize', this._freezeResizeHandler);
+        this._freezeResizeHandler = null;
       }
     },
     
