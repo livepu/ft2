@@ -531,33 +531,68 @@ window.table = function table(config = {}) {
     // 排序管理
     // ============================================================================
     
+    /**
+     * 排序操作 - 支持单列和多列排序
+     * 
+     * 【单列排序】点击列头：none → desc → asc → none
+     * 【多列排序】Ctrl+点击：在现有排序基础上累加/切换
+     * 
+     * @param {string} field - 排序字段名
+     * @param {Event} event - 点击事件对象，通过 event.ctrlKey 判断是否多列排序
+     * 
+     * @example
+     * // 单列排序示例：
+     * // 第一次点击：添加 desc 排序
+     * // 第二次点击：切换为 asc 排序  
+     * // 第三次点击：移除该字段排序
+     * 
+     * @example
+     * // 多列排序示例（Ctrl+点击）：
+     * // 1. 点击"基金代码" → [{field: 'fcode', type: 'desc'}]
+     * // 2. Ctrl+点击"基金名称" → [{field: 'fcode', type: 'desc'}, {field: 'fname', type: 'desc'}]
+     * // 3. Ctrl+再次点击"基金代码" → [{field: 'fcode', type: 'asc'}, {field: 'fname', type: 'desc'}]
+     */
     sort(field, event) {
+      // 判断是否多列排序模式（按住 Ctrl 键）
       const isMultiSort = event.ctrlKey;
+      
+      // 获取该字段当前的排序方向
       const currentType = this.getSortDirection(field);
       
+      // 计算下一次排序方向：none → desc → asc → none
       let nextType = null;
       if (!currentType) {
-        nextType = 'desc';
+        nextType = 'desc';      // 首次排序：设为降序
       } else if (currentType === 'desc') {
-        nextType = 'asc';
+        nextType = 'asc';       // 再次点击：切换为升序
       }
+      // currentType === 'asc' 时，nextType 保持 null，表示取消排序
       
+      // 根据是否为多列排序，采用不同的策略
       if (isMultiSort || this.sortRules.length === 0) {
+        // 【多列排序模式】或【首个排序规则】
+        // 策略：在现有排序规则上累加或切换
         if (nextType) {
+          // 有下一个方向（desc 或 asc）
           const existingIndex = this.sortRules.findIndex(rule => rule.field === field);
           
           if (existingIndex >= 0) {
+            // 该字段已存在排序规则 → 切换方向
             this.sortRules[existingIndex].type = nextType;
           } else {
+            // 该字段不存在 → 新增排序规则
             this.sortRules.push({ field, type: nextType });
           }
         } else {
+          // nextType 为 null，表示取消该字段排序
           const index = this.sortRules.findIndex(rule => rule.field === field);
           if (index >= 0) {
             this.sortRules.splice(index, 1);
           }
         }
       } else {
+        // 【单列排序模式】（非 Ctrl 点击且已有其他排序规则）
+        // 策略：清空其他排序，只保留当前点击的字段
         this.sortRules = [];
         
         if (nextType) {
@@ -566,22 +601,60 @@ window.table = function table(config = {}) {
       }
     },
     
+    /**
+     * 获取指定字段的排序方向
+     * 
+     * @param {string} field - 字段名
+     * @returns {string|null} 排序方向：'asc'（升序）、'desc'（降序）、null（未排序）
+     * 
+     * @example
+     * getSortDirection('fcode') // → 'asc' | 'desc' | null
+     */
     getSortDirection(field) {
       const rule = this.sortRules.find(rule => rule.field === field);
       return rule ? rule.type : null;
     },
     
+    /**
+     * 获取指定字段的排序优先级
+     * 
+     * 用于多列排序时显示优先级数字（1, 2, 3...）
+     * 
+     * @param {string} field - 字段名
+     * @returns {number} 优先级：1, 2, 3...（已排序）或 0（未排序）
+     * 
+     * @example
+     * // 假设排序规则为：[{field: 'fcode', type: 'desc'}, {field: 'fname', type: 'asc'}]
+     * getSortPriority('fcode') // → 1  （第一优先级）
+     * getSortPriority('fname') // → 2  （第二优先级）
+     * getSortPriority('other') // → 0  （未排序）
+     */
     getSortPriority(field) {
       const index = this.sortRules.findIndex(rule => rule.field === field);
       return index >= 0 ? index + 1 : 0;
     },
     
+    /**
+     * 获取指定字段的排序图标
+     * 
+     * @param {string} field - 字段名
+     * @returns {string} 图标字符：'↑'（升序）、'↓'（降序）、''（未排序）
+     * 
+     * @example
+     * getSortIcon('fcode') // → '↑' | '↓' | ''
+     */
     getSortIcon(field) {
       const direction = this.getSortDirection(field);
       if (!direction) return '';
-      return direction === 'asc' ? '↑' : '↓';
+      return direction === 'asc' ? '▲' : '▼';
     },
     
+    /**
+     * 清除所有排序规则
+     * 
+     * @example
+     * clearSort() // sortRules 重置为 []
+     */
     clearSort() {
       this.sortRules = [];
     },
@@ -650,16 +723,21 @@ window.table = function table(config = {}) {
               <thead>
                 <tr>
                   ${this.cols.map(col => `
-                    <th @click="sort('${col.field}', $event)">
+                    <th @click="sort('${col.field}', $event)" class="sortable">
                       <span x-text="'${col.title}'"></span>
-                      <span x-show="getSortDirection('${col.field}') === 'asc'" class="sort-asc">↑</span>
-                      <span x-show="getSortDirection('${col.field}') === 'desc'" class="sort-desc">↓</span>
+                      <template x-if="getSortPriority('${col.field}') > 0">
+                        <span class="sort-indicator">
+                          <span x-text="getSortIcon('${col.field}')" 
+                                :class="getSortDirection('${col.field}') === 'asc' ? 'sort-asc' : 'sort-desc'"></span>
+                          <span class="sort-priority" x-text="getSortPriority('${col.field}')"></span>
+                        </span>
+                      </template>
                     </th>
                   `).join('')}
                 </tr>
               </thead>
               <tbody>
-                <template x-for="row in pageData" :key="row.id || row[Object.keys(row)[0]]">
+                <template x-for="(row, rowIndex) in pageData" :key="rowIndex + '-' + (row.id || row[Object.keys(row)[0]] || rowIndex)">
                   <tr>
                     ${this.cols.map(col => `<td x-text="getNestedValue(row, '${col.field}')"></td>`).join('')}
                   </tr>
