@@ -632,10 +632,75 @@
             .metrics-grid {
                 grid-template-columns: repeat(2, 1fr) !important;
             }
+            .toc-panel {
+                display: none;
+            }
+        }
+        
+        .toc-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 200px;
+            max-height: calc(100vh - 40px);
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            z-index: 1000;
+            overflow: hidden;
+        }
+        .toc-header {
+            padding: 12px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #6b21a8;
+            border-bottom: 1px solid #e5e5e5;
+            background: #fafafa;
+        }
+        .toc-list {
+            list-style: none;
+            padding: 8px 0;
+            margin: 0;
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+        }
+        .toc-list li {
+            padding: 0;
+        }
+        .toc-list a {
+            display: block;
+            padding: 8px 16px;
+            font-size: 13px;
+            color: #555;
+            text-decoration: none;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+        .toc-list a:hover {
+            background: #f5f0ff;
+            color: #6b21a8;
+            border-left-color: #a855f7;
+        }
+        .toc-list a.active {
+            background: #f5f0ff;
+            color: #6b21a8;
+            border-left-color: #a855f7;
         }
     </style>
 </head>
 <body>
+    <div class="toc-panel" x-data="notebookApp">
+        <div class="toc-header">📑 目录</div>
+        <ul class="toc-list">
+            <template x-for="(item, index) in tocItems" :key="index">
+                <li>
+                    <a :href="'#section-' + index" x-text="item.title" @click.prevent="scrollToSection(index)"></a>
+                </li>
+            </template>
+        </ul>
+    </div>
+    
     <div class="notebook-container" x-data="notebookApp" x-init="init()">
         <div class="notebook-header">
             <h1 x-text="title"></h1>
@@ -645,7 +710,7 @@
         <template x-for="(cell, index) in cells" :key="index">
             <div>
                 <template x-if="cell.type === 'section'">
-                    <div class="section">
+                    <div class="section" :id="'section-' + index">
                         <div class="section-title" x-show="cell.title" x-text="cell.title"></div>
                         <div class="section-content">
                             <template x-for="(subCell, subIndex) in cell.content" :key="subIndex">
@@ -961,13 +1026,32 @@
             title: config.title,
             createdAt: config.createdAt,
             cells: [],
+            tocItems: [],
             
             init() {
                 this.cells = config.cells;
+                this.buildToc();
                 
                 this.$nextTick(() => {
                     this.renderAllComponents();
                 });
+            },
+            
+            buildToc() {
+                this.tocItems = this.cells
+                    .filter(cell => cell.type === 'section' && cell.title)
+                    .map((cell, idx) => ({
+                        title: cell.title,
+                        index: this.cells.indexOf(cell)
+                    }));
+            },
+            
+            scrollToSection(index) {
+                const sectionIndex = this.tocItems[index].index;
+                const section = document.querySelector(`#section-${sectionIndex}`);
+                if (section) {
+                    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
             },
             
             renderAllComponents() {
