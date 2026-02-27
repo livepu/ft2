@@ -87,13 +87,39 @@ class CellBuilder:
         )
     
     @staticmethod
-    def table(data: List[Dict], columns: List[str] = None, title: str = None) -> Cell:
-        """创建表格单元格"""
+    def table(data: List[Dict], columns: List[str] = None, title: str = None,
+              options: dict = None) -> Cell:
+        """
+        创建表格单元格
+        
+        Args:
+            data: 表格数据
+            columns: 列名列表
+            title: 标题
+            options: 可选配置
+                - freeze: 冻结列配置 (int 或 dict)
+                    - int: 冻结左侧 n 列
+                    - dict: {'left': n, 'right': m}
+                - page: 分页配置 {'limit': 20, 'limits': [10, 20, 50]}
+        """
+        opts = {'columns': columns} if columns else {}
+        
+        if options:
+            freeze = options.get('freeze')
+            if freeze is not None:
+                if isinstance(freeze, int):
+                    opts['freeze'] = {'left': freeze, 'right': 0}
+                else:
+                    opts['freeze'] = freeze
+            
+            if 'page' in options:
+                opts['page'] = options['page']
+        
         return Cell(
             type=CellType.TABLE,
             content=data,
             title=title,
-            options={'columns': columns}
+            options=opts
         )
     
     @staticmethod

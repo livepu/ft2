@@ -129,21 +129,49 @@ class Notebook:
     
     # ========== 表格 ==========
     
-    def add_table(self, data: List[dict], columns: List[str] = None,
-                  title: str = None) -> 'Notebook':
-        """添加表格"""
-        return self._add_cell(CellBuilder.table(data, columns, title), title)
-    
-    def add_dataframe(self, df, title: str = None, columns: List[str] = None) -> 'Notebook':
-        """添加DataFrame表格"""
+    def table(self, data, columns=None, title=None, **options):
+        """
+        添加表格
+        
+        核心参数:
+            data: 表格数据（List[dict] 或 DataFrame）
+            columns: 列名列表
+            title: 标题
+        
+        可选参数 (**options):
+            freeze: 冻结列配置
+                - int: 冻结左侧 n 列
+                - dict: {'left': n, 'right': m}
+            page: 分页配置 {'limit': 20, 'limits': [10, 20, 50]}
+            collapsed: 折叠状态
+                - None: 普通表格（默认）
+                - True: 可折叠表格，默认折叠
+                - False: 可折叠表格，默认展开
+        
+        Examples:
+            nb.table(data)
+            nb.table(data, columns=['code', 'name'], title='基金列表')
+            nb.table(df, title='数据表')  # DataFrame 自动识别
+            nb.table(data, freeze=2)
+            nb.table(data, freeze={'left': 2, 'right': 1})
+            nb.table(data, title='详细数据', collapsed=True)
+        """
         import pandas as pd
-        if isinstance(df, pd.DataFrame):
-            data = df.to_dict('records')
-            cols = columns or list(df.columns)
+        
+        if isinstance(data, pd.DataFrame):
+            df_data = data.to_dict('records')
+            cols = columns or list(data.columns)
         else:
-            data = df
+            df_data = data
             cols = columns
-        return self.add_table(data, cols, title)
+        
+        collapsed = options.get('collapsed')
+        
+        if collapsed is not None:
+            cell = CellBuilder.table(df_data, cols, None, options)
+            return self.add_collapsible(title, [cell], collapsed)
+        else:
+            return self._add_cell(CellBuilder.table(df_data, cols, title, options), title)
     
     # ========== 指标卡片 ==========
     
@@ -235,13 +263,6 @@ class Notebook:
                         collapsed: bool = True) -> 'Notebook':
         """添加可折叠区域"""
         return self._add_cell(CellBuilder.collapsible(title, cells, collapsed))
-    
-    def add_collapsible_table(self, title: str, data: List[dict],
-                              columns: List[str] = None,
-                              collapsed: bool = True) -> 'Notebook':
-        """添加可折叠表格"""
-        cell = CellBuilder.table(data, columns)
-        return self.add_collapsible(title, [cell], collapsed)
     
     # ========== HTML ==========
     
