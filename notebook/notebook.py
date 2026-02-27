@@ -33,15 +33,16 @@ class Notebook:
     
     使用方式：
         nb = Notebook("策略分析报告")
-        nb.add_title("回测结果")
-        nb.add_metrics(metrics_data)
-        nb.add_line_chart(dates, [{'name': '净值', 'data': values}])
+        nb.title("回测结果")
+        nb.table(data, columns=['code', 'name'], freeze=2)
+        nb.metrics([{'name': '收益率', 'value': '15%'}])
+        nb.line_chart(dates, [{'name': '净值', 'data': values}])
         nb.export_html("report.html")
         
         # Section 容器
         with nb.section("收益分析"):
-            nb.add_metrics([...], title="核心指标")
-            nb.add_line_chart(dates, series, title="净值曲线")
+            nb.metrics([...], title="核心指标")
+            nb.line_chart(dates, series, title="净值曲线")
     """
     
     def __init__(self, title: str = "Notebook Report"):
@@ -97,7 +98,7 @@ class Notebook:
         
         Usage:
             with nb.section("收益分析"):
-                nb.add_metrics([...], title="核心指标")
+                nb.metrics([...], title="核心指标")
         """
         if level is None:
             level = len(self._section_stack) + 1
@@ -105,25 +106,25 @@ class Notebook:
     
     # ========== 标题和文本 ==========
     
-    def add_title(self, text: str, level: int = 1) -> 'Notebook':
+    def title(self, text: str, level: int = 1) -> 'Notebook':
         """添加标题"""
         return self._add_cell(CellBuilder.title(text, level))
     
-    def add_text(self, text: str, style: str = 'normal') -> 'Notebook':
+    def text(self, text: str, style: str = 'normal') -> 'Notebook':
         """添加文本"""
         return self._add_cell(CellBuilder.text(text, style))
     
-    def add_markdown(self, text: str) -> 'Notebook':
+    def markdown(self, text: str) -> 'Notebook':
         """添加Markdown内容"""
         return self._add_cell(CellBuilder.markdown(text))
     
-    def add_divider(self) -> 'Notebook':
+    def divider(self) -> 'Notebook':
         """添加分隔线"""
         return self._add_cell(CellBuilder.divider())
     
     # ========== 代码 ==========
     
-    def add_code(self, code: str, language: str = 'python', output: str = None) -> 'Notebook':
+    def code(self, code: str, language: str = 'python', output: str = None) -> 'Notebook':
         """添加代码块"""
         return self._add_cell(CellBuilder.code(code, language, output))
     
@@ -135,8 +136,13 @@ class Notebook:
         
         核心参数:
             data: 表格数据（List[dict] 或 DataFrame）
-            columns: 列名列表
+                - List[dict]: [{'code': '000001', 'name': '基金A'}, ...]
+                - DataFrame: pd.DataFrame 对象，自动转换
+            columns: 列名列表（指定要显示的列及顺序）
+                - ['code', 'name', 'type']  # 只显示这3列，按此顺序
+                - None 时显示数据中的所有列
             title: 标题
+                - '基金列表'
         
         可选参数 (**options):
             freeze: 冻结列配置
@@ -169,14 +175,13 @@ class Notebook:
         
         if collapsed is not None:
             cell = CellBuilder.table(df_data, cols, None, options)
-            return self.add_collapsible(title, [cell], collapsed)
+            return self.collapsible(title, [cell], collapsed)
         else:
             return self._add_cell(CellBuilder.table(df_data, cols, title, options), title)
     
     # ========== 指标卡片 ==========
     
-    def add_metrics(self, data: List[dict], title: str = None,
-                    columns: int = 4) -> 'Notebook':
+    def metrics(self, data: List[dict], title: str = None, columns: int = 4) -> 'Notebook':
         """
         添加指标卡片
 
@@ -186,37 +191,37 @@ class Notebook:
     
     # ========== 图表 ==========
     
-    def add_chart(self, chart_type: str, data: dict, title: str = None,
-                  height: int = 400, **options) -> 'Notebook':
+    def chart(self, chart_type: str, data: dict, title: str = None,
+              height: int = 400, **options) -> 'Notebook':
         """添加图表（通用）"""
         return self._add_cell(CellBuilder.chart(chart_type, data, title, height, **options), title)
     
-    def add_line_chart(self, dates: List, series: List[dict],
-                       title: str = None, **options) -> 'Notebook':
+    def line_chart(self, dates: List, series: List[dict],
+                   title: str = None, **options) -> 'Notebook':
         """添加折线图"""
         return self._add_cell(CellBuilder.line_chart(dates, series, title, **options), title)
 
-    def add_area_chart(self, dates: List, series: List[dict],
-                       title: str = None, **options) -> 'Notebook':
+    def area_chart(self, dates: List, series: List[dict],
+                   title: str = None, **options) -> 'Notebook':
         """添加面积图"""
         return self._add_cell(CellBuilder.area_chart(dates, series, title, **options), title)
 
-    def add_bar_chart(self, categories: List, series: List[dict],
-                      title: str = None, **options) -> 'Notebook':
+    def bar_chart(self, categories: List, series: List[dict],
+                  title: str = None, **options) -> 'Notebook':
         """添加柱状图"""
         return self._add_cell(CellBuilder.bar_chart(categories, series, title, **options), title)
 
-    def add_pie_chart(self, data: List[dict], title: str = None,
-                      **options) -> 'Notebook':
+    def pie_chart(self, data: List[dict], title: str = None,
+                  **options) -> 'Notebook':
         """添加饼图"""
         return self._add_cell(CellBuilder.pie_chart(data, title, **options), title)
 
-    def add_heatmap(self, data: dict, title: str = None, **options) -> 'Notebook':
+    def heatmap(self, data: dict, title: str = None, **options) -> 'Notebook':
         """添加热力图"""
         return self._add_cell(CellBuilder.heatmap(data, title, **options), title)
     
-    def add_pyecharts(self, chart, title: str = None, height: int = 400,
-                      width: str = '100%') -> 'Notebook':
+    def pyecharts(self, chart, title: str = None, height: int = 400,
+                  width: str = '100%') -> 'Notebook':
         """
         添加 pyecharts 图表
 
@@ -233,40 +238,40 @@ class Notebook:
     
     # ========== 权益曲线快捷方法 ==========
     
-    def add_equity_curve(self, dates: List, values: List, 
-                         title: str = '权益曲线',
-                         benchmark_values: List = None) -> 'Notebook':
+    def equity_curve(self, dates: List, values: List, 
+                     title: str = '权益曲线',
+                     benchmark_values: List = None) -> 'Notebook':
         """添加权益曲线图"""
         series = [{'name': '策略净值', 'data': values}]
         if benchmark_values:
             series.append({'name': '基准净值', 'data': benchmark_values})
-        return self.add_line_chart(dates, series, title)
+        return self.line_chart(dates, series, title)
     
-    def add_drawdown_chart(self, dates: List, drawdowns: List,
-                           title: str = '回撤曲线') -> 'Notebook':
+    def drawdown_chart(self, dates: List, drawdowns: List,
+                       title: str = '回撤曲线') -> 'Notebook':
         """添加回撤曲线图"""
         series = [{'name': '回撤', 'data': drawdowns}]
-        return self.add_area_chart(dates, series, title, color='#E94F37')
+        return self.area_chart(dates, series, title, color='#E94F37')
     
-    def add_monthly_returns_heatmap(self, monthly_returns: dict,
-                                    title: str = '月度收益热力图') -> 'Notebook':
+    def monthly_returns_heatmap(self, monthly_returns: dict,
+                                title: str = '月度收益热力图') -> 'Notebook':
         """
         添加月度收益热力图
         
         monthly_returns格式: {'2023': {'01': 0.05, '02': -0.02, ...}, ...}
         """
-        return self.add_heatmap(monthly_returns, title)
+        return self.heatmap(monthly_returns, title)
     
     # ========== 可折叠区域 ==========
     
-    def add_collapsible(self, title: str, cells: List[Cell],
-                        collapsed: bool = True) -> 'Notebook':
+    def collapsible(self, title: str, cells: List[Cell],
+                    collapsed: bool = True) -> 'Notebook':
         """添加可折叠区域"""
         return self._add_cell(CellBuilder.collapsible(title, cells, collapsed))
     
     # ========== HTML ==========
     
-    def add_html(self, html_content: str) -> 'Notebook':
+    def html(self, html_content: str) -> 'Notebook':
         """添加原始HTML"""
         return self._add_cell(CellBuilder.html(html_content))
     
