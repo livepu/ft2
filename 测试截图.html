@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title }}</title>
+    <title></title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -637,6 +637,11 @@
             }
         }
         
+        /* 截图模式：隐藏未选中的元素 */
+        .screenshot-mode .screenshot-hidden {
+            display: none !important;
+        }
+        
         .toc-panel {
             position: fixed;
             top: 20px;
@@ -723,8 +728,8 @@
         .toc-select-all span { cursor: pointer; }
     </style>
 </head>
-<body>
-    <div class="toc-panel" x-data="notebookApp">
+<body x-data="notebookApp" x-init="init()">
+    <div class="toc-panel">
         <div class="toc-header">📑 目录</div>
         <ul class="toc-list">
             <template x-for="(item, index) in tocItems" :key="index">
@@ -745,43 +750,43 @@
         </div>
     </div>
     
-    <div class="notebook-container" x-data="notebookApp" x-init="init()">
-        <div class="notebook-header">
-            <h1 x-text="title"></h1>
-            <div class="meta" x-text="'生成时间: ' + createdAt"></div>
-        </div>
-        
-        <template x-for="(cell, index) in cells" :key="index">
-            <div>
-                <template x-if="cell.type === 'section'">
-                    <div class="section" :id="'section-' + index">
-                        <div class="section-title" x-show="cell.title" x-text="cell.title"></div>
-                        <div class="section-content">
-                            <template x-for="(subCell, subIndex) in cell.content" :key="subIndex">
-                                <div>
-                                    <template x-if="subCell.type === 'title'">
-                                        <div class="cell">
-                                            <div class="cell-title">
-                                                <h1 x-show="subCell.options.level === 1" x-text="subCell.content"></h1>
-                                                <h2 x-show="subCell.options.level === 2" x-text="subCell.content"></h2>
-                                                <h3 x-show="subCell.options.level === 3" x-text="subCell.content"></h3>
+    <div class="notebook-container" id="screenshot-area">
+        <div class="notebook-header" :class="{ 'screenshot-hidden': !isSelected(-1) }">
+                <h1 x-text="title"></h1>
+                <div class="meta" x-text="'生成时间: ' + createdAt"></div>
+            </div>
+            
+            <template x-for="(cell, index) in cells" :key="index">
+                <div>
+                    <template x-if="cell.type === 'section'">
+                        <div class="section" :id="'section-' + index" :class="{ 'screenshot-hidden': !isSelected(index) }">
+                            <div class="section-title" x-show="cell.title" x-text="cell.title"></div>
+                            <div class="section-content">
+                                <template x-for="(subCell, subIndex) in cell.content" :key="subIndex">
+                                    <div>
+                                        <template x-if="subCell.type === 'title'">
+                                            <div class="cell">
+                                                <div class="cell-title">
+                                                    <h1 x-show="subCell.options.level === 1" x-text="subCell.content"></h1>
+                                                    <h2 x-show="subCell.options.level === 2" x-text="subCell.content"></h2>
+                                                    <h3 x-show="subCell.options.level === 3" x-text="subCell.content"></h3>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </template>
-                                    <template x-if="subCell.type === 'text'">
-                                        <div class="cell"><div class="cell-text" :class="'text-' + subCell.options.style" x-text="subCell.content"></div></div>
-                                    </template>
-                                    <template x-if="subCell.type === 'markdown'">
-                                        <div class="cell"><div class="markdown-content" x-html="renderMarkdown(subCell.content)"></div></div>
-                                    </template>
-                                    <template x-if="subCell.type === 'code'">
-                                        <div class="cell" style="padding: 0; overflow: hidden;">
-                                            <div class="cell-code">
-                                                <div class="code-block">
-                                                    <div class="code-header">
-                                                        <span class="code-lang" x-text="subCell.content.lang || 'Python'"></span>
-                                                    </div>
-                                                    <div class="code-input"><pre x-text="subCell.content.code"></pre></div>
+                                        </template>
+                                        <template x-if="subCell.type === 'text'">
+                                            <div class="cell"><div class="cell-text" :class="'text-' + subCell.options.style" x-text="subCell.content"></div></div>
+                                        </template>
+                                        <template x-if="subCell.type === 'markdown'">
+                                            <div class="cell"><div class="markdown-content" x-html="renderMarkdown(subCell.content)"></div></div>
+                                        </template>
+                                        <template x-if="subCell.type === 'code'">
+                                            <div class="cell" style="padding: 0; overflow: hidden;">
+                                                <div class="cell-code">
+                                                    <div class="code-block">
+                                                        <div class="code-header">
+                                                            <span class="code-lang" x-text="subCell.content.lang || 'Python'"></span>
+                                                        </div>
+                                                        <div class="code-input"><pre x-text="subCell.content.code"></pre></div>
                                                     <div class="code-output" x-show="subCell.content.output" x-text="subCell.content.output"></div>
                                                 </div>
                                             </div>
@@ -1063,7 +1068,716 @@
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/alpine.min.js" defer></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/snapdom.min.js"></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/echarts.min.js"></script>
-    <script id="notebook-data" type="application/json">{{ data_json | safe }}</script>
+    <script id="notebook-data" type="application/json">{
+  "title": "综合测试报告",
+  "createdAt": "2026-02-27 14:54:55",
+  "cells": [
+    {
+      "type": "section",
+      "content": [
+        {
+          "type": "title",
+          "content": "策略回测报告",
+          "title": null,
+          "options": {
+            "level": 1
+          }
+        },
+        {
+          "type": "markdown",
+          "content": "\n**策略类型**: 趋势跟踪 | **回测区间**: 2024-01 至 2024-05 | **初始资金**: 1,000,000\n        ",
+          "title": null,
+          "options": {}
+        },
+        {
+          "type": "metrics",
+          "content": [
+            {
+              "name": "总收益",
+              "value": "45.6%",
+              "desc": "累计收益"
+            },
+            {
+              "name": "夏普",
+              "value": "1.85",
+              "desc": "风险调整"
+            },
+            {
+              "name": "最大回撤",
+              "value": "-12.3%",
+              "desc": "2024-03"
+            },
+            {
+              "name": "胜率",
+              "value": "58%",
+              "desc": "盈利占比"
+            }
+          ],
+          "title": "核心指标",
+          "options": {
+            "columns": 4
+          }
+        }
+      ],
+      "title": "报告概述",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "section",
+      "content": [
+        {
+          "type": "text",
+          "content": "净值曲线与基准对比：",
+          "title": null,
+          "options": {
+            "style": "normal"
+          }
+        },
+        {
+          "type": "chart",
+          "content": {
+            "chart_type": "line",
+            "data": {
+              "dates": [
+                "2024-01",
+                "2024-02",
+                "2024-03",
+                "2024-04",
+                "2024-05"
+              ],
+              "series": [
+                {
+                  "name": "策略",
+                  "data": [
+                    1.0,
+                    1.05,
+                    1.12,
+                    1.08,
+                    1.15
+                  ]
+                },
+                {
+                  "name": "基准",
+                  "data": [
+                    1.0,
+                    1.02,
+                    1.04,
+                    1.06,
+                    1.08
+                  ]
+                }
+              ]
+            }
+          },
+          "title": "净值曲线",
+          "options": {
+            "height": 300
+          }
+        },
+        {
+          "type": "section",
+          "content": [
+            {
+              "type": "chart",
+              "content": {
+                "chart_type": "bar",
+                "data": {
+                  "categories": [
+                    "1月",
+                    "2月",
+                    "3月",
+                    "4月",
+                    "5月"
+                  ],
+                  "series": [
+                    {
+                      "name": "月收益%",
+                      "data": [
+                        5,
+                        -2,
+                        8,
+                        3,
+                        6
+                      ]
+                    }
+                  ]
+                }
+              },
+              "title": "月度收益",
+              "options": {
+                "height": 400
+              }
+            },
+            {
+              "type": "chart",
+              "content": {
+                "chart_type": "pie",
+                "data": [
+                  {
+                    "name": "股票",
+                    "value": 60
+                  },
+                  {
+                    "name": "债券",
+                    "value": 25
+                  },
+                  {
+                    "name": "现金",
+                    "value": 15
+                  }
+                ]
+              },
+              "title": "资产配置",
+              "options": {
+                "height": 250
+              }
+            }
+          ],
+          "title": "月度分析",
+          "options": {
+            "level": 2
+          }
+        }
+      ],
+      "title": "收益分析",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "section",
+      "content": [
+        {
+          "type": "chart",
+          "content": {
+            "chart_type": "area",
+            "data": {
+              "dates": [
+                "2024-01",
+                "2024-02",
+                "2024-03",
+                "2024-04",
+                "2024-05"
+              ],
+              "series": [
+                {
+                  "name": "回撤%",
+                  "data": [
+                    0,
+                    -2,
+                    -5,
+                    -3,
+                    -1
+                  ]
+                }
+              ]
+            }
+          },
+          "title": "回撤曲线",
+          "options": {
+            "height": 250
+          }
+        },
+        {
+          "type": "heatmap",
+          "content": {
+            "2023": {
+              "01": 0.02,
+              "02": -0.01,
+              "03": 0.03,
+              "04": 0.01,
+              "05": -0.02,
+              "06": 0.04
+            },
+            "2024": {
+              "01": 0.05,
+              "02": -0.02,
+              "03": 0.08,
+              "04": 0.03,
+              "05": 0.06,
+              "06": -0.01
+            }
+          },
+          "title": "月度收益热力图",
+          "options": {}
+        }
+      ],
+      "title": "风险分析",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "section",
+      "content": [
+        {
+          "type": "text",
+          "content": "当前持仓情况：",
+          "title": null,
+          "options": {
+            "style": "normal"
+          }
+        },
+        {
+          "type": "table",
+          "content": [
+            {
+              "代码": "600000",
+              "名称": "浦发银行",
+              "数量": 10000,
+              "成本": 10.5,
+              "现价": 11.2,
+              "盈亏": "+6.7%"
+            },
+            {
+              "代码": "000001",
+              "名称": "平安银行",
+              "数量": 5000,
+              "成本": 15.2,
+              "现价": 16.8,
+              "盈亏": "+10.5%"
+            },
+            {
+              "代码": "000002",
+              "名称": "万科A",
+              "数量": 8000,
+              "成本": 8.3,
+              "现价": 7.5,
+              "盈亏": "-9.6%"
+            }
+          ],
+          "title": "持仓列表",
+          "options": {
+            "columns": [
+              "代码",
+              "名称",
+              "数量",
+              "成本",
+              "现价",
+              "盈亏"
+            ]
+          }
+        }
+      ],
+      "title": "持仓明细",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "section",
+      "content": [
+        {
+          "type": "text",
+          "content": "多列表格，冻结左侧2列：",
+          "title": null,
+          "options": {
+            "style": "normal"
+          }
+        },
+        {
+          "type": "table",
+          "content": [
+            {
+              "股票代码": "600000",
+              "股票名称": "股票0名称",
+              "收盘价": 10.0,
+              "涨跌幅": "-10%",
+              "成交量": 1000000,
+              "成交额": 10000000,
+              "振幅": "0.0%",
+              "换手率": "0.0%",
+              "市盈率": 20.0,
+              "市净率": 2.0,
+              "总市值": 1000000000,
+              "流通市值": 800000000
+            },
+            {
+              "股票代码": "600001",
+              "股票名称": "股票1名称",
+              "收盘价": 10.5,
+              "涨跌幅": "-9%",
+              "成交量": 1100000,
+              "成交额": 11000000,
+              "振幅": "0.5%",
+              "换手率": "0.3%",
+              "市盈率": 20.5,
+              "市净率": 2.1,
+              "总市值": 1010000000,
+              "流通市值": 808000000
+            },
+            {
+              "股票代码": "600002",
+              "股票名称": "股票2名称",
+              "收盘价": 11.0,
+              "涨跌幅": "-8%",
+              "成交量": 1200000,
+              "成交额": 12000000,
+              "振幅": "1.0%",
+              "换手率": "0.6%",
+              "市盈率": 21.0,
+              "市净率": 2.2,
+              "总市值": 1020000000,
+              "流通市值": 816000000
+            },
+            {
+              "股票代码": "600003",
+              "股票名称": "股票3名称",
+              "收盘价": 11.5,
+              "涨跌幅": "-7%",
+              "成交量": 1300000,
+              "成交额": 13000000,
+              "振幅": "1.5%",
+              "换手率": "0.8999999999999999%",
+              "市盈率": 21.5,
+              "市净率": 2.3,
+              "总市值": 1030000000,
+              "流通市值": 824000000
+            },
+            {
+              "股票代码": "600004",
+              "股票名称": "股票4名称",
+              "收盘价": 12.0,
+              "涨跌幅": "-6%",
+              "成交量": 1400000,
+              "成交额": 14000000,
+              "振幅": "2.0%",
+              "换手率": "1.2%",
+              "市盈率": 22.0,
+              "市净率": 2.4,
+              "总市值": 1040000000,
+              "流通市值": 832000000
+            },
+            {
+              "股票代码": "600005",
+              "股票名称": "股票5名称",
+              "收盘价": 12.5,
+              "涨跌幅": "-5%",
+              "成交量": 1500000,
+              "成交额": 15000000,
+              "振幅": "2.5%",
+              "换手率": "1.5%",
+              "市盈率": 22.5,
+              "市净率": 2.5,
+              "总市值": 1050000000,
+              "流通市值": 840000000
+            },
+            {
+              "股票代码": "600006",
+              "股票名称": "股票6名称",
+              "收盘价": 13.0,
+              "涨跌幅": "-4%",
+              "成交量": 1600000,
+              "成交额": 16000000,
+              "振幅": "3.0%",
+              "换手率": "1.7999999999999998%",
+              "市盈率": 23.0,
+              "市净率": 2.6,
+              "总市值": 1060000000,
+              "流通市值": 848000000
+            },
+            {
+              "股票代码": "600007",
+              "股票名称": "股票7名称",
+              "收盘价": 13.5,
+              "涨跌幅": "-3%",
+              "成交量": 1700000,
+              "成交额": 17000000,
+              "振幅": "3.5%",
+              "换手率": "2.1%",
+              "市盈率": 23.5,
+              "市净率": 2.7,
+              "总市值": 1070000000,
+              "流通市值": 856000000
+            },
+            {
+              "股票代码": "600008",
+              "股票名称": "股票8名称",
+              "收盘价": 14.0,
+              "涨跌幅": "-2%",
+              "成交量": 1800000,
+              "成交额": 18000000,
+              "振幅": "4.0%",
+              "换手率": "2.4%",
+              "市盈率": 24.0,
+              "市净率": 2.8,
+              "总市值": 1080000000,
+              "流通市值": 864000000
+            },
+            {
+              "股票代码": "600009",
+              "股票名称": "股票9名称",
+              "收盘价": 14.5,
+              "涨跌幅": "-1%",
+              "成交量": 1900000,
+              "成交额": 19000000,
+              "振幅": "4.5%",
+              "换手率": "2.6999999999999997%",
+              "市盈率": 24.5,
+              "市净率": 2.9,
+              "总市值": 1090000000,
+              "流通市值": 872000000
+            },
+            {
+              "股票代码": "600010",
+              "股票名称": "股票10名称",
+              "收盘价": 15.0,
+              "涨跌幅": "0%",
+              "成交量": 2000000,
+              "成交额": 20000000,
+              "振幅": "5.0%",
+              "换手率": "3.0%",
+              "市盈率": 25.0,
+              "市净率": 3.0,
+              "总市值": 1100000000,
+              "流通市值": 880000000
+            },
+            {
+              "股票代码": "600011",
+              "股票名称": "股票11名称",
+              "收盘价": 15.5,
+              "涨跌幅": "1%",
+              "成交量": 2100000,
+              "成交额": 21000000,
+              "振幅": "5.5%",
+              "换手率": "3.3%",
+              "市盈率": 25.5,
+              "市净率": 3.1,
+              "总市值": 1110000000,
+              "流通市值": 888000000
+            },
+            {
+              "股票代码": "600012",
+              "股票名称": "股票12名称",
+              "收盘价": 16.0,
+              "涨跌幅": "2%",
+              "成交量": 2200000,
+              "成交额": 22000000,
+              "振幅": "6.0%",
+              "换手率": "3.5999999999999996%",
+              "市盈率": 26.0,
+              "市净率": 3.2,
+              "总市值": 1120000000,
+              "流通市值": 896000000
+            },
+            {
+              "股票代码": "600013",
+              "股票名称": "股票13名称",
+              "收盘价": 16.5,
+              "涨跌幅": "3%",
+              "成交量": 2300000,
+              "成交额": 23000000,
+              "振幅": "6.5%",
+              "换手率": "3.9%",
+              "市盈率": 26.5,
+              "市净率": 3.3,
+              "总市值": 1130000000,
+              "流通市值": 904000000
+            },
+            {
+              "股票代码": "600014",
+              "股票名称": "股票14名称",
+              "收盘价": 17.0,
+              "涨跌幅": "4%",
+              "成交量": 2400000,
+              "成交额": 24000000,
+              "振幅": "7.0%",
+              "换手率": "4.2%",
+              "市盈率": 27.0,
+              "市净率": 3.4,
+              "总市值": 1140000000,
+              "流通市值": 912000000
+            },
+            {
+              "股票代码": "600015",
+              "股票名称": "股票15名称",
+              "收盘价": 17.5,
+              "涨跌幅": "5%",
+              "成交量": 2500000,
+              "成交额": 25000000,
+              "振幅": "7.5%",
+              "换手率": "4.5%",
+              "市盈率": 27.5,
+              "市净率": 3.5,
+              "总市值": 1150000000,
+              "流通市值": 920000000
+            },
+            {
+              "股票代码": "600016",
+              "股票名称": "股票16名称",
+              "收盘价": 18.0,
+              "涨跌幅": "6%",
+              "成交量": 2600000,
+              "成交额": 26000000,
+              "振幅": "8.0%",
+              "换手率": "4.8%",
+              "市盈率": 28.0,
+              "市净率": 3.6,
+              "总市值": 1160000000,
+              "流通市值": 928000000
+            },
+            {
+              "股票代码": "600017",
+              "股票名称": "股票17名称",
+              "收盘价": 18.5,
+              "涨跌幅": "7%",
+              "成交量": 2700000,
+              "成交额": 27000000,
+              "振幅": "8.5%",
+              "换手率": "5.1%",
+              "市盈率": 28.5,
+              "市净率": 3.7,
+              "总市值": 1170000000,
+              "流通市值": 936000000
+            },
+            {
+              "股票代码": "600018",
+              "股票名称": "股票18名称",
+              "收盘价": 19.0,
+              "涨跌幅": "8%",
+              "成交量": 2800000,
+              "成交额": 28000000,
+              "振幅": "9.0%",
+              "换手率": "5.3999999999999995%",
+              "市盈率": 29.0,
+              "市净率": 3.8,
+              "总市值": 1180000000,
+              "流通市值": 944000000
+            },
+            {
+              "股票代码": "600019",
+              "股票名称": "股票19名称",
+              "收盘价": 19.5,
+              "涨跌幅": "9%",
+              "成交量": 2900000,
+              "成交额": 29000000,
+              "振幅": "9.5%",
+              "换手率": "5.7%",
+              "市盈率": 29.5,
+              "市净率": 3.9,
+              "总市值": 1190000000,
+              "流通市值": 952000000
+            }
+          ],
+          "title": "股票行情（冻结左侧2列，共12列）",
+          "options": {
+            "columns": [
+              "股票代码",
+              "股票名称",
+              "收盘价",
+              "涨跌幅",
+              "成交量",
+              "成交额",
+              "振幅",
+              "换手率",
+              "市盈率",
+              "市净率",
+              "总市值",
+              "流通市值"
+            ],
+            "freeze": {
+              "left": 2,
+              "right": 0
+            }
+          }
+        }
+      ],
+      "title": "股票行情",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "section",
+      "content": [
+        {
+          "type": "collapsible",
+          "content": [
+            {
+              "type": "table",
+              "content": [
+                {
+                  "日期": "2024-01-05",
+                  "方向": "买入",
+                  "代码": "600000",
+                  "价格": 10.5,
+                  "数量": 1000
+                },
+                {
+                  "日期": "2024-02-10",
+                  "方向": "卖出",
+                  "代码": "600000",
+                  "价格": 11.2,
+                  "数量": 1000
+                },
+                {
+                  "日期": "2024-02-15",
+                  "方向": "买入",
+                  "代码": "000001",
+                  "价格": 15.0,
+                  "数量": 500
+                },
+                {
+                  "日期": "2024-03-20",
+                  "方向": "卖出",
+                  "代码": "000001",
+                  "价格": 16.8,
+                  "数量": 500
+                }
+              ],
+              "title": null,
+              "options": {}
+            }
+          ],
+          "title": "历史交易（点击展开）",
+          "options": {
+            "collapsed": true
+          }
+        }
+      ],
+      "title": "历史记录",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "section",
+      "content": [
+        {
+          "type": "code",
+          "content": {
+            "code": "# 策略核心逻辑\ndef on_bar(bar):\n    if bar.close > ma20:\n        buy(symbol=bar.symbol, quantity=100)\n    elif bar.close < ma20:\n        sell(symbol=bar.symbol, quantity=100)\n",
+            "language": "python",
+            "output": "策略初始化完成\n回测结束"
+          },
+          "title": null,
+          "options": {}
+        }
+      ],
+      "title": "策略代码",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "section",
+      "content": [
+        {
+          "type": "html",
+          "content": "\n<div style=\"background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 6px;\">\n    <strong>⚠️ 风险提示</strong>\n    <p style=\"margin: 8px 0 0 0; color: #856404;\">\n        本报告仅供参考，不构成投资建议。历史业绩不代表未来表现。\n    </p>\n</div>\n        ",
+          "title": null,
+          "options": {}
+        }
+      ],
+      "title": "风险提示",
+      "options": {
+        "level": 1
+      }
+    }
+  ]
+}</script>
     <script>
     function notebookApp() {
         const config = JSON.parse(document.getElementById('notebook-data').textContent);
@@ -1111,66 +1825,55 @@
                 return this.tocItems.length > 0 && this.selectedItems.size === this.tocItems.length;
             },
             
+            isSelected(cellIndex) {
+                // cellIndex: -1 表示 header, >=0 表示 cells 数组中的索引
+                const tocIndex = this.tocItems.findIndex(item => item.index === cellIndex);
+                return tocIndex !== -1 && this.selectedItems.has(tocIndex);
+            },
+            
             async captureScreenshot() {
                 if (this.selectedItems.size === 0) return;
                 
-                // 获取选中的元素
-                const elements = [];
-                this.selectedItems.forEach(index => {
-                    const item = this.tocItems[index];
-                    if (item.type === 'header') {
-                        const header = document.querySelector('.notebook-header');
-                        if (header) elements.push(header);
-                    } else {
-                        const section = document.querySelector(`#section-${item.index}`);
-                        if (section) elements.push(section);
-                    }
-                });
-                
-                if (elements.length === 0) {
-                    alert('未找到选中的内容');
+                const screenshotArea = document.getElementById('screenshot-area');
+                if (!screenshotArea) {
+                    alert('未找到截图区域');
                     return;
                 }
                 
                 try {
-                    // 创建临时容器
-                    const tempContainer = document.createElement('div');
-                    tempContainer.style.cssText = `
-                        position: absolute;
-                        left: -9999px;
-                        top: 0;
-                        width: 900px;
-                        background: #f5f5f5;
-                        padding: 20px;
-                    `;
-                    document.body.appendChild(tempContainer);
+                    screenshotArea.classList.add('screenshot-mode');
+                    await new Promise(resolve => setTimeout(resolve, 100));
                     
-                    // 克隆选中的元素
-                    elements.forEach(el => {
-                        const clone = el.cloneNode(true);
-                        tempContainer.appendChild(clone);
+                    const result = await snapdom(screenshotArea, {
+                        backgroundColor: '#f5f5f5',
+                        scale: 1,
+                        cache: 'auto'
                     });
                     
-                    // 等待图表渲染
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    screenshotArea.classList.remove('screenshot-mode');
                     
-                    // 使用 snapdom 截图
-                    const snap = window.snapdom || snapdom;
-                    const dataUrl = await snap.toPng(tempContainer, {
-                        scale: 2,
-                        backgroundColor: '#f5f5f5'
-                    });
+                    const blob = await result.toBlob({ type: 'png' });
                     
-                    // 下载图片
-                    const link = document.createElement('a');
-                    link.download = `截图_${new Date().toLocaleString().replace(/[/:]/g, '-')}.png`;
-                    link.href = dataUrl;
-                    link.click();
-                    
-                    // 清理
-                    document.body.removeChild(tempContainer);
-                    
+                    try {
+                        // 确保页面有焦点后再写入剪贴板
+                        window.focus();
+                        await navigator.clipboard.write([
+                            new ClipboardItem({ 'image/png': blob })
+                        ]);
+                        alert(`截图已复制到剪贴板 (${this.selectedItems.size}个区域)`);
+                    } catch (err) {
+                        console.error('复制到剪贴板失败:', err);
+                        // 降级方案：自动下载图片
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.download = `截图_${new Date().toLocaleString().replace(/[/:]/g, '-')}.png`;
+                        link.href = url;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        alert('已自动下载截图（剪贴板需要页面焦点）');
+                    }
                 } catch (error) {
+                    screenshotArea.classList.remove('screenshot-mode');
                     console.error('截图失败:', error);
                     alert('截图失败: ' + error.message);
                 }
@@ -1188,16 +1891,16 @@
                     });
                 }
                 
-                // 添加所有 section
-                this.cells
-                    .filter(cell => cell.type === 'section' && cell.title)
-                    .forEach(cell => {
+                // 添加所有 section（使用 forEach 的 index 而不是 indexOf）
+                this.cells.forEach((cell, cellIndex) => {
+                    if (cell.type === 'section' && cell.title) {
                         items.push({
                             title: cell.title,
                             type: 'section',
-                            index: this.cells.indexOf(cell)
+                            index: cellIndex
                         });
-                    });
+                    }
+                });
                 
                 this.tocItems = items;
             },
