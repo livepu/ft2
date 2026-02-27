@@ -2082,7 +2082,11 @@
                         legend: { data: data.series.map(s => s.name), top: 5 },
                         grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
                         xAxis: { type: 'category', boundaryGap: false, data: data.dates },
-                        yAxis: { type: 'value' },
+                        yAxis: { 
+                            type: 'value',
+                            scale: true,
+                            boundaryGap: ['10%', '10%']
+                        },
                         series: data.series.map(s => ({
                             name: s.name,
                             type: 'line',
@@ -2098,7 +2102,11 @@
                         legend: { data: data.series.map(s => s.name), top: 5 },
                         grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
                         xAxis: { type: 'category', data: data.categories },
-                        yAxis: { type: 'value' },
+                        yAxis: { 
+                            type: 'value',
+                            scale: true,
+                            boundaryGap: ['10%', '10%']
+                        },
                         series: data.series.map(s => ({
                             name: s.name,
                             type: 'bar',
