@@ -642,6 +642,43 @@
             display: none !important;
         }
         
+        /* Toast 提示样式 */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .toast {
+            background: #f3e8ff;
+            color: #6b21a8;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border: 1px solid #e9d5ff;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s ease;
+            pointer-events: auto;
+            min-width: 200px;
+            text-align: center;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast.error {
+            background: #fef2f2;
+            color: #dc2626;
+            border-color: #fecaca;
+        }
+        
         .toc-panel {
             position: fixed;
             top: 20px;
@@ -729,6 +766,9 @@
     </style>
 </head>
 <body x-data="notebookApp" x-init="init()">
+    <!-- Toast 容器 -->
+    <div class="toast-container" id="toast-container"></div>
+    
     <div class="toc-panel">
         <div class="toc-header">📑 目录</div>
         <ul class="toc-list">
@@ -1779,6 +1819,28 @@
   ]
 }</script>
     <script>
+    // Toast 提示函数
+    function showToast(message, type = 'info', duration = 3000) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        
+        // 触发显示动画
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+        
+        // 自动移除
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                container.removeChild(toast);
+            }, 300);
+        }, duration);
+    }
+    
     function notebookApp() {
         const config = JSON.parse(document.getElementById('notebook-data').textContent);
         return {
@@ -1795,6 +1857,10 @@
                 this.$nextTick(() => {
                     this.renderAllComponents();
                 });
+            },
+            
+            showToast(message, type, duration) {
+                showToast(message, type, duration);
             },
             
             toggleItemSelection(index) {
@@ -1836,7 +1902,7 @@
                 
                 const screenshotArea = document.getElementById('screenshot-area');
                 if (!screenshotArea) {
-                    alert('未找到截图区域');
+                    showToast('未找到截图区域', 'error');
                     return;
                 }
                 
@@ -1860,7 +1926,7 @@
                         await navigator.clipboard.write([
                             new ClipboardItem({ 'image/png': blob })
                         ]);
-                        alert(`截图已复制到剪贴板 (${this.selectedItems.size}个区域)`);
+                        showToast(`截图已复制到剪贴板 (${this.selectedItems.size}个区域)`);
                     } catch (err) {
                         console.error('复制到剪贴板失败:', err);
                         // 降级方案：自动下载图片
@@ -1870,12 +1936,12 @@
                         link.href = url;
                         link.click();
                         URL.revokeObjectURL(url);
-                        alert('已自动下载截图（剪贴板需要页面焦点）');
+                        showToast('已自动下载截图（剪贴板需要页面焦点）');
                     }
                 } catch (error) {
                     screenshotArea.classList.remove('screenshot-mode');
                     console.error('截图失败:', error);
-                    alert('截图失败: ' + error.message);
+                    showToast('截图失败: ' + error.message, 'error');
                 }
             },
             
