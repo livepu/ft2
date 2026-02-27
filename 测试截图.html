@@ -2066,6 +2066,9 @@
                 return result;
             },
             
+            // 暖冷渐变系4 配色方案
+            chartColors: ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4'],
+            
             renderChart(containerId, cell) {
                 const container = document.getElementById(containerId);
                 if (!container) return;
@@ -2073,11 +2076,13 @@
                 const chart = echarts.init(container);
                 const chartType = cell.content.chart_type;
                 const data = cell.content.data;
+                const colors = this.chartColors;
                 
                 let option = {};
                 
                 if (chartType === 'line' || chartType === 'area') {
                     option = {
+                        color: colors,
                         tooltip: { trigger: 'axis' },
                         legend: { data: data.series.map(s => s.name), top: 5 },
                         grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
@@ -2087,19 +2092,37 @@
                             scale: true,
                             boundaryGap: ['10%', '10%']
                         },
-                        series: data.series.map(s => ({
+                        series: data.series.map((s, i) => ({
                             name: s.name,
                             type: 'line',
                             data: s.data,
                             smooth: true,
-                            areaStyle: chartType === 'area' ? {} : undefined,
-                            itemStyle: { color: s.color }
+                            areaStyle: chartType === 'area' ? { 
+                                color: {
+                                    type: 'linear',
+                                    x: 0, y: 0, x2: 0, y2: 1,
+                                    colorStops: [
+                                        { offset: 0, color: colors[i] + '60' },
+                                        { offset: 1, color: colors[i] + '10' }
+                                    ]
+                                }
+                            } : undefined,
+                            itemStyle: { color: colors[i] }
                         }))
                     };
                 } else if (chartType === 'bar') {
                     option = {
                         tooltip: { trigger: 'axis' },
-                        legend: { data: data.series.map(s => s.name), top: 5 },
+                        legend: { 
+                            data: data.series.map(s => ({
+                                name: s.name,
+                                icon: 'rect'
+                            })),
+                            top: 5,
+                            itemStyle: {
+                                color: '#e74c3c' // legend使用红色
+                            }
+                        },
                         grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
                         xAxis: { type: 'category', data: data.categories },
                         yAxis: { 
@@ -2107,22 +2130,35 @@
                             scale: true,
                             boundaryGap: ['10%', '10%']
                         },
-                        series: data.series.map(s => ({
+                        series: data.series.map((s, i) => ({
                             name: s.name,
                             type: 'bar',
-                            data: s.data
+                            data: s.data,
+                            itemStyle: { 
+                                color: function(params) {
+                                    // 根据数值正负设置颜色：正数红色，负数蓝色
+                                    const value = params.value;
+                                    if (value >= 0) {
+                                        return '#e74c3c'; // 珊瑚红
+                                    } else {
+                                        return '#5499c7'; // 青色
+                                    }
+                                },
+                                borderRadius: [4, 4, 0, 0]
+                            }
                         }))
                     };
                 } else if (chartType === 'pie') {
                     option = {
+                        color: colors,
                         tooltip: { 
                             trigger: 'item',
                             formatter: '{b}: {c} ({d}%)'
                         },
                         legend: { 
                             top: 10,
-                            orient: 'horizontal',
-                            left: 'center'
+                            left: 'center',
+                            orient: 'horizontal'
                         },
                         series: [{
                             type: 'pie',
