@@ -1,7 +1,7 @@
-# Notebook 可视化设计方案 V2
+# Notebook 可视化设计方案 V3
 
-> 制定时间：2025-02-19
-> 目标：构建统一、规范、交互友好的可视化系统
+> 制定时间：2025-02-27
+> 目标：构建统一、规范、简洁的可视化系统
 > 技术方案：Section 模块化布局 + pyecharts 图表 + Notion 风格样式
 
 ---
@@ -14,16 +14,14 @@
 ┌─────────────────────────────────────────────────────────┐
 │                    ft2 Notebook 系统                     │
 ├─────────────────────────────────────────────────────────┤
+│  用户层                                                  │
+│  └── Notebook: 统一入口，简洁 API                        │
+├─────────────────────────────────────────────────────────┤
 │  数据层                                                  │
 │  ├── Cell: 内容单元（类型 + 内容 + 标题 + 配置）          │
 │  └── CellBuilder: 静态工厂方法创建各类 Cell              │
 ├─────────────────────────────────────────────────────────┤
-│  逻辑层                                                  │
-│  ├── Notebook: 管理 Cells 集合                          │
-│  ├── SectionContext: 上下文管理器实现 Section 嵌套        │
-│  └── 栈结构: 支持多层 Section 嵌套                       │
-├─────────────────────────────────────────────────────────┤
-│  表现层                                                  │
+│  渲染层                                                  │
 │  ├── Jinja2 模板: 渲染 HTML 结构                         │
 │  ├── Alpine.js: 交互逻辑（表格排序、折叠展开）            │
 │  ├── ECharts: 图表渲染                                   │
@@ -31,22 +29,17 @@
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 模块层次关系
+### 1.2 设计理念
 
 ```
-Notebook (报告)
-├── Section (一级模块)
-│   ├── Cell (内容块: text/markdown/table/metrics/chart...)
-│   └── Section.nested-section (二级模块)
-│       ├── Cell
-│       └── Section.nested-section (三级模块)
-│           └── Cell
+简洁的 API + 清晰的架构 + 灵活的扩展
 ```
 
-**设计原则**:
-- **Section** 是模块容器，带标题，可嵌套
-- **Cell** 是内容块，统一在 Section 内容区内
-- 层级通过 CSS 类区分（颜色、边框、背景）
+**核心原则**:
+- **少即是多**: 7个图表方法 → 1个 `chart()`
+- **统一入口**: 用户无需记忆多个方法
+- **自动识别**: pyecharts 对象智能识别
+- **分层清晰**: 用户接口 / 数据结构 / 渲染分离
 
 ---
 
@@ -91,10 +84,11 @@ class Cell:
 | TEXT | str | style: normal/heading/code |
 | MARKDOWN | str | - |
 | CODE | {code, language, output} | - |
-| TABLE | List[Dict] | columns: List[str] |
+| TABLE | List[Dict] | columns, freeze, page |
 | METRICS | List[Dict{name,value,desc}] | columns: int |
 | CHART | {chart_type, data} | height, color, ... |
 | PYECHARTS | {option, width, height} | - |
+| HEATMAP | Dict | - |
 | COLLAPSIBLE | List[Cell] | collapsed: bool |
 | SECTION | List[Cell] | level: int |
 
@@ -111,9 +105,9 @@ from notebook import Notebook
 nb = Notebook("策略回测报告")
 
 # 添加内容（链式调用）
-nb.add_title("回测结果", level=1) \
-  .add_text("本报告展示策略表现...") \
-  .add_metrics([
+nb.title("回测结果", level=1) \
+  .text("本报告展示策略表现...") \
+  .metrics([
       {'name': '总收益', 'value': '45.6%', 'desc': '累计'},
       {'name': '夏普比率', 'value': '1.85', 'desc': '风险调整后'}
   ], title="核心指标")
@@ -127,55 +121,63 @@ nb.export_html("report.html")
 ```python
 # 方式1: 上下文管理器（推荐）
 with nb.section("收益分析"):
-    nb.add_metrics([...], title="收益指标")
-    nb.add_line_chart(dates, series, title="净值曲线")
+    nb.metrics([...], title="收益指标")
+    nb.chart('line', {'dates': dates, 'series': series}, title="净值曲线")
     
     with nb.section("月度统计"):  # 嵌套
-        nb.add_bar_chart(months, returns, title="月度收益")
+        nb.chart('bar', {'categories': months, 'series': returns}, title="月度收益")
 
 # 方式2: 链式调用（Section 内）
 with nb.section("风险分析"):
-    nb.add_metrics([...], title="风险指标") \
-      .add_area_chart(dates, drawdowns, title="回撤曲线") \
-      .add_heatmap(monthly_data, title="月度热力图")
+    nb.metrics([...], title="风险指标") \
+      .chart('area', {'dates': dates, 'series': drawdowns}, title="回撤曲线") \
+      .chart('heatmap', monthly_data, title="月度热力图")
 ```
 
 ### 3.3 完整 API 列表
 
 ```python
 # 标题文本
-add_title(text, level=1)
-add_text(text, style='normal')
-add_markdown(text)
-add_divider()
+title(text, level=1)
+text(text, style='normal')
+markdown(text)
+divider()
 
 # 代码
-add_code(code, language='python', output=None)
+code(code, language='python', output=None)
 
-# 表格
-add_table(data, columns=None, title=None)
-add_dataframe(df, title=None, columns=None)
+# 表格（支持冻结、折叠）
+table(data, columns=None, title=None, **options)
+    # options:
+    #   freeze: int 或 {'left': n, 'right': m}
+    #   page: {'limit': 20, 'limits': [10, 20, 50]}
+    #   collapsed: True/False
 
 # 指标
-add_metrics(data, title=None, columns=4)
+metrics(data, title=None, columns=4)
 
-# 图表
-add_line_chart(dates, series, title=None, **options)
-add_area_chart(dates, series, title=None, **options)
-add_bar_chart(categories, series, title=None, **options)
-add_pie_chart(data, title=None, **options)
-add_heatmap(data, title=None, **options)
-add_pyecharts(chart, title=None, height=400, width='100%')
-
-# 快捷方法
-add_equity_curve(dates, values, title='权益曲线', benchmark_values=None)
-add_drawdown_chart(dates, drawdowns, title='回撤曲线')
-add_monthly_returns_heatmap(monthly_returns, title='月度收益热力图')
+# 图表（统一入口）
+chart(chart_type, data=None, title=None, **options)
+    # chart_type:
+    #   - 'line': 折线图
+    #   - 'area': 面积图
+    #   - 'bar': 柱状图
+    #   - 'pie': 饼图
+    #   - 'heatmap': 热力图
+    #   - pyecharts 对象: 自动识别
+    # data 格式:
+    #   - line/area: {'dates': [...], 'series': [...]}
+    #   - bar: {'categories': [...], 'series': [...]}
+    #   - pie: [{'name': '', 'value': 0}, ...]
+    #   - heatmap: {'2024': {'01': 0.05, ...}, ...}
+    # options:
+    #   - height: 高度（默认 400）
+    #   - color: 颜色配置
+    #   - width: 宽度（仅 pyecharts）
 
 # 其他
-add_collapsible(title, cells, collapsed=True)
-add_collapsible_table(title, data, columns=None, collapsed=True)
-add_html(html_content)
+collapsible(title, cells, collapsed=True)
+html(html_content)
 
 # Section 容器
 section(title, level=None) -> SectionContext
@@ -236,9 +238,111 @@ def section(self, title, level=None):
 
 ---
 
-## 5. 模板渲染系统
+## 5. 图表系统
 
-### 5.1 HTML 结构
+### 5.1 统一入口设计
+
+```python
+def chart(self, chart_type, data=None, title=None, **options):
+    """
+    统一图表入口
+    
+    自动识别:
+    - chart_type 是字符串 → 普通图表
+    - chart_type 是 pyecharts 对象 → 自动识别
+    """
+    if hasattr(chart_type, 'dump_options'):
+        # pyecharts 对象
+        ...
+    elif chart_type == 'heatmap':
+        # 热力图
+        ...
+    else:
+        # 普通图表
+        ...
+```
+
+### 5.2 数据格式
+
+| 图表类型 | data 格式 |
+|---------|----------|
+| line/area | `{'dates': [...], 'series': [{'name': '', 'data': []}, ...]}` |
+| bar | `{'categories': [...], 'series': [{'name': '', 'data': []}, ...]}` |
+| pie | `[{'name': '', 'value': 0}, ...]` |
+| heatmap | `{'2024': {'01': 0.05, ...}, ...}` |
+| pyecharts | 直接传对象 |
+
+### 5.3 使用示例
+
+```python
+# 折线图
+nb.chart('line', {'dates': dates, 'series': series}, title='净值曲线')
+
+# 柱状图
+nb.chart('bar', {'categories': categories, 'series': series}, title='持仓')
+
+# 饼图
+nb.chart('pie', [{'name': '股票', 'value': 60}, ...], title='配置')
+
+# 热力图
+nb.chart('heatmap', monthly_returns, title='月度收益')
+
+# pyecharts 对象（自动识别）
+from pyecharts.charts import Kline, Grid
+kline = Kline().add_xaxis(dates).add_yaxis("K线", data)
+nb.chart(kline, title='K线图', height=600)
+
+# 复杂 pyecharts（Grid 布局）
+grid = Grid()
+grid.add(line1, grid_opts=opts.GridOpts(pos_left="5%", pos_right="55%"))
+grid.add(line2, grid_opts=opts.GridOpts(pos_left="55%", pos_right="5%"))
+nb.chart(grid, title='双轴图')
+```
+
+---
+
+## 6. 表格系统
+
+### 6.1 功能特性
+
+| 特性 | 说明 |
+|------|------|
+| 数据类型 | List[dict] 或 DataFrame（自动识别） |
+| 冻结列 | `freeze=2` 或 `freeze={'left': 2, 'right': 1}` |
+| 折叠 | `collapsed=True` |
+| 分页 | `page={'limit': 20}` |
+
+### 6.2 使用示例
+
+```python
+# 基础表格
+nb.table(data)
+
+# 指定列
+nb.table(data, columns=['code', 'name', 'type'], title='基金列表')
+
+# DataFrame 自动识别
+nb.table(df, title='数据表')
+
+# 冻结列
+nb.table(data, freeze=2)
+nb.table(data, freeze={'left': 2, 'right': 1})
+
+# 可折叠表格
+nb.table(data, title='详细数据', collapsed=True)
+
+# 冻结 + 折叠
+nb.table(data, title='详细数据', freeze=2, collapsed=True)
+
+# 分页
+nb.table(data, page={'limit': 20, 'limits': [10, 20, 50]})
+```
+
+---
+
+## 7. 模板渲染系统
+
+### 7.1 HTML 结构
 
 ```html
 <div class="notebook-container">
@@ -268,7 +372,7 @@ def section(self, title, level=None):
 </div>
 ```
 
-### 5.2 Notion 风格 CSS
+### 7.2 Notion 风格 CSS
 
 ```css
 /* Section 模块 */
@@ -303,18 +407,9 @@ def section(self, title, level=None):
     border-left: 4px solid #9b51e0;
     background: #faf9f7;
 }
-.nested-section .section-title {
-    color: #6b5b95;
-}
-.nested-section .nested-section {
-    border-left-color: #ff9500;
-}
-.nested-section .nested-section .section-title {
-    color: #c68a00;
-}
 ```
 
-### 5.3 层级颜色规范
+### 7.3 层级颜色规范
 
 | 层级 | 左边框 | 标题颜色 | 背景 |
 |------|--------|---------|------|
@@ -324,37 +419,7 @@ def section(self, title, level=None):
 
 ---
 
-## 6. pyecharts 集成
-
-### 6.1 使用方式
-
-```python
-from pyecharts.charts import Kline
-from pyecharts import options as opts
-
-# 创建 pyecharts 图表
-kline = (
-    Kline()
-    .add_xaxis(dates)
-    .add_yaxis("K线", kline_data)
-    .set_global_opts(title_opts=opts.TitleOpts(title="K线图"))
-)
-
-# 添加到 Notebook
-nb.add_pyecharts(kline, title="K线图", height=500)
-```
-
-### 6.2 数据转换
-
-```python
-def df_to_kline_data(df):
-    """DataFrame 转 pyecharts K线数据 [open, close, low, high]"""
-    return df[['open', 'close', 'low', 'high']].values.tolist()
-```
-
----
-
-## 7. 文件结构
+## 8. 文件结构
 
 ```
 ft2/
@@ -362,94 +427,87 @@ ft2/
 │   ├── __init__.py              # 导出 Notebook, Cell, CellType
 │   ├── notebook.py              # Notebook 主类 + SectionContext
 │   ├── cell.py                  # Cell 数据类 + CellBuilder
-│   ├── 设计方案V2.md            # 本文档
-│   └── charts/                  # 图表辅助函数（可选）
-│       ├── __init__.py
-│       └── helpers.py
+│   └── Notebook设计方案.md      # 本文档
 ├── template/
 │   ├── notebook.html            # 主模板（Notion 风格）
-│   ├── js/
-│   │   ├── alpine.min.js        # Alpine.js
-│   │   ├── alpine-table.js      # 表格组件
-│   │   └── echarts.min.js       # ECharts
-│   └── css/
-│       └── notion-style.css     # 样式（可选分离）
-├── test_notebook.py             # 综合测试示例
-├── 新式风格.html                # 样式参考
-└── demo_pyecharts.py            # pyecharts 示例
+│   └── js/
+│       ├── alpine.min.js        # Alpine.js
+│       ├── alpine-table.js      # 表格组件
+│       └── echarts.min.js       # ECharts
+└── test_notebook.py             # 综合测试示例
 ```
 
 ---
 
-## 8. 特性总结
+## 9. 特性总结
 
-### 8.1 核心特性
+### 9.1 核心特性
 
 | 特性 | 说明 |
 |------|------|
+| **简洁 API** | 方法命名无 `add_` 前缀，直观易用 |
+| **统一图表** | `chart()` 一个入口搞定所有图表 |
+| **自动识别** | pyecharts 对象智能识别 |
 | **模块化布局** | Section 容器 + Cell 内容块，层次清晰 |
 | **上下文管理** | `with nb.section()` 语法，自动层级计算 |
-| **链式调用** | 所有 `add_xxx` 方法返回 self |
-| **统一样式** | Notion 风格，三层嵌套颜色区分 |
+| **链式调用** | 所有方法返回 self |
+| **表格增强** | 冻结列、折叠、分页 |
 | **pyecharts** | 直接集成，支持所有 ECharts 图表 |
-| **交互表格** | 排序、分页、搜索 |
-| **可折叠** | 支持 collapsible 区域 |
 
-### 8.2 与 V1 对比
+### 9.2 与 V2 对比
 
-| 项目 | V1 | V2 |
+| 项目 | V2 | V3 |
 |------|-----|-----|
-| 布局方式 | Cell 平铺 | Section 模块化嵌套 |
-| 样式风格 | 混合 | 统一 Notion 风格 |
-| 层级支持 | 单层 | 三层嵌套 |
-| API 风格 | 单一 | 上下文管理器 + 链式 |
-| 代码高亮 | 基础 | 完整语法高亮 |
-| 可折叠 | 无 | 支持 |
+| 方法命名 | `add_xxx` | `xxx`（简洁） |
+| 图表方法 | 7个独立方法 | 1个 `chart()` |
+| 表格方法 | 3个独立方法 | 1个 `table()` |
+| 快捷方法 | 多个 | 精简 |
+| API 复杂度 | 较高 | **极简** |
 
 ---
 
-## 9. 使用示例
+## 10. 使用示例
 
-### 9.1 简单报告
+### 10.1 简单报告
 
 ```python
 nb = Notebook("日报")
-nb.add_title("今日行情", level=1)
-nb.add_metrics([
+nb.title("今日行情", level=1)
+nb.metrics([
     {'name': '上证指数', 'value': '3,050.21', 'desc': '+0.52%'},
     {'name': '深证成指', 'value': '9,875.43', 'desc': '+0.81%'},
 ])
 nb.export_html("daily.html")
 ```
 
-### 9.2 复杂报告
+### 10.2 复杂报告
 
 ```python
 nb = Notebook("策略回测报告")
 
 with nb.section("报告概述"):
-    nb.add_markdown("**策略**: 双均线 | **周期**: 2024-01 ~ 2024-12")
+    nb.markdown("**策略**: 双均线 | **周期**: 2024-01 ~ 2024-12")
 
 with nb.section("核心指标"):
-    nb.add_metrics([...], title="收益指标")
-    nb.add_metrics([...], title="风险指标")
+    nb.metrics([...], title="收益指标")
+    nb.metrics([...], title="风险指标")
 
 with nb.section("收益分析"):
-    nb.add_line_chart(dates, series, title="净值曲线")
+    nb.chart('line', {'dates': dates, 'series': series}, title="净值曲线")
     
     with nb.section("月度统计"):
-        nb.add_bar_chart(months, returns, title="月度收益")
-        nb.add_heatmap(monthly_data, title="热力图")
+        nb.chart('bar', {'categories': months, 'series': returns}, title="月度收益")
+        nb.chart('heatmap', monthly_data, title="热力图")
 
 with nb.section("交易记录"):
-    nb.add_collapsible_table("历史明细", trades, collapsed=True)
+    nb.table(trades, title="历史明细", collapsed=True, freeze=2)
 
 nb.export_html("report.html")
 ```
 
 ---
 
-## 10. 参考文档
+## 11. 参考文档
 
 - pyecharts: https://pyecharts.org/
 - ECharts: https://echarts.apache.org/
@@ -463,3 +521,4 @@ nb.export_html("report.html")
 |------|------|------|
 | V1 | 2025-02 | 基础 Notebook 系统，pyecharts 集成 |
 | V2 | 2025-02-19 | Section 模块化布局，Notion 风格，上下文管理器 |
+| V3 | 2025-02-27 | **API 极简化**：统一 `chart()`、`table()`，移除 `add_` 前缀 |

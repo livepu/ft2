@@ -233,7 +233,8 @@ class Notebook:
         # 自动识别 pyecharts 对象
         if hasattr(chart_type, 'dump_options'):
             height = options.get('height', 400)
-            return self._add_cell(CellBuilder.pyecharts(chart_type, title, height), title)
+            width = options.get('width', '100%')
+            return self._add_cell(CellBuilder.pyecharts(chart_type, title, height, width), title)
         
         # 热力图单独处理
         if chart_type == 'heatmap':
