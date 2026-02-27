@@ -21,7 +21,7 @@
             background: linear-gradient(90deg, #ffffff 0%, #f3e8ff 100%);
             border: 1px solid #e9d5ff;
             padding: 28px 24px;
-            margin-bottom: 24px;
+            margin-bottom: 12px;
             border-radius: 8px;
         }
         .notebook-header h1 {
@@ -1038,19 +1038,41 @@
             },
             
             buildToc() {
-                this.tocItems = this.cells
+                const items = [];
+                
+                // 添加封面标题
+                if (this.title) {
+                    items.push({
+                        title: this.title,
+                        type: 'header',
+                        index: -1
+                    });
+                }
+                
+                // 添加所有 section
+                this.cells
                     .filter(cell => cell.type === 'section' && cell.title)
-                    .map((cell, idx) => ({
-                        title: cell.title,
-                        index: this.cells.indexOf(cell)
-                    }));
+                    .forEach(cell => {
+                        items.push({
+                            title: cell.title,
+                            type: 'section',
+                            index: this.cells.indexOf(cell)
+                        });
+                    });
+                
+                this.tocItems = items;
             },
             
             scrollToSection(index) {
-                const sectionIndex = this.tocItems[index].index;
-                const section = document.querySelector(`#section-${sectionIndex}`);
-                if (section) {
-                    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                const item = this.tocItems[index];
+                if (item.type === 'header') {
+                    // 跳转到页面顶部
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                } else {
+                    const section = document.querySelector(`#section-${item.index}`);
+                    if (section) {
+                        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
                 }
             },
             
