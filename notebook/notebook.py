@@ -36,13 +36,13 @@ class Notebook:
         nb.title("回测结果")
         nb.table(data, columns=['code', 'name'], freeze=2)
         nb.metrics([{'name': '收益率', 'value': '15%'}])
-        nb.line_chart(dates, [{'name': '净值', 'data': values}])
+        nb.chart('line', {'dates': dates, 'series': series})
         nb.export_html("report.html")
         
         # Section 容器
         with nb.section("收益分析"):
             nb.metrics([...], title="核心指标")
-            nb.line_chart(dates, series, title="净值曲线")
+            nb.chart('line', {'dates': dates, 'series': series}, title="净值曲线")
     """
     
     def __init__(self, title: str = "Notebook Report"):
@@ -191,76 +191,57 @@ class Notebook:
     
     # ========== 图表 ==========
     
-    def chart(self, chart_type: str, data: dict, title: str = None,
-              height: int = 400, **options) -> 'Notebook':
-        """添加图表（通用）"""
-        return self._add_cell(CellBuilder.chart(chart_type, data, title, height, **options), title)
-    
-    def line_chart(self, dates: List, series: List[dict],
-                   title: str = None, **options) -> 'Notebook':
-        """添加折线图"""
-        return self._add_cell(CellBuilder.line_chart(dates, series, title, **options), title)
-
-    def area_chart(self, dates: List, series: List[dict],
-                   title: str = None, **options) -> 'Notebook':
-        """添加面积图"""
-        return self._add_cell(CellBuilder.area_chart(dates, series, title, **options), title)
-
-    def bar_chart(self, categories: List, series: List[dict],
-                  title: str = None, **options) -> 'Notebook':
-        """添加柱状图"""
-        return self._add_cell(CellBuilder.bar_chart(categories, series, title, **options), title)
-
-    def pie_chart(self, data: List[dict], title: str = None,
-                  **options) -> 'Notebook':
-        """添加饼图"""
-        return self._add_cell(CellBuilder.pie_chart(data, title, **options), title)
-
-    def heatmap(self, data: dict, title: str = None, **options) -> 'Notebook':
-        """添加热力图"""
-        return self._add_cell(CellBuilder.heatmap(data, title, **options), title)
-    
-    def pyecharts(self, chart, title: str = None, height: int = 400,
-                  width: str = '100%') -> 'Notebook':
+    def chart(self, chart_type, data=None, title=None, **options):
         """
-        添加 pyecharts 图表
-
-        Args:
-            chart: pyecharts 图表对象（Kline, Line, Bar, Pie 等）
-            title: 可选标题
-            height: 图表高度（像素）
-            width: 图表宽度（默认100%）
-
-        Returns:
-            Notebook: 支持链式调用
-        """
-        return self._add_cell(CellBuilder.pyecharts(chart, title, height, width), title)
-    
-    # ========== 权益曲线快捷方法 ==========
-    
-    def equity_curve(self, dates: List, values: List, 
-                     title: str = '权益曲线',
-                     benchmark_values: List = None) -> 'Notebook':
-        """添加权益曲线图"""
-        series = [{'name': '策略净值', 'data': values}]
-        if benchmark_values:
-            series.append({'name': '基准净值', 'data': benchmark_values})
-        return self.line_chart(dates, series, title)
-    
-    def drawdown_chart(self, dates: List, drawdowns: List,
-                       title: str = '回撤曲线') -> 'Notebook':
-        """添加回撤曲线图"""
-        series = [{'name': '回撤', 'data': drawdowns}]
-        return self.area_chart(dates, series, title, color='#E94F37')
-    
-    def monthly_returns_heatmap(self, monthly_returns: dict,
-                                title: str = '月度收益热力图') -> 'Notebook':
-        """
-        添加月度收益热力图
+        添加图表（统一入口）
         
-        monthly_returns格式: {'2023': {'01': 0.05, '02': -0.02, ...}, ...}
+        Args:
+            chart_type: 图表类型
+                - 'line': 折线图
+                - 'area': 面积图
+                - 'bar': 柱状图
+                - 'pie': 饼图
+                - 'heatmap': 热力图
+                - pyecharts 对象: 直接传入，自动识别
+            data: 图表数据（格式因类型而异）
+                - line/area: {'dates': [...], 'series': [{'name': '', 'data': []}, ...]}
+                - bar: {'categories': [...], 'series': [{'name': '', 'data': []}, ...]}
+                - pie: [{'name': '', 'value': 0}, ...]
+                - heatmap: {'2024': {'01': 0.05, ...}, ...}
+            title: 标题
+            **options: 可选参数
+                - height: 高度（默认 400）
+                - color: 颜色配置
+                - 其他配置
+        
+        Examples:
+            # 折线图
+            nb.chart('line', {'dates': dates, 'series': series})
+            
+            # 柱状图
+            nb.chart('bar', {'categories': categories, 'series': series})
+            
+            # 饼图
+            nb.chart('pie', [{'name': '股票', 'value': 60}, ...])
+            
+            # 热力图
+            nb.chart('heatmap', monthly_returns)
+            
+            # pyecharts 对象（自动识别）
+            nb.chart(kline_chart)
         """
-        return self.heatmap(monthly_returns, title)
+        # 自动识别 pyecharts 对象
+        if hasattr(chart_type, 'dump_options'):
+            height = options.get('height', 400)
+            return self._add_cell(CellBuilder.pyecharts(chart_type, title, height), title)
+        
+        # 热力图单独处理
+        if chart_type == 'heatmap':
+            return self._add_cell(CellBuilder.heatmap(data, title, **options), title)
+        
+        # 普通图表
+        height = options.get('height', 400)
+        return self._add_cell(CellBuilder.chart(chart_type, data, title, height, **options), title)
     
     # ========== 可折叠区域 ==========
     
