@@ -272,7 +272,100 @@ def chart(self, chart_type, data=None, title=None, **options):
 | heatmap | `{'2024': {'01': 0.05, ...}, ...}` |
 | pyecharts | 直接传对象 |
 
-### 5.3 使用示例
+### 5.3 DataFrame 转换
+
+#### 折线图/面积图
+
+```python
+# DataFrame 结构
+df = pd.DataFrame({
+    'date': ['2024-01-01', '2024-01-02', ...],
+    'strategy': [1.0, 1.05, ...],
+    'benchmark': [1.0, 1.03, ...]
+})
+
+# 转换
+dates = df['date'].tolist()
+series = [
+    {'name': '策略净值', 'data': df['strategy'].tolist()},
+    {'name': '基准净值', 'data': df['benchmark'].tolist()}
+]
+nb.chart('line', {'dates': dates, 'series': series})
+```
+
+#### 柱状图
+
+```python
+# DataFrame 结构
+df = pd.DataFrame({
+    'category': ['股票', '债券', '现金'],
+    'current': [60, 25, 15],
+    'target': [50, 30, 20]
+})
+
+# 转换
+categories = df['category'].tolist()
+series = [
+    {'name': '当前配置', 'data': df['current'].tolist()},
+    {'name': '目标配置', 'data': df['target'].tolist()}
+]
+nb.chart('bar', {'categories': categories, 'series': series})
+```
+
+#### 饼图
+
+```python
+# DataFrame 结构
+df = pd.DataFrame({
+    'name': ['股票', '债券', '现金'],
+    'value': [60, 25, 15]
+})
+
+# 转换（最简单）
+nb.chart('pie', df.to_dict('records'))
+```
+
+#### 热力图（月度收益）
+
+```python
+# DataFrame 结构
+df = pd.DataFrame({
+    'date': pd.date_range('2024-01-01', periods=12, freq='M'),
+    'return': [0.05, -0.02, ...]
+})
+df['year'] = df['date'].dt.year.astype(str)
+df['month'] = df['date'].dt.month.astype(str).str.zfill(2)
+
+# 转换
+monthly_returns = df.groupby('year').apply(
+    lambda x: x.set_index('month')['return'].to_dict()
+).to_dict()
+nb.chart('heatmap', monthly_returns)
+```
+
+#### 辅助函数封装
+
+```python
+def df_to_line_chart(df, date_col='date', value_cols=None):
+    """DataFrame 转折线图格式"""
+    dates = df[date_col].tolist()
+    cols = value_cols or [c for c in df.columns if c != date_col]
+    series = [{'name': col, 'data': df[col].tolist()} for col in cols]
+    return {'dates': dates, 'series': series}
+
+def df_to_bar_chart(df, category_col, value_cols=None):
+    """DataFrame 转柱状图格式"""
+    categories = df[category_col].tolist()
+    cols = value_cols or [c for c in df.columns if c != category_col]
+    series = [{'name': col, 'data': df[col].tolist()} for col in cols]
+    return {'categories': categories, 'series': series}
+
+# 使用
+nb.chart('line', df_to_line_chart(df, 'date', ['strategy', 'benchmark']))
+nb.chart('bar', df_to_bar_chart(df, 'category'))
+```
+
+### 5.4 使用示例
 
 ```python
 # 折线图

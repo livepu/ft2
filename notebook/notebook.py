@@ -46,7 +46,7 @@ class Notebook:
     """
     
     def __init__(self, title: str = "Notebook Report"):
-        self.title = title
+        self.nb_title = title
         self.cells: List[Cell] = []
         self.created_at = datetime.now()
         self._cell_counter = 0
@@ -232,17 +232,14 @@ class Notebook:
         """
         # 自动识别 pyecharts 对象
         if hasattr(chart_type, 'dump_options'):
-            height = options.get('height', 400)
-            width = options.get('width', '100%')
-            return self._add_cell(CellBuilder.pyecharts(chart_type, title, height, width), title)
+            return self._add_cell(CellBuilder.pyecharts(chart_type, title, **options), title)
         
         # 热力图单独处理
         if chart_type == 'heatmap':
             return self._add_cell(CellBuilder.heatmap(data, title, **options), title)
         
         # 普通图表
-        height = options.get('height', 400)
-        return self._add_cell(CellBuilder.chart(chart_type, data, title, height, **options), title)
+        return self._add_cell(CellBuilder.chart(chart_type, data, title, **options), title)
     
     # ========== 可折叠区域 ==========
     
@@ -262,7 +259,7 @@ class Notebook:
     def to_dict(self) -> dict:
         """转换为字典"""
         return {
-            'title': self.title,
+            'title': self.nb_title,
             'created_at': self.created_at.isoformat(),
             'cells': [cell.to_dict() for cell in self.cells]
         }
@@ -290,7 +287,7 @@ class Notebook:
         template = env.get_template(Path(template_path).name)
         
         data = {
-            'title': self.title,
+            'title': self.nb_title,
             'createdAt': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
             'cells': [cell.to_dict() for cell in self.cells]
         }
@@ -305,7 +302,7 @@ class Notebook:
         return str(output_path)
     
     def __repr__(self):
-        return f"<Notebook '{self.title}' with {len(self.cells)} cells>"
+        return f"<Notebook '{self.nb_title}' with {len(self.cells)} cells>"
     
     def __len__(self):
         return len(self.cells)

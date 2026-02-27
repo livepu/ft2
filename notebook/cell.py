@@ -133,9 +133,9 @@ class CellBuilder:
         )
     
     @staticmethod
-    def chart(chart_type: str, data: Dict, title: str = None, 
-              height: int = 400, **options) -> Cell:
+    def chart(chart_type: str, data: Dict, title: str = None, **options) -> Cell:
         """创建图表单元格"""
+        height = options.pop('height', 400)
         chart_options = {'height': height, **options}
         return Cell(
             type=CellType.CHART,
@@ -198,19 +198,22 @@ class CellBuilder:
         return Cell(type=CellType.HTML, content=html_content)
     
     @staticmethod
-    def pyecharts(chart, title: str = None, height: int = 400, width: str = '100%') -> Cell:
+    def pyecharts(chart, title: str = None, **options) -> Cell:
         """
         创建 pyecharts 图表单元格
         
         Args:
             chart: pyecharts 图表对象（Kline, Line, Bar, Pie 等）
             title: 可选标题
-            height: 图表高度（像素）
-            width: 图表宽度（默认100%）
+            **options: 可选参数
+                - height: 图表高度（像素，默认400）
+                - width: 图表宽度（默认100%）
         
         Returns:
             Cell: 封装后的单元格
         """
+        height = options.pop('height', 400)
+        width = options.pop('width', '100%')
         return Cell(
             type=CellType.PYECHARTS,
             content={
