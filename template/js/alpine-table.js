@@ -502,6 +502,10 @@ window.table = function table(config = {}) {
       injectFreezeStyles();
       this.loadDataFromConfig();
       
+      if (this.$cleanup) {
+        this.$cleanup(() => this.destroyFreeze());
+      }
+      
       this.$nextTick(() => {
         this.render();
       });
