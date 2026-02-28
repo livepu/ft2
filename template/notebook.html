@@ -637,6 +637,48 @@
             }
         }
         
+        /* 截图模式：隐藏未选中的元素 */
+        .screenshot-mode .screenshot-hidden {
+            display: none !important;
+        }
+        
+        /* Toast 提示样式 */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .toast {
+            background: #f3e8ff;
+            color: #6b21a8;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border: 1px solid #e9d5ff;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s ease;
+            pointer-events: auto;
+            min-width: 200px;
+            text-align: center;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast.error {
+            background: #fef2f2;
+            color: #dc2626;
+            border-color: #fecaca;
+        }
+        
         .toc-panel {
             position: fixed;
             top: 20px;
@@ -705,12 +747,11 @@
             padding: 8px 12px;
             font-size: 13px;
             color: #fff;
-            background: #6b21a8;
+            background: #9b51e0;
             border: none;
             border-radius: 4px;
             cursor: pointer;
         }
-        .toc-btn:hover { background: #7c3aed; }
         .toc-btn:disabled { background: #ccc; cursor: not-allowed; }
         .toc-select-all {
             padding: 8px 12px;
@@ -723,8 +764,11 @@
         .toc-select-all span { cursor: pointer; }
     </style>
 </head>
-<body>
-    <div class="toc-panel" x-data="notebookApp">
+<body x-data="notebookApp" x-init="init()">
+    <!-- Toast 容器 -->
+    <div class="toast-container" id="toast-container"></div>
+    
+    <div class="toc-panel">
         <div class="toc-header">📑 目录</div>
         <ul class="toc-list">
             <template x-for="(item, index) in tocItems" :key="index">
@@ -745,48 +789,48 @@
         </div>
     </div>
     
-    <div class="notebook-container" x-data="notebookApp" x-init="init()">
-        <div class="notebook-header">
+    <div class="notebook-container" id="screenshot-area">
+        <div class="notebook-header" :class="{ 'screenshot-hidden': !isSelected(-1) }">
             <h1 x-text="title"></h1>
             <div class="meta" x-text="'生成时间: ' + createdAt"></div>
         </div>
-        
-        <template x-for="(cell, index) in cells" :key="index">
-            <div>
-                <template x-if="cell.type === 'section'">
-                    <div class="section" :id="'section-' + index">
-                        <div class="section-title" x-show="cell.title" x-text="cell.title"></div>
-                        <div class="section-content">
-                            <template x-for="(subCell, subIndex) in cell.content" :key="subIndex">
-                                <div>
-                                    <template x-if="subCell.type === 'title'">
-                                        <div class="cell">
-                                            <div class="cell-title">
-                                                <h1 x-show="subCell.options.level === 1" x-text="subCell.content"></h1>
-                                                <h2 x-show="subCell.options.level === 2" x-text="subCell.content"></h2>
-                                                <h3 x-show="subCell.options.level === 3" x-text="subCell.content"></h3>
-                                            </div>
-                                        </div>
-                                    </template>
-                                    <template x-if="subCell.type === 'text'">
-                                        <div class="cell"><div class="cell-text" :class="'text-' + subCell.options.style" x-text="subCell.content"></div></div>
-                                    </template>
-                                    <template x-if="subCell.type === 'markdown'">
-                                        <div class="cell"><div class="markdown-content" x-html="renderMarkdown(subCell.content)"></div></div>
-                                    </template>
-                                    <template x-if="subCell.type === 'code'">
-                                        <div class="cell" style="padding: 0; overflow: hidden;">
-                                            <div class="cell-code">
-                                                <div class="code-block">
-                                                    <div class="code-header">
-                                                        <span class="code-lang" x-text="subCell.content.lang || 'Python'"></span>
-                                                    </div>
-                                                    <div class="code-input"><pre x-text="subCell.content.code"></pre></div>
-                                                    <div class="code-output" x-show="subCell.content.output" x-text="subCell.content.output"></div>
+            
+            <template x-for="(cell, index) in cells" :key="index">
+                <div>
+                    <template x-if="cell.type === 'section'">
+                        <div class="section" :id="'section-' + index" :class="{ 'screenshot-hidden': !isSelected(index) }">
+                            <div class="section-title" x-show="cell.title" x-text="cell.title"></div>
+                            <div class="section-content">
+                                <template x-for="(subCell, subIndex) in cell.content" :key="subIndex">
+                                    <div>
+                                        <template x-if="subCell.type === 'title'">
+                                            <div class="cell">
+                                                <div class="cell-title">
+                                                    <h1 x-show="subCell.options.level === 1" x-text="subCell.content"></h1>
+                                                    <h2 x-show="subCell.options.level === 2" x-text="subCell.content"></h2>
+                                                    <h3 x-show="subCell.options.level === 3" x-text="subCell.content"></h3>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </template>
+                                        </template>
+                                        <template x-if="subCell.type === 'text'">
+                                            <div class="cell"><div class="cell-text" :class="'text-' + subCell.options.style" x-text="subCell.content"></div></div>
+                                        </template>
+                                        <template x-if="subCell.type === 'markdown'">
+                                            <div class="cell"><div class="markdown-content" x-html="renderMarkdown(subCell.content)"></div></div>
+                                        </template>
+                                        <template x-if="subCell.type === 'code'">
+                                            <div class="cell" style="padding: 0; overflow: hidden;">
+                                                <div class="cell-code">
+                                                    <div class="code-block">
+                                                        <div class="code-header">
+                                                            <span class="code-lang" x-text="subCell.content.lang || 'Python'"></span>
+                                                        </div>
+                                                        <div class="code-input"><pre x-text="subCell.content.code"></pre></div>
+                                                        <div class="code-output" x-show="subCell.content.output" x-text="subCell.content.output"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
                                     <template x-if="subCell.type === 'table'">
                                         <div class="cell">
                                             <div class="cell-table">
@@ -1065,6 +1109,28 @@
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/echarts.min.js"></script>
     <script id="notebook-data" type="application/json">{{ data_json | safe }}</script>
     <script>
+    // Toast 提示函数
+    function showToast(message, type = 'info', duration = 3000) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        
+        // 触发显示动画
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+        
+        // 自动移除
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                container.removeChild(toast);
+            }, 300);
+        }, duration);
+    }
+    
     function notebookApp() {
         const config = JSON.parse(document.getElementById('notebook-data').textContent);
         return {
@@ -1081,6 +1147,10 @@
                 this.$nextTick(() => {
                     this.renderAllComponents();
                 });
+            },
+            
+            showToast(message, type, duration) {
+                showToast(message, type, duration);
             },
             
             toggleItemSelection(index) {
@@ -1111,68 +1181,58 @@
                 return this.tocItems.length > 0 && this.selectedItems.size === this.tocItems.length;
             },
             
+            isSelected(cellIndex) {
+                // cellIndex: -1 表示 header, >=0 表示 cells 的索引
+                const tocIndex = this.tocItems.findIndex(item => item.index === cellIndex);
+                if (tocIndex === -1) return false;
+                return this.selectedItems.has(tocIndex);
+            },
+            
             async captureScreenshot() {
                 if (this.selectedItems.size === 0) return;
-                
-                // 获取选中的元素
-                const elements = [];
-                this.selectedItems.forEach(index => {
-                    const item = this.tocItems[index];
-                    if (item.type === 'header') {
-                        const header = document.querySelector('.notebook-header');
-                        if (header) elements.push(header);
-                    } else {
-                        const section = document.querySelector(`#section-${item.index}`);
-                        if (section) elements.push(section);
-                    }
-                });
-                
-                if (elements.length === 0) {
-                    alert('未找到选中的内容');
+
+                const screenshotArea = document.getElementById('screenshot-area');
+                if (!screenshotArea) {
+                    showToast('未找到截图区域', 'error');
                     return;
                 }
-                
+
                 try {
-                    // 创建临时容器
-                    const tempContainer = document.createElement('div');
-                    tempContainer.style.cssText = `
-                        position: absolute;
-                        left: -9999px;
-                        top: 0;
-                        width: 900px;
-                        background: #f5f5f5;
-                        padding: 20px;
-                    `;
-                    document.body.appendChild(tempContainer);
-                    
-                    // 克隆选中的元素
-                    elements.forEach(el => {
-                        const clone = el.cloneNode(true);
-                        tempContainer.appendChild(clone);
+                    screenshotArea.classList.add('screenshot-mode');
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    const result = await snapdom(screenshotArea, {
+                        backgroundColor: '#f5f5f5',
+                        scale: 1,
+                        cache: 'auto'
                     });
-                    
-                    // 等待图表渲染
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    
-                    // 使用 snapdom 截图
-                    const snap = window.snapdom || snapdom;
-                    const dataUrl = await snap.toPng(tempContainer, {
-                        scale: 2,
-                        backgroundColor: '#f5f5f5'
-                    });
-                    
-                    // 下载图片
-                    const link = document.createElement('a');
-                    link.download = `截图_${new Date().toLocaleString().replace(/[/:]/g, '-')}.png`;
-                    link.href = dataUrl;
-                    link.click();
-                    
-                    // 清理
-                    document.body.removeChild(tempContainer);
-                    
+
+                    screenshotArea.classList.remove('screenshot-mode');
+
+                    const blob = await result.toBlob({ type: 'png' });
+
+                    try {
+                        // 确保页面有焦点后再写入剪贴板
+                        window.focus();
+                        await navigator.clipboard.write([
+                            new ClipboardItem({ 'image/png': blob })
+                        ]);
+                        showToast(`截图已复制到剪贴板 (${this.selectedItems.size}个区域)`);
+                    } catch (err) {
+                        console.error('复制到剪贴板失败:', err);
+                        // 降级方案：自动下载图片
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.download = `截图_${new Date().toLocaleString().replace(/[/:]/g, '-')}.png`;
+                        link.href = url;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        showToast('已自动下载截图（剪贴板需要页面焦点）');
+                    }
                 } catch (error) {
+                    screenshotArea.classList.remove('screenshot-mode');
                     console.error('截图失败:', error);
-                    alert('截图失败: ' + error.message);
+                    showToast('截图失败: ' + error.message, 'error');
                 }
             },
             
@@ -1188,16 +1248,16 @@
                     });
                 }
                 
-                // 添加所有 section
-                this.cells
-                    .filter(cell => cell.type === 'section' && cell.title)
-                    .forEach(cell => {
+                // 添加所有 section（使用 forEach 的 index 而不是 indexOf）
+                this.cells.forEach((cell, cellIndex) => {
+                    if (cell.type === 'section' && cell.title) {
                         items.push({
                             title: cell.title,
                             type: 'section',
-                            index: this.cells.indexOf(cell)
+                            index: cellIndex
                         });
-                    });
+                    }
+                });
                 
                 this.tocItems = items;
             },
@@ -1298,6 +1358,8 @@
                 return result;
             },
             
+            chartColors: ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4'],
+            
             renderChart(containerId, cell) {
                 const container = document.getElementById(containerId);
                 if (!container) return;
@@ -1305,48 +1367,88 @@
                 const chart = echarts.init(container);
                 const chartType = cell.content.chart_type;
                 const data = cell.content.data;
+                const colors = this.chartColors;
                 
                 let option = {};
                 
                 if (chartType === 'line' || chartType === 'area') {
                     option = {
+                        color: colors,
                         tooltip: { trigger: 'axis' },
                         legend: { data: data.series.map(s => s.name), top: 5 },
                         grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
                         xAxis: { type: 'category', boundaryGap: false, data: data.dates },
-                        yAxis: { type: 'value' },
-                        series: data.series.map(s => ({
+                        yAxis: { 
+                            type: 'value',
+                            scale: true,
+                            boundaryGap: ['10%', '10%']
+                        },
+                        series: data.series.map((s, i) => ({
                             name: s.name,
                             type: 'line',
                             data: s.data,
                             smooth: true,
-                            areaStyle: chartType === 'area' ? {} : undefined,
-                            itemStyle: { color: s.color }
+                            areaStyle: chartType === 'area' ? { 
+                                color: {
+                                    type: 'linear',
+                                    x: 0, y: 0, x2: 0, y2: 1,
+                                    colorStops: [
+                                        { offset: 0, color: colors[i] + '60' },
+                                        { offset: 1, color: colors[i] + '10' }
+                                    ]
+                                }
+                            } : undefined,
+                            itemStyle: { color: colors[i] }
                         }))
                     };
                 } else if (chartType === 'bar') {
                     option = {
                         tooltip: { trigger: 'axis' },
-                        legend: { data: data.series.map(s => s.name), top: 5 },
+                        legend: { 
+                            data: data.series.map(s => ({
+                                name: s.name,
+                                icon: 'rect'
+                            })),
+                            top: 5,
+                            itemStyle: {
+                                color: '#e74c3c'
+                            }
+                        },
                         grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
                         xAxis: { type: 'category', data: data.categories },
-                        yAxis: { type: 'value' },
-                        series: data.series.map(s => ({
+                        yAxis: { 
+                            type: 'value',
+                            scale: true,
+                            boundaryGap: ['10%', '10%']
+                        },
+                        series: data.series.map((s, i) => ({
                             name: s.name,
                             type: 'bar',
-                            data: s.data
+                            data: s.data,
+                            itemStyle: { 
+                                color: function(params) {
+                                    const value = params.value;
+                                    if (value >= 0) {
+                                        return '#e74c3c';
+                                    } else {
+                                        return '#5499c7';
+                                    }
+                                },
+                                borderRadius: [4, 4, 0, 0]
+                            }
                         }))
                     };
                 } else if (chartType === 'pie') {
                     option = {
+                        color: colors,
                         tooltip: { 
                             trigger: 'item',
                             formatter: '{b}: {c} ({d}%)'
                         },
                         legend: { 
                             top: 10,
-                            orient: 'horizontal',
-                            left: 'center'
+                            left: 'center',
+                            orient: 'horizontal'
                         },
                         series: [{
                             type: 'pie',
@@ -1390,14 +1492,24 @@
                 const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
                 
                 const heatmapData = [];
+                let minValue = Infinity;
+                let maxValue = -Infinity;
+                
                 years.forEach((year, yIndex) => {
                     months.forEach((month, mIndex) => {
                         const value = data[year][month];
                         if (value !== undefined) {
-                            heatmapData.push([mIndex, yIndex, (value * 100).toFixed(2)]);
+                            const percentValue = parseFloat((value * 100).toFixed(2));
+                            heatmapData.push([mIndex, yIndex, percentValue]);
+                            minValue = Math.min(minValue, percentValue);
+                            maxValue = Math.max(maxValue, percentValue);
                         }
                     });
                 });
+                
+                // 根据数据范围动态设置 visualMap 范围
+                const range = Math.max(Math.abs(minValue), Math.abs(maxValue));
+                const visualMax = Math.ceil(range / 5) * 5;  // 向上取整到5的倍数
                 
                 const option = {
                     tooltip: {
@@ -1405,16 +1517,16 @@
                             return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2] + '%';
                         }
                     },
-                    grid: { left: '10%', right: '10%', top: '10%', bottom: '15%' },
+                    grid: { left: '10%', right: '18%', top: '10%', bottom: '12%' },
                     xAxis: { type: 'category', data: months, splitArea: { show: true } },
                     yAxis: { type: 'category', data: years, splitArea: { show: true } },
                     visualMap: {
-                        min: -10,
-                        max: 10,
+                        min: -visualMax,
+                        max: visualMax,
                         calculable: true,
-                        orient: 'horizontal',
-                        left: 'center',
-                        bottom: '0%',
+                        orient: 'vertical',
+                        right: '2%',
+                        top: 'center',
                         inRange: {
                             color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8',
                                     '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']

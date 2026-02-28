@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECharts A股配色方案对比</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .header {
+            max-width: 1400px;
+            margin: 0 auto 20px;
+            margin-right: 310px;
+            background: linear-gradient(135deg, #c23531 0%, #e74c3c 100%);
+            border-radius: 12px;
+            padding: 24px;
+            color: white;
+            box-shadow: 0 4px 20px rgba(194, 53, 49, 0.3);
+        }
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .palette-selector {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 280px;
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            z-index: 1000;
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+        .palette-selector h3 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: sticky;
+            top: 0;
+            background: #fff;
+            padding-bottom: 8px;
+        }
+        .palette-selector h3::before {
+            content: "🎨";
+        }
+        .palette-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .palette-btn {
+            padding: 10px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            text-align: left;
+        }
+        .palette-btn:hover {
+            border-color: #c23531;
+            transform: translateX(-2px);
+            box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+        }
+        .palette-btn.active {
+            border-color: #c23531;
+            background: linear-gradient(135deg, #fff5f5 0%, #fff 100%);
+            box-shadow: 2px 2px 12px rgba(194, 53, 49, 0.2);
+        }
+        .palette-btn .btn-info {
+            flex: 1;
+        }
+        .palette-btn .btn-name {
+            font-weight: 600;
+            font-size: 13px;
+            color: #333;
+            display: block;
+        }
+        .palette-btn .btn-desc {
+            font-size: 11px;
+            color: #888;
+            display: block;
+            margin-top: 2px;
+        }
+        .palette-btn .btn-colors {
+            display: flex;
+            gap: 2px;
+            flex-shrink: 0;
+        }
+        .palette-btn .btn-colors span {
+            width: 14px;
+            height: 14px;
+            border-radius: 2px;
+        }
+        
+        .current-palette {
+            max-width: 1400px;
+            margin: 0 auto 20px;
+            margin-right: 310px;
+            background: #fff;
+            border-radius: 12px;
+            padding: 12px 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .current-palette .label {
+            font-size: 14px;
+            color: #666;
+            white-space: nowrap;
+        }
+        .color-swatches {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            flex: 1;
+        }
+        .swatch {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+        .swatch-color {
+            width: 40px;
+            height: 24px;
+            border-radius: 4px;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        .swatch-label {
+            font-size: 9px;
+            color: #888;
+            font-family: monospace;
+        }
+        
+        .charts-grid {
+            max-width: 1400px;
+            margin: 0 auto;
+            margin-right: 310px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+        .chart-box {
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        .chart-box h4 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .chart-box h4 .icon {
+            font-size: 16px;
+        }
+        .chart {
+            height: 300px;
+        }
+        .chart-box.full-width {
+            grid-column: span 2;
+        }
+        .chart-box.full-width .chart {
+            height: 380px;
+        }
+        
+        @media (max-width: 900px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            .chart-box.full-width {
+                grid-column: span 1;
+            }
+            .palette-selector {
+                width: 240px;
+                padding: 12px;
+            }
+            .header, .current-palette, .charts-grid {
+                margin-right: 260px;
+            }
+        }
+        
+        @media (max-width: 700px) {
+            .palette-selector {
+                position: relative;
+                top: 0;
+                right: 0;
+                width: 100%;
+                max-height: none;
+                margin-bottom: 16px;
+            }
+            .header, .current-palette, .charts-grid {
+                margin-right: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>ECharts A股配色方案对比工具</h1>
+        <p>点击下方配色方案按钮，实时预览不同配色在各类图表中的效果</p>
+    </div>
+    
+    <div class="palette-selector">
+        <h3>选择配色方案</h3>
+        <div class="palette-buttons" id="paletteButtons"></div>
+    </div>
+    
+    <div class="current-palette">
+        <span class="label">当前配色：</span>
+        <div class="color-swatches" id="currentSwatches"></div>
+    </div>
+    
+    <div class="charts-grid">
+        <div class="chart-box full-width">
+            <h4><span class="icon">📈</span>多线折线图 - 模拟指数走势</h4>
+            <div id="chartLine" class="chart"></div>
+        </div>
+        
+        <div class="chart-box">
+            <h4><span class="icon">📊</span>K线图 - 模拟股票走势</h4>
+            <div id="chartKline" class="chart"></div>
+        </div>
+        
+        <div class="chart-box">
+            <h4><span class="icon">📉</span>柱状图 - 行业市值分布</h4>
+            <div id="chartBar" class="chart"></div>
+        </div>
+        
+        <div class="chart-box">
+            <h4><span class="icon">🥧</span>饼图 - 市场板块占比</h4>
+            <div id="chartPie" class="chart"></div>
+        </div>
+        
+        <div class="chart-box">
+            <h4><span class="icon">🌊</span>面积图 - 资金流向</h4>
+            <div id="chartArea" class="chart"></div>
+        </div>
+        
+        <div class="chart-box full-width">
+            <h4><span class="icon">📊</span>堆叠柱状图 - 行业资金净流入</h4>
+            <div id="chartStackBar" class="chart"></div>
+        </div>
+        
+        <div class="chart-box">
+            <h4><span class="icon">🎯</span>雷达图 - 个股评分</h4>
+            <div id="chartRadar" class="chart"></div>
+        </div>
+        
+        <div class="chart-box">
+            <h4><span class="icon">📉</span>散点图 - 风险收益分布</h4>
+            <div id="chartScatter" class="chart"></div>
+        </div>
+    </div>
+
+    <script>
+        const palettes = {
+            warm1: {
+                name: '红金暖色系',
+                desc: '经典A股风格',
+                colors: ['#c23531', '#f5a623', '#d48265', '#c7b299', '#e8b4b8', '#b8860b', '#cd853f', '#daa520', '#c9a86c'],
+                kline: { up: '#c23531', down: '#2d8f4e' }
+            },
+            warm2: {
+                name: '红橙渐变系',
+                desc: '现代科技感',
+                colors: ['#c23531', '#ff6b6b', '#ffa502', '#ff7f50', '#e17055', '#fdcb6e', '#f39c12', '#e67e22', '#d35400'],
+                kline: { up: '#c23531', down: '#27ae60' }
+            },
+            warm3: {
+                name: '红棕大地系',
+                desc: '稳重商务风',
+                colors: ['#c23531', '#8b4513', '#a0522d', '#cd853f', '#d2691e', '#bc8f8f', '#f4a460', '#deb887', '#d2b48c'],
+                kline: { up: '#c23531', down: '#228b22' }
+            },
+            warm4: {
+                name: '红紫优雅系',
+                desc: '高端金融风',
+                colors: ['#c23531', '#9b59b6', '#8e44ad', '#e74c3c', '#c0392b', '#d4a5a5', '#b8860b', '#daa520', '#c9a86c'],
+                kline: { up: '#c23531', down: '#16a085' }
+            },
+            warm5: {
+                name: '红粉柔和系',
+                desc: '清新淡雅风',
+                colors: ['#c23531', '#e8b4b8', '#f5d0d0', '#f5a623', '#f7dc6f', '#f0b27a', '#eb984e', '#dc7633', '#d35400'],
+                kline: { up: '#c23531', down: '#58d68d' }
+            },
+            classic: {
+                name: '红蓝经典系',
+                desc: '传统商务风',
+                colors: ['#c23531', '#2f4554', '#61a0a8', '#d48265', '#91c7ae', '#749f83', '#ca8622', '#bda29a', '#6e7074'],
+                kline: { up: '#c23531', down: '#2f4554' }
+            },
+            contrast: {
+                name: '高对比度系',
+                desc: '清晰易辨识',
+                colors: ['#c23531', '#1abc9c', '#f39c12', '#9b59b6', '#3498db', '#e74c3c', '#2ecc71', '#e67e22', '#95a5a6'],
+                kline: { up: '#c23531', down: '#27ae60' }
+            },
+            sunset: {
+                name: '日落暖阳系',
+                desc: '温暖舒适感',
+                colors: ['#c23531', '#e74c3c', '#f39c12', '#f1c40f', '#e67e22', '#d35400', '#c0392b', '#e08283', '#f5b041'],
+                kline: { up: '#c23531', down: '#27ae60' }
+            },
+            warmToCool: {
+                name: '暖冷渐变系',
+                desc: '红紫黄蓝金绿交替',
+                colors: ['#c23531', '#9b59b6', '#f39c12', '#3498db', '#daa520', '#58d68d', '#e67e22', '#8e44ad', '#1abc9c'],
+                kline: { up: '#c23531', down: '#27ae60' }
+            },
+            warmToCool2: {
+                name: '暖冷渐变系2',
+                desc: '红橙紫青金绿',
+                colors: ['#c23531', '#e67e22', '#8e44ad', '#16a085', '#f1c40f', '#7cb342', '#d35400', '#9b59b6', '#4db6ac'],
+                kline: { up: '#c23531', down: '#27ae60' }
+            },
+            warmToCool3: {
+                name: '暖冷渐变系3',
+                desc: '深红棕紫蓝金薄荷绿',
+                colors: ['#a93226', '#d68910', '#7d3c98', '#2874a6', '#b7950b', '#52be80', '#ba4a00', '#8e44ad', '#45b39d'],
+                kline: { up: '#c23531', down: '#27ae60' }
+            },
+            warmToCool4: {
+                name: '暖冷渐变系4',
+                desc: '珊瑚橙粉紫青金绿',
+                colors: ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4'],
+                kline: { up: '#c23531', down: '#27ae60' }
+            },
+            echartsDefault: {
+                name: 'ECharts默认',
+                desc: '官方默认配色',
+                colors: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc'],
+                kline: { up: '#ee6666', down: '#91cc75' }
+            },
+            dahongdazi1: {
+                name: '大红大紫系1',
+                desc: '紫红金交替，喜庆吉祥',
+                colors: ['#c23531', '#9b51e0', '#f5a623', '#ec4899', '#daa520', '#be185d', '#e67e22', '#8e44ad', '#f39c12'],
+                kline: { up: '#c23531', down: '#27ae60' }
+            },
+            dahongdazi2: {
+                name: '大红大紫系2',
+                desc: '红紫粉金，柔和现代',
+                colors: ['#e74c3c', '#9b59b6', '#f39c12', '#e91e63', '#f1c40f', '#8e44ad', '#ff6b6b', '#af7ac5', '#daa520'],
+                kline: { up: '#e74c3c', down: '#58d68d' }
+            }
+        };
+
+        let currentPalette = 'warm1';
+        const charts = {};
+
+        const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
+        const indexNames = ['沪深300', '上证50', '中证500', '创业板指', '科创50'];
+        const indexData = [
+            [3200, 3280, 3150, 3400, 3520, 3480, 3650, 3720, 3580, 3850, 3920, 4050],
+            [2800, 2850, 2780, 2920, 3050, 2980, 3120, 3180, 3050, 3280, 3350, 3420],
+            [5200, 5350, 5100, 5500, 5680, 5550, 5820, 5950, 5700, 6100, 6250, 6480],
+            [2100, 2250, 2050, 2350, 2580, 2450, 2700, 2850, 2650, 2950, 3100, 3280],
+            [950, 980, 920, 1020, 1100, 1050, 1150, 1200, 1120, 1280, 1350, 1420]
+        ];
+
+        const klineData = [
+            [18.5, 19.2, 18.3, 19.5], [19.5, 19.8, 19.2, 20.1], [20.0, 19.5, 19.0, 20.2],
+            [19.8, 20.5, 19.6, 20.8], [20.8, 21.2, 20.5, 21.5], [21.5, 21.0, 20.8, 21.8],
+            [21.2, 20.8, 20.2, 21.5], [20.5, 21.0, 20.3, 21.2], [21.0, 21.8, 20.8, 22.0],
+            [21.8, 22.5, 21.5, 22.8], [22.5, 22.0, 21.8, 22.8], [22.2, 22.8, 22.0, 23.2],
+            [22.8, 23.5, 22.5, 23.8], [23.5, 23.2, 22.8, 23.8], [23.0, 22.5, 22.2, 23.2],
+            [22.5, 23.0, 22.0, 23.2], [23.0, 23.8, 22.8, 24.0], [23.8, 24.5, 23.5, 24.8],
+            [24.5, 24.2, 23.8, 24.8], [24.0, 24.8, 23.8, 25.2]
+        ];
+
+        function renderPaletteButtons() {
+            const container = document.getElementById('paletteButtons');
+            container.innerHTML = Object.entries(palettes).map(([key, p]) => `
+                <button class="palette-btn ${key === currentPalette ? 'active' : ''}" data-palette="${key}">
+                    <div class="btn-info">
+                        <span class="btn-name">${p.name}</span>
+                        <span class="btn-desc">${p.desc}</span>
+                    </div>
+                    <div class="btn-colors">
+                        ${p.colors.slice(0, 6).map(c => `<span style="background:${c}"></span>`).join('')}
+                    </div>
+                </button>
+            `).join('');
+
+            container.querySelectorAll('.palette-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    currentPalette = btn.dataset.palette;
+                    container.querySelectorAll('.palette-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    updateAllCharts();
+                });
+            });
+        }
+
+        function renderCurrentSwatches() {
+            const p = palettes[currentPalette];
+            const container = document.getElementById('currentSwatches');
+            container.innerHTML = p.colors.map(c => `
+                <div class="swatch">
+                    <div class="swatch-color" style="background: ${c}"></div>
+                    <span class="swatch-label">${c}</span>
+                </div>
+            `).join('');
+        }
+
+        function createLineChart() {
+            const chart = echarts.init(document.getElementById('chartLine'));
+            const p = palettes[currentPalette];
+            const option = {
+                color: p.colors,
+                tooltip: { trigger: 'axis' },
+                legend: { data: indexNames, bottom: 0 },
+                grid: { left: '3%', right: '4%', bottom: '12%', top: '8%', containLabel: true },
+                xAxis: { type: 'category', boundaryGap: false, data: months },
+                yAxis: { type: 'value', splitLine: { lineStyle: { color: '#f0f0f0' } } },
+                series: indexData.map((data, i) => ({
+                    name: indexNames[i],
+                    type: 'line',
+                    smooth: true,
+                    data: data,
+                    symbol: 'circle',
+                    symbolSize: 6
+                }))
+            };
+            chart.setOption(option);
+            return chart;
+        }
+
+        function createKlineChart() {
+            const chart = echarts.init(document.getElementById('chartKline'));
+            const p = palettes[currentPalette];
+            const option = {
+                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                grid: { left: '10%', right: '8%', bottom: '12%' },
+                xAxis: { 
+                    type: 'category', 
+                    data: Array.from({length: 20}, (_, i) => `${i+1}日`),
+                    axisLine: { lineStyle: { color: '#ddd' } }
+                },
+                yAxis: { 
+                    scale: true, 
+                    splitLine: { lineStyle: { color: '#f0f0f0' } },
+                    axisLine: { lineStyle: { color: '#ddd' } }
+                },
+                series: [{
+                    type: 'candlestick',
+                    data: klineData,
+                    itemStyle: {
+                        color: p.kline.up,
+                        color0: p.kline.down,
+                        borderColor: p.kline.up,
+                        borderColor0: p.kline.down
+                    }
+                }]
+            };
+            chart.setOption(option);
+            return chart;
+        }
+
+        function createBarChart() {
+            const chart = echarts.init(document.getElementById('chartBar'));
+            const p = palettes[currentPalette];
+            const industries = ['银行', '非银金融', '食品饮料', '医药生物', '电子', '计算机', '化工', '机械设备'];
+            const values = [12.5, 8.8, 6.2, 5.5, 4.8, 4.2, 3.5, 3.0];
+            const option = {
+                color: [p.colors[0]],
+                tooltip: { trigger: 'axis', formatter: '{b}: {c}万亿' },
+                grid: { left: '3%', right: '4%', bottom: '3%', top: '8%', containLabel: true },
+                xAxis: { type: 'category', data: industries, axisLabel: { rotate: 30 } },
+                yAxis: { type: 'value', name: '市值(万亿)', splitLine: { lineStyle: { color: '#f0f0f0' } } },
+                series: [{
+                    type: 'bar',
+                    data: values,
+                    itemStyle: { borderRadius: [4, 4, 0, 0] }
+                }]
+            };
+            chart.setOption(option);
+            return chart;
+        }
+
+        function createPieChart() {
+            const chart = echarts.init(document.getElementById('chartPie'));
+            const p = palettes[currentPalette];
+            const option = {
+                color: p.colors,
+                tooltip: { trigger: 'item', formatter: '{b}: {c}家 ({d}%)' },
+                legend: { orient: 'vertical', right: '5%', top: 'center' },
+                series: [{
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    center: ['40%', '50%'],
+                    avoidLabelOverlap: false,
+                    label: { show: false },
+                    emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+                    labelLine: { show: false },
+                    data: [
+                        { value: 3200, name: '主板' },
+                        { value: 1250, name: '创业板' },
+                        { value: 560, name: '科创板' },
+                        { value: 220, name: '北交所' },
+                        { value: 5800, name: '新三板' }
+                    ]
+                }]
+            };
+            chart.setOption(option);
+            return chart;
+        }
+
+        function createAreaChart() {
+            const chart = echarts.init(document.getElementById('chartArea'));
+            const p = palettes[currentPalette];
+            const option = {
+                color: [p.colors[0]],
+                tooltip: { trigger: 'axis' },
+                grid: { left: '3%', right: '4%', bottom: '3%', top: '8%', containLabel: true },
+                xAxis: { type: 'category', boundaryGap: false, data: months },
+                yAxis: { type: 'value', name: '亿元', splitLine: { lineStyle: { color: '#f0f0f0' } } },
+                series: [{
+                    type: 'line',
+                    smooth: true,
+                    areaStyle: { 
+                        color: {
+                            type: 'linear',
+                            x: 0, y: 0, x2: 0, y2: 1,
+                            colorStops: [
+                                { offset: 0, color: p.colors[0] + '80' },
+                                { offset: 1, color: p.colors[0] + '10' }
+                            ]
+                        }
+                    },
+                    data: [580, 620, 450, 720, 850, 780, 920, 1050, 880, 1150, 1280, 1350],
+                    lineStyle: { width: 2 }
+                }]
+            };
+            chart.setOption(option);
+            return chart;
+        }
+
+        function createStackBarChart() {
+            const chart = echarts.init(document.getElementById('chartStackBar'));
+            const p = palettes[currentPalette];
+            const industries = ['银行', '非银金融', '电子', '计算机', '医药', '化工'];
+            const option = {
+                color: [p.colors[0], p.kline.down],
+                tooltip: { trigger: 'axis' },
+                legend: { data: ['净流入', '净流出'], bottom: 0 },
+                grid: { left: '3%', right: '4%', bottom: '12%', top: '8%', containLabel: true },
+                xAxis: { type: 'category', data: industries },
+                yAxis: { type: 'value', name: '亿元', splitLine: { lineStyle: { color: '#f0f0f0' } } },
+                series: [
+                    { name: '净流入', type: 'bar', stack: 'total', data: [120, 85, 65, 55, 45, 35] },
+                    { name: '净流出', type: 'bar', stack: 'total', data: [-80, -45, -35, -40, -25, -20] }
+                ]
+            };
+            chart.setOption(option);
+            return chart;
+        }
+
+        function createRadarChart() {
+            const chart = echarts.init(document.getElementById('chartRadar'));
+            const p = palettes[currentPalette];
+            const option = {
+                color: p.colors.slice(0, 3),
+                tooltip: {},
+                legend: { data: ['股票A', '股票B', '股票C'], bottom: 0 },
+                radar: {
+                    indicator: [
+                        { name: '盈利能力', max: 100 },
+                        { name: '成长性', max: 100 },
+                        { name: '估值', max: 100 },
+                        { name: '流动性', max: 100 },
+                        { name: '波动率', max: 100 },
+                        { name: '市值', max: 100 }
+                    ],
+                    center: ['50%', '48%'],
+                    radius: '60%'
+                },
+                series: [{
+                    type: 'radar',
+                    data: [
+                        { value: [85, 78, 65, 90, 72, 88], name: '股票A' },
+                        { value: [72, 90, 80, 65, 85, 70], name: '股票B' },
+                        { value: [68, 75, 90, 80, 60, 82], name: '股票C' }
+                    ]
+                }]
+            };
+            chart.setOption(option);
+            return chart;
+        }
+
+        function createScatterChart() {
+            const chart = echarts.init(document.getElementById('chartScatter'));
+            const p = palettes[currentPalette];
+            const data1 = [];
+            const data2 = [];
+            for (let i = 0; i < 30; i++) {
+                data1.push([Math.random() * 30 + 5, Math.random() * 20 + 5, Math.random() * 500 + 100]);
+                data2.push([Math.random() * 25 + 10, Math.random() * 15 + 8, Math.random() * 400 + 80]);
+            }
+            const option = {
+                color: [p.colors[0], p.colors[1]],
+                tooltip: {
+                    formatter: function(params) {
+                        return `风险: ${params.value[0].toFixed(1)}%<br/>收益: ${params.value[1].toFixed(1)}%`;
+                    }
+                },
+                legend: { data: ['主板', '创业板'], bottom: 0 },
+                grid: { left: '3%', right: '4%', bottom: '12%', top: '8%', containLabel: true },
+                xAxis: { 
+                    name: '风险(%)', 
+                    nameLocation: 'middle',
+                    nameGap: 30,
+                    splitLine: { lineStyle: { color: '#f0f0f0' } }
+                },
+                yAxis: { 
+                    name: '收益(%)', 
+                    nameLocation: 'middle',
+                    nameGap: 35,
+                    splitLine: { lineStyle: { color: '#f0f0f0' } }
+                },
+                series: [
+                    { name: '主板', type: 'scatter', symbolSize: 12, data: data1 },
+                    { name: '创业板', type: 'scatter', symbolSize: 12, data: data2 }
+                ]
+            };
+            chart.setOption(option);
+            return chart;
+        }
+
+        function updateAllCharts() {
+            renderCurrentSwatches();
+            
+            if (charts.line) charts.line.dispose();
+            if (charts.kline) charts.kline.dispose();
+            if (charts.bar) charts.bar.dispose();
+            if (charts.pie) charts.pie.dispose();
+            if (charts.area) charts.area.dispose();
+            if (charts.stackBar) charts.stackBar.dispose();
+            if (charts.radar) charts.radar.dispose();
+            if (charts.scatter) charts.scatter.dispose();
+            
+            charts.line = createLineChart();
+            charts.kline = createKlineChart();
+            charts.bar = createBarChart();
+            charts.pie = createPieChart();
+            charts.area = createAreaChart();
+            charts.stackBar = createStackBarChart();
+            charts.radar = createRadarChart();
+            charts.scatter = createScatterChart();
+        }
+
+        renderPaletteButtons();
+        updateAllCharts();
+
+        window.addEventListener('resize', () => {
+            Object.values(charts).forEach(chart => chart && chart.resize());
+        });
+    </script>
+</body>
+</html>

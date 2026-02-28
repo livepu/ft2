@@ -6,12 +6,168 @@
     <title>Notebook 风格对比</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        /* ========== CSS 变量定义 ========== */
+        :root {
+            /* 默认配色：大红大紫 */
+            --level-2-border: #9b51e0;
+            --level-2-bg: #faf9f7;
+            --level-2-text: #6b5b95;
+            --level-3-border: #ec4899;
+            --level-3-bg: #fdf2f8;
+            --level-3-text: #be185d;
+        }
+        
+        /* 配色方案类 */
+        /* 原橙色: Notion 经典配色 */
+        .theme-original {
+            --level-2-border: #9b51e0;
+            --level-2-bg: #faf9f7;
+            --level-2-text: #6b5b95;
+            --level-3-border: #ff9500;
+            --level-3-bg: #fffdf7;
+            --level-3-text: #c68a00;
+        }
+        
+        .theme-purple-red {
+            --level-2-border: #9b51e0;
+            --level-2-bg: #faf9f7;
+            --level-2-text: #6b5b95;
+            --level-3-border: #b83b5e;
+            --level-3-bg: #fdf5f7;
+            --level-3-text: #9b2348;
+        }
+        
+        .theme-magenta {
+            --level-2-border: #9b51e0;
+            --level-2-bg: #faf9f7;
+            --level-2-text: #6b5b95;
+            --level-3-border: #c13584;
+            --level-3-bg: #fdf6f9;
+            --level-3-text: #a0206a;
+        }
+        
+        .theme-blue-purple {
+            --level-2-border: #667eea;
+            --level-2-bg: #f5f7ff;
+            --level-2-text: #4c63d2;
+            --level-3-border: #9b51e0;
+            --level-3-bg: #faf9f7;
+            --level-3-text: #6b5b95;
+        }
+        
+        .theme-teal-purple {
+            --level-2-border: #9b51e0;
+            --level-2-bg: #faf9f7;
+            --level-2-text: #6b5b95;
+            --level-3-border: #2dd4bf;
+            --level-3-bg: #f0fdfa;
+            --level-3-text: #0d9488;
+        }
+        
+        .theme-coral-purple {
+            --level-2-border: #9b51e0;
+            --level-2-bg: #faf9f7;
+            --level-2-text: #6b5b95;
+            --level-3-border: #f97316;
+            --level-3-bg: #fff7ed;
+            --level-3-text: #ea580c;
+        }
+        
+        /* 大红大紫: 紫 + 粉红 - 寓意吉祥 */
+        .theme-da-hong-da-zi {
+            --level-2-border: #9b51e0;
+            --level-2-bg: #faf9f7;
+            --level-2-text: #6b5b95;
+            --level-3-border: #ec4899;
+            --level-3-bg: #fdf2f8;
+            --level-3-text: #be185d;
+        }
+        
+        /* ========== VS Code 风格配色 ========== */
+        .theme-vscode-dark {
+            --level-2-border: #0e639c;
+            --level-2-bg: #1e1e1e;
+            --level-2-text: #4fc1ff;
+            --level-3-border: #c586c0;
+            --level-3-bg: #252526;
+            --level-3-text: #ce9178;
+        }
+        
+        .theme-vscode-light {
+            --level-2-border: #007acc;
+            --level-2-bg: #f3f3f3;
+            --level-2-text: #0451a5;
+            --level-3-border: #af00db;
+            --level-3-bg: #ffffff;
+            --level-3-text: #795e26;
+        }
+        
+        .theme-vscode-github {
+            --level-2-border: #0969da;
+            --level-2-bg: #f6f8fa;
+            --level-2-text: #0969da;
+            --level-3-border: #cf222e;
+            --level-3-bg: #ffffff;
+            --level-3-text: #8250df;
+        }
+        
+        .theme-vscode-dracula {
+            --level-2-border: #bd93f9;
+            --level-2-bg: #282a36;
+            --level-2-text: #8be9fd;
+            --level-3-border: #ff79c6;
+            --level-3-bg: #44475a;
+            --level-3-text: #50fa7b;
+        }
+        
+        /* ========== JupyterLab 风格配色 ========== */
+        .theme-jupyter-light {
+            --level-2-border: #1976d2;
+            --level-2-bg: #f7f7f7;
+            --level-2-text: #1976d2;
+            --level-3-border: #f57c00;
+            --level-3-bg: #ffffff;
+            --level-3-text: #388e3c;
+        }
+        
+        .theme-jupyter-dark {
+            --level-2-border: #1976d2;
+            --level-2-bg: #2b2b2b;
+            --level-2-text: #64b5f6;
+            --level-3-border: #ffa726;
+            --level-3-bg: #1e1e1e;
+            --level-3-text: #81c784;
+        }
+        
+        /* ========== Notion 风格配色（新增） ========== */
+        /* Notion 风格 A: 紫 + 青绿 - 冷暖对比 */
+        .theme-notion-a {
+            --level-2-border: #7c3aed;
+            --level-2-bg: #f5f3ff;
+            --level-2-text: #5b21b6;
+            --level-3-border: #059669;
+            --level-3-bg: #ecfdf5;
+            --level-3-text: #047857;
+        }
+        
+        /* Notion 风格 B: 紫 + 琥珀 - 暖色对比 */
+        .theme-notion-b {
+            --level-2-border: #6d28d9;
+            --level-2-bg: #faf5ff;
+            --level-2-text: #581c87;
+            --level-3-border: #d97706;
+            --level-3-bg: #fffbeb;
+            --level-3-text: #b45309;
+        }
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #f5f5f5;
             color: #333;
             line-height: 1.6;
             padding: 20px;
+            padding-right: 220px;
         }
         .container {
             max-width: 1200px;
@@ -81,19 +237,20 @@
         .notion .nested-section {
             border-radius: 6px;
             margin: 10px 0;
-            border-left: 4px solid #9b51e0;
-            background: #faf9f7;
+            border-left: 4px solid var(--level-2-border);
+            background: var(--level-2-bg);
         }
         .notion .nested-section .section-title {
             background: transparent;
             font-size: 14px;
-            color: #6b5b95;
+            color: var(--level-2-text);
         }
         .notion .nested-section .nested-section {
-            border-left-color: #ff9500;
+            border-left-color: var(--level-3-border);
+            background: var(--level-3-bg);
         }
         .notion .nested-section .nested-section .section-title {
-            color: #c68a00;
+            color: var(--level-3-text);
         }
         
         /* ========== Markdown 样式 ========== */
@@ -281,10 +438,204 @@
             .metrics-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
+            body {
+                padding-right: 20px;
+            }
+            .theme-switcher {
+                display: none;
+            }
+        }
+        
+        /* ========== 配色切换器样式 ========== */
+        .theme-switcher {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            width: 180px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            padding: 16px;
+            z-index: 1000;
+        }
+        .theme-switcher h3 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .theme-option {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .theme-option:hover {
+            background: #f5f5f5;
+        }
+        .theme-option.active {
+            border-color: #667eea;
+            background: #f5f7ff;
+        }
+        .theme-colors {
+            display: flex;
+            gap: 4px;
+            margin-right: 10px;
+        }
+        .color-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        .theme-name {
+            font-size: 13px;
+            color: #555;
+            font-weight: 500;
+        }
+        .theme-option.active .theme-name {
+            color: #667eea;
         }
     </style>
 </head>
 <body>
+    <!-- 配色切换器 -->
+    <div class="theme-switcher">
+        <h3>🎨 配色方案</h3>
+        
+        <div class="theme-option" data-theme="original" onclick="switchTheme('original')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #9b51e0;"></div>
+                <div class="color-dot" style="background: #ff9500;"></div>
+            </div>
+            <span class="theme-name">原橙色</span>
+        </div>
+        
+        <div class="theme-option active" data-theme="da-hong-da-zi" onclick="switchTheme('da-hong-da-zi')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #9b51e0;"></div>
+                <div class="color-dot" style="background: #ec4899;"></div>
+            </div>
+            <span class="theme-name">大红大紫</span>
+        </div>
+        
+        <h3 style="margin-top: 16px; font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 1px;">Notion 风格</h3>
+        
+        <div class="theme-option" data-theme="notion-a" onclick="switchTheme('notion-a')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #7c3aed;"></div>
+                <div class="color-dot" style="background: #059669;"></div>
+            </div>
+            <span class="theme-name">Notion 紫青</span>
+        </div>
+        
+        <div class="theme-option" data-theme="notion-b" onclick="switchTheme('notion-b')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #6d28d9;"></div>
+                <div class="color-dot" style="background: #d97706;"></div>
+            </div>
+            <span class="theme-name">Notion 紫琥珀</span>
+        </div>    
+        
+        <div class="theme-option" data-theme="purple-red" onclick="switchTheme('purple-red')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #9b51e0;"></div>
+                <div class="color-dot" style="background: #b83b5e;"></div>
+            </div>
+            <span class="theme-name">柔和红紫</span>
+        </div>
+        
+        <div class="theme-option" data-theme="magenta" onclick="switchTheme('magenta')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #9b51e0;"></div>
+                <div class="color-dot" style="background: #c13584;"></div>
+            </div>
+            <span class="theme-name">紫红渐变</span>
+        </div>
+        
+        <div class="theme-option" data-theme="blue-purple" onclick="switchTheme('blue-purple')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #667eea;"></div>
+                <div class="color-dot" style="background: #9b51e0;"></div>
+            </div>
+            <span class="theme-name">蓝紫渐变</span>
+        </div>
+        
+        <div class="theme-option" data-theme="teal-purple" onclick="switchTheme('teal-purple')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #9b51e0;"></div>
+                <div class="color-dot" style="background: #2dd4bf;"></div>
+            </div>
+            <span class="theme-name">青紫对比</span>
+        </div>
+        
+        <div class="theme-option" data-theme="coral-purple" onclick="switchTheme('coral-purple')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #9b51e0;"></div>
+                <div class="color-dot" style="background: #f97316;"></div>
+            </div>
+            <span class="theme-name">珊瑚橙紫</span>
+        </div>
+        
+        <h3 style="margin-top: 16px; font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 1px;">VS Code 风格</h3>
+        
+        <div class="theme-option" data-theme="vscode-light" onclick="switchTheme('vscode-light')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #007acc;"></div>
+                <div class="color-dot" style="background: #af00db;"></div>
+            </div>
+            <span class="theme-name">VS Code Light</span>
+        </div>
+        
+        <div class="theme-option" data-theme="vscode-dark" onclick="switchTheme('vscode-dark')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #0e639c;"></div>
+                <div class="color-dot" style="background: #c586c0;"></div>
+            </div>
+            <span class="theme-name">VS Code Dark</span>
+        </div>
+        
+        <div class="theme-option" data-theme="vscode-github" onclick="switchTheme('vscode-github')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #0969da;"></div>
+                <div class="color-dot" style="background: #cf222e;"></div>
+            </div>
+            <span class="theme-name">GitHub Light</span>
+        </div>
+        
+        <div class="theme-option" data-theme="vscode-dracula" onclick="switchTheme('vscode-dracula')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #bd93f9;"></div>
+                <div class="color-dot" style="background: #ff79c6;"></div>
+            </div>
+            <span class="theme-name">Dracula</span>
+        </div>
+        
+        <h3 style="margin-top: 16px; font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 1px;">JupyterLab 风格</h3>
+        
+        <div class="theme-option" data-theme="jupyter-light" onclick="switchTheme('jupyter-light')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #1976d2;"></div>
+                <div class="color-dot" style="background: #f57c00;"></div>
+            </div>
+            <span class="theme-name">Jupyter Light</span>
+        </div>
+        
+        <div class="theme-option" data-theme="jupyter-dark" onclick="switchTheme('jupyter-dark')">
+            <div class="theme-colors">
+                <div class="color-dot" style="background: #1976d2;"></div>
+                <div class="color-dot" style="background: #ffa726;"></div>
+            </div>
+            <span class="theme-name">Jupyter Dark</span>
+        </div>
+
+    </div>
+
     <div class="container">
         <h1>Notebook 内容类型示例 (Notion 风格)</h1>
         
@@ -758,5 +1109,42 @@ CONFIG = {
             </div>
         </div>
     </div>
+    
+    <script>
+        // 配色切换功能
+        function switchTheme(themeName) {
+            const body = document.body;
+            
+            // 移除所有主题类
+            body.classList.remove('theme-purple-red', 'theme-deep-purple', 'theme-magenta', 
+                                  'theme-blue-purple', 'theme-teal-purple', 'theme-coral-purple', 'theme-purple-pink',
+                                  'theme-vscode-light', 'theme-vscode-dark', 'theme-vscode-github', 'theme-vscode-dracula',
+                                  'theme-jupyter-light', 'theme-jupyter-dark',
+                                     'theme-notion-a', 'theme-notion-b', 'theme-da-hong-da-zi',
+                                     'theme-purple-pink', 'theme-deep-purple', 'theme-original');
+            
+            // 添加新主题类（默认主题不需要类）
+            if (themeName !== 'default') {
+                body.classList.add('theme-' + themeName);
+            }
+            
+            // 更新选中状态
+            document.querySelectorAll('.theme-option').forEach(option => {
+                option.classList.remove('active');
+            });
+            document.querySelector('.theme-option[data-theme="' + themeName + '"]').classList.add('active');
+            
+            // 保存到本地存储
+            localStorage.setItem('selectedTheme', themeName);
+        }
+        
+        // 页面加载时恢复上次选择的主题
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedTheme = localStorage.getItem('selectedTheme');
+            if (savedTheme) {
+                switchTheme(savedTheme);
+            }
+        });
+    </script>
 </body>
 </html>
