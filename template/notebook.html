@@ -41,16 +41,15 @@
             content: "📄";
             font-size: 12px;
         }
-
-        /* ========== Cell 基础样式 ========== */
+        
         .cell {
             background: #f7f6f3;
             border-radius: 6px;
             margin: 8px 0;
             padding: 12px 14px;
         }
-
-        /* ========== Section 样式（仅控制视觉层次） ========== */
+        
+        /* ========== Section 样式 (Notion 风格) ========== */
         .section {
             border-radius: 6px;
             margin: 12px 0;
@@ -69,8 +68,16 @@
         .section-content {
             padding: 14px 16px;
         }
-
-        /* 嵌套 Section - 仅改变边框和标题颜色 */
+        .section-content .cell {
+            background: #f7f6f3;
+            border-radius: 6px;
+            padding: 12px 14px;
+            margin: 8px 0;
+            box-shadow: none;
+            border: none;
+        }
+        
+        /* 嵌套 Section - 二级 */
         .nested-section {
             border-radius: 6px;
             margin: 10px 0;
@@ -86,8 +93,12 @@
         .nested-section .section-content {
             padding: 10px 14px;
         }
-
-        /* 深层嵌套 */
+        .nested-section .section-content .cell {
+            background: #fff;
+            border: 1px solid #eee;
+        }
+        
+        /* 嵌套 Section - 三级 */
         .nested-section .nested-section {
             border-left-color: #ff9500;
             background: #fffdf7;
@@ -95,14 +106,11 @@
         .nested-section .nested-section .section-title {
             color: #c68a00;
         }
-
-        /* 嵌套内的 cell 仅覆盖背景色 */
-        .nested-section .cell {
+        .nested-section .nested-section .section-content .cell {
             background: #fff;
-            border: 1px solid #eee;
         }
-
-        /* ========== 代码块样式 ========== */
+        
+        /* ========== 代码块样式 (新式风格) ========== */
         .code-block {
             border-radius: 6px;
             overflow: hidden;
@@ -123,7 +131,7 @@
             color: #abb2bf;
             font-weight: 500;
         }
-        .code-input {
+        .code-block .code-input {
             background: #282c34;
             color: #abb2bf;
             padding: 12px;
@@ -132,7 +140,7 @@
             overflow-x: auto;
             line-height: 1.5;
         }
-        .code-output {
+        .code-block .code-output {
             background: #21252b;
             border-top: 1px solid #3a3f4b;
             padding: 10px 12px;
@@ -140,17 +148,13 @@
             font-size: 13px;
             color: #98c379;
         }
-
-        /* ========== 统一表格样式 ========== */
-        .table-container,
-        .cell-table .data-table-container,
-        .alpine-table-container {
+        
+        /* ========== 表格样式 (新式风格) ========== */
+        .data-table-container {
             overflow-x: auto;
             margin: 8px 0;
         }
-
-        .data-table,
-        .alpine-table {
+        .data-table {
             width: 100%;
             border-collapse: collapse;
             font-size: 14px;
@@ -159,127 +163,27 @@
             border-radius: 6px;
             overflow: hidden;
         }
-
-        .data-table th,
-        .data-table td,
-        .alpine-table th,
-        .alpine-table td {
-            padding: 10px 14px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .data-table th,
-        .alpine-table th {
+        .data-table th {
             background: #f7f6f3;
-            padding-top: 12px;
-            padding-bottom: 12px;
+            padding: 12px 14px;
             font-weight: 600;
-            border-bottom-width: 2px;
+            border-bottom: 2px solid #e9e9e9;
             color: #37352f;
         }
-
-        .data-table td,
-        .alpine-table td {
+        .data-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #eee;
             color: #333;
         }
-
-        .data-table tr:hover td,
-        .alpine-table tr:hover td {
+        .data-table tr:hover td {
             background: #fafafa;
         }
-
-        .data-table .positive,
-        .alpine-table .positive { color: #e64340; }
-
-        .data-table .negative,
-        .alpine-table .negative { color: #00b300; }
-
-        /* ========== 分页样式 ========== */
-        .alpine-table-pagination {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 10px 0;
-            gap: 10px;
-        }
-        .alpine-table-pagination .pagination-btn {
-            padding: 5px 10px;
-            border: 1px solid #e9e9e9;
-            background-color: #fff;
-            color: #333;
-            cursor: pointer;
-            border-radius: 3px;
-        }
-        .alpine-table-pagination .pagination-btn:disabled {
-            background-color: #f5f5f5;
-            color: #999;
-            cursor: not-allowed;
-        }
-        .alpine-table-pagination .pagination-select {
-            padding: 5px;
-            border: 1px solid #e0e0e0;
-            border-radius: 3px;
-        }
-
-        /* ========== 冻结列样式 ========== */
-        .alpine-table-freeze {
-            overflow-x: auto;
-            position: relative;
-        }
-        .alpine-table-freeze .alpine-table {
-            border-collapse: separate;
-            border-spacing: 0;
-        }
-        .alpine-table-freeze .alpine-table th,
-        .alpine-table-freeze .alpine-table td {
-            white-space: nowrap;
-            min-width: 80px;
-            background: white;
-        }
-        .alpine-table-freeze .freeze-col {
-            position: sticky;
-            background: inherit;
-        }
-        .alpine-table-freeze thead th {
-            position: sticky;
-            top: 0;
-            background: #f7f6f3;
-            z-index: 10;
-        }
-        .alpine-table-freeze thead .freeze-col {
-            background: #f7f6f3;
-            z-index: 100;
-        }
-        .alpine-table-freeze tbody .freeze-col {
-            z-index: 50;
-        }
-        .alpine-table-freeze tbody tr:hover .freeze-col {
-            background: #fafafa;
-        }
-        .alpine-table-freeze .freeze-left::after {
-            content: '';
-            position: absolute;
-            right: 0;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background: #e9e9e9;
-        }
-        .alpine-table-freeze .freeze-right::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background: #e9e9e9;
-        }
-
-        /* ========== 图表样式 ========== */
-        .chart-container {
-            width: 100%;
-            height: var(--height, 400px);
-        }
+        .data-table .sort-asc::after { content: ' ▲'; font-size: 10px; }
+        .data-table .sort-desc::after { content: ' ▼'; font-size: 10px; }
+        .data-table .positive { color: #e64340; }
+        .data-table .negative { color: #00b300; }
+        
+        /* ========== 图表占位符样式 ========== */
         .chart-placeholder {
             display: flex;
             align-items: center;
@@ -291,8 +195,160 @@
             color: #999;
             font-size: 14px;
         }
-
-        /* ========== Metrics 样式 ========== */
+        
+        /* ========== HTML块样式 ========== */
+        .html-block {
+            border-radius: 6px;
+            margin: 8px 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1px;
+        }
+        .html-block-inner {
+            background: #fff;
+            padding: 14px;
+            border-radius: 5px;
+        }
+        
+        /* ========== Markdown 样式 ========== */
+        .markdown-content h1 { font-size: 20px; margin: 0 0 10px; color: #37352f; }
+        .markdown-content h2 { font-size: 18px; margin: 0 0 8px; color: #37352f; }
+        .markdown-content h3 { font-size: 16px; margin: 0 0 6px; color: #37352f; }
+        .markdown-content p { margin: 0 0 8px; }
+        .markdown-content strong { color: #37352f; }
+        .markdown-content em { color: #666; }
+        .markdown-content ul, .markdown-content ol { margin: 0 0 8px 20px; }
+        .markdown-content li { margin: 4px 0; }
+        .markdown-content a { color: #667eea; text-decoration: none; }
+        .markdown-content a:hover { text-decoration: underline; }
+        .markdown-content blockquote {
+            border-left: 3px solid #e9e9e9;
+            padding-left: 12px;
+            margin: 8px 0;
+            color: #666;
+            font-style: italic;
+        }
+        .markdown-content hr {
+            border: none;
+            border-top: 1px solid #e9e9e9;
+            margin: 12px 0;
+        }
+        
+        .cell-title {
+            padding: 0;
+        }
+        .cell-title h1, .cell-title h2, .cell-title h3 {
+            color: #37352f;
+            margin: 0;
+        }
+        .cell-title h1 { font-size: 20px; }
+        .cell-title h2 { font-size: 18px; }
+        .cell-title h3 { font-size: 16px; }
+        .cell-text {
+            padding: 0;
+        }
+        .cell-text.text-heading {
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .cell-text.text-code {
+            font-family: 'Consolas', 'Monaco', monospace;
+            background: #f0efe9;
+            border-radius: 4px;
+            padding: 8px 12px;
+        }
+        
+        /* ========== 代码块样式 (cell-code 使用新式风格) ========== */
+        .cell-code {
+            padding: 0;
+        }
+        .cell-code .code-block {
+            border-radius: 6px;
+            overflow: hidden;
+            background: #282c34;
+        }
+        .cell-code .code-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: #21252b;
+            font-size: 12px;
+            color: #abb2bf;
+        }
+        .cell-code .code-header .code-lang {
+            font-weight: 500;
+        }
+        .cell-code .code-input {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 12px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            line-height: 1.5;
+        }
+        .cell-code .code-output {
+            background: #f8f9fa;
+            border-top: 1px solid #3a3f4b;
+            padding: 10px 12px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            color: #333;
+        }
+        .cell-table {
+            padding: 0;
+        }
+        .cell-table h3 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            color: #37352f;
+        }
+        
+        /* ========== 表格样式 (新式风格) ========== */
+        .cell-table .data-table-container {
+            overflow-x: auto;
+            margin: 8px 0;
+        }
+        .cell-table .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            text-align: left;
+            background: #fff;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .cell-table .data-table th {
+            background: #f7f6f3;
+            padding: 12px 14px;
+            font-weight: 600;
+            border-bottom: 2px solid #e9e9e9;
+            color: #37352f;
+        }
+        .cell-table .data-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #eee;
+            color: #333;
+        }
+        .cell-table .data-table tr:hover td {
+            background: #fafafa;
+        }
+        .cell-table .data-table .positive { color: #e64340; }
+        .cell-table .data-table .negative { color: #00b300; }
+        
+        /* 保留原有的 Alpine 表格样式以兼容旧版 */
+        .alpine-table-container {
+            overflow-x: auto;
+        }
+        .cell-metrics {
+            padding: 0;
+        }
+        .cell-metrics h3 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            color: #37352f;
+        }
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(var(--columns, 4), 1fr);
@@ -322,24 +378,51 @@
             color: #999;
             margin-top: 4px;
         }
-
-        /* ========== Markdown 样式 ========== */
-        .markdown-content h1 { font-size: 20px; margin: 0 0 10px; color: #37352f; }
-        .markdown-content h2 { font-size: 18px; margin: 0 0 8px; color: #37352f; }
-        .markdown-content h3 { font-size: 16px; margin: 0 0 6px; color: #37352f; }
-        .markdown-content p { margin: 0 0 8px; }
-        .markdown-content strong { color: #37352f; }
-        .markdown-content em { color: #666; }
-        .markdown-content a { color: #667eea; text-decoration: none; }
-        .markdown-content blockquote {
-            border-left: 3px solid #e9e9e9;
-            padding-left: 12px;
-            margin: 8px 0;
-            color: #666;
-            font-style: italic;
+        .cell-chart {
+            padding: 0;
         }
-
-        /* ========== 可折叠样式 ========== */
+        .cell-chart h3 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            color: #37352f;
+        }
+        .chart-container {
+            width: 100%;
+            height: var(--height, 400px);
+        }
+        
+        /* ========== 图表占位符样式 (新式风格) ========== */
+        .cell-chart .chart-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+            border-radius: 6px;
+            min-height: 200px;
+            color: #999;
+            font-size: 13px;
+            border: 2px dashed #ddd;
+        }
+        
+        .cell-heatmap {
+            padding: 0;
+        }
+        .cell-heatmap h3 {
+            margin: 0 0 8px;
+            font-size: 14px;
+            color: #37352f;
+        }
+        .heatmap-container {
+            width: 100%;
+            height: 300px;
+        }
+        .cell-divider {
+            height: 1px;
+            background: #e9e9e9;
+            margin: 12px 0;
+        }
+        
+        /* ========== 可折叠区域样式 (新式风格) ========== */
         .cell-collapsible {
             padding: 0;
             border: 1px solid #e9e9e9;
@@ -372,36 +455,230 @@
             padding: 14px;
             border-top: 1px solid #e9e9e9;
         }
-
-        /* ========== 其他基础样式 ========== */
-        .cell-divider {
-            height: 1px;
-            background: #e9e9e9;
-            margin: 12px 0;
-        }
+        
+        /* ========== HTML块样式 (新式风格) ========== */
         .cell-html {
             padding: 0;
         }
-        .cell-title h1, .cell-title h2, .cell-title h3 {
+        .cell-html .html-block {
+            border-radius: 6px;
+            margin: 8px 0;
+            overflow: hidden;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1px;
+        }
+        .cell-html .html-block-inner {
+            background: #fff;
+            padding: 14px;
+            border-radius: 5px;
+        }
+        .cell-html .html-block h4 {
+            margin: 0 0 8px;
+            font-size: 14px;
             color: #37352f;
+        }
+        .cell-html .html-block p {
             margin: 0;
+            font-size: 13px;
+            color: #666;
         }
-        .cell-title h1 { font-size: 20px; }
-        .cell-title h2 { font-size: 18px; }
-        .cell-title h3 { font-size: 16px; }
-        .cell-text.text-heading { font-weight: bold; font-size: 16px; }
-        .cell-text.text-code {
-            font-family: 'Consolas', 'Monaco', monospace;
-            background: #f0efe9;
-            border-radius: 4px;
-            padding: 8px 12px;
+        
+        /* ========== 代码语法高亮样式 (新式风格) ========== */
+        .code-keyword { color: #c678dd; }
+        .code-string { color: #98c379; }
+        .code-comment { color: #5c6370; }
+        .code-function { color: #61afef; }
+        .code-number { color: #d19a66; }
+        .code-operator { color: #56b6c2; }
+        .code-builtin { color: #e5c07b; }
+        
+        /* ========== 表格样式 ========== */
+        .alpine-table-container {
+            overflow-x: auto;
         }
-
-        /* ========== 截图和目录样式 ========== */
+        .alpine-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            text-align: left;
+        }
+        .alpine-table th {
+            background: #f7f6f3;
+            padding: 10px 12px;
+            font-weight: 600;
+            border-bottom: 2px solid #e9e9e9;
+        }
+        .alpine-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .alpine-table tr:hover td {
+            background: #fafafa;
+        }
+        .alpine-table .sort-asc, .alpine-table .sort-desc {
+            margin-left: 5px;
+            font-size: 12px;
+            color: #e64340;
+        }
+        .alpine-table .sort-indicator {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            vertical-align: middle;
+            line-height: 1;
+        }
+        .alpine-table .sort-priority {
+            order: 1;
+            font-size: 10px;
+            color: #e64340;
+        }
+        .alpine-table .sort-asc, .alpine-table .sort-desc {
+            order: 2;
+        }
+        .alpine-table .positive { color: #e64340; }
+        .alpine-table .negative { color: #00b300; }
+        
+        .alpine-table-pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 10px 0;
+            gap: 10px;
+        }
+        .alpine-table-pagination .pagination-btn {
+            padding: 5px 10px;
+            border: 1px solid #e9e9e9;
+            background-color: #fff;
+            color: #333;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        
+        .alpine-table-pagination .pagination-btn:disabled {
+            background-color: #f5f5f5;
+            color: #999;
+            cursor: not-allowed;
+        }
+        
+        .alpine-table-pagination .pagination-select {
+            padding: 5px;
+            border: 1px solid #e0e0e0;
+            border-radius: 3px;
+        }
+        
+        /* ========== 冻结列样式（与 alpine-table.js 一致） ========== */
+        .alpine-table-freeze {
+            overflow-x: auto;
+            position: relative;
+        }
+        .alpine-table-freeze .alpine-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .alpine-table-freeze .alpine-table th,
+        .alpine-table-freeze .alpine-table td {
+            white-space: nowrap;
+            min-width: 80px;
+            background: white;
+        }
+        /* 冻结列单元格 */
+        .alpine-table-freeze .freeze-col {
+            position: sticky;
+            background: inherit;
+        }
+        /* 表头整体冻结在顶部 */
+        .alpine-table-freeze thead th {
+            position: sticky;
+            top: 0;
+            background: #f7f6f3;
+            z-index: 10;
+        }
+        /* 表头中的冻结列需要更高的 z-index */
+        .alpine-table-freeze thead .freeze-col {
+            background: #f7f6f3;
+            z-index: 100;
+        }
+        .alpine-table-freeze tbody .freeze-col {
+            z-index: 50;
+        }
+        .alpine-table-freeze tbody tr:hover .freeze-col {
+            background: #fafafa;
+        }
+        /* 冻结列边框效果 */
+        .alpine-table-freeze .freeze-left::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #e9e9e9;
+        }
+        .alpine-table-freeze .freeze-right::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #e9e9e9;
+        }
+        
+        @media (max-width: 768px) {
+            .notebook-container {
+                padding: 10px;
+            }
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr) !important;
+            }
+            .toc-panel {
+                display: none;
+            }
+        }
+        
+        /* 截图模式：隐藏未选中的元素 */
         .screenshot-mode .screenshot-hidden {
             display: none !important;
         }
-
+        
+        /* Toast 提示样式 */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .toast {
+            background: #f3e8ff;
+            color: #6b21a8;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border: 1px solid #e9d5ff;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s ease;
+            pointer-events: auto;
+            min-width: 200px;
+            text-align: center;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast.error {
+            background: #fef2f2;
+            color: #dc2626;
+            border-color: #fecaca;
+        }
+        
         .toc-panel {
             position: fixed;
             top: 20px;
@@ -443,7 +720,12 @@
             transition: all 0.2s;
             border-left: 3px solid transparent;
         }
-        .toc-list a:hover, .toc-list a.active {
+        .toc-list a:hover {
+            background: #f5f0ff;
+            color: #6b21a8;
+            border-left-color: #a855f7;
+        }
+        .toc-list a.active {
             background: #f5f0ff;
             color: #6b21a8;
             border-left-color: #a855f7;
@@ -480,60 +762,24 @@
             border-bottom: 1px solid #e5e5e5;
         }
         .toc-select-all span { cursor: pointer; }
-
-        .toast-container {
-            position: fixed;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            pointer-events: none;
-        }
-        .toast {
-            background: #f3e8ff;
-            color: #6b21a8;
-            padding: 12px 24px;
-            border-radius: 6px;
-            font-size: 14px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            border: 1px solid #e9d5ff;
-            opacity: 0;
-            transform: translateY(-20px);
-            transition: all 0.3s ease;
-            pointer-events: auto;
-            min-width: 200px;
-            text-align: center;
-        }
-        .toast.show {
-            opacity: 1;
-            transform: translateY(0);
-        }
-        .toast.error {
-            background: #fef2f2;
-            color: #dc2626;
-            border-color: #fecaca;
-        }
-
-        @media (max-width: 768px) {
-            .notebook-container { padding: 10px; }
-            .metrics-grid { grid-template-columns: repeat(2, 1fr) !important; }
-            .toc-panel { display: none; }
-        }
     </style>
 </head>
 <body x-data="notebookApp" x-init="init()">
     <!-- Toast 容器 -->
     <div class="toast-container" id="toast-container"></div>
-
-    <!-- 目录面板 -->
+    
     <div class="toc-panel">
         <div class="toc-header">📑 目录</div>
-        <ul class="toc-list" id="toc-list"></ul>
+        <ul class="toc-list">
+            <template x-for="(item, index) in tocItems" :key="index">
+                <li>
+                    <a :href="'#section-' + index" x-text="item.title" @click.prevent="scrollToSection(index)"></a>
+                    <input type="checkbox" :checked="selectedItems.has(index)" @change="toggleItemSelection(index)">
+                </li>
+            </template>
+        </ul>
         <div class="toc-actions">
-            <div class="toc-select-all">
+            <div class="toc-select-all" style="border-top: none; border-bottom: 1px solid #e5e5e5; margin-bottom: 8px;">
                 <span @click="toggleSelectAll(true)">全选</span>
                 <span @click="clearSelection()">清空</span>
             </div>
@@ -542,392 +788,379 @@
             </button>
         </div>
     </div>
-
-    <!-- 主内容区 -->
+    
     <div class="notebook-container" id="screenshot-area">
         <div class="notebook-header" :class="{ 'screenshot-hidden': !isSelected(-1) }">
             <h1 x-text="title"></h1>
-            <div class="meta" x-text="'生成时间：' + createdAt"></div>
+            <div class="meta" x-text="'生成时间: ' + createdAt"></div>
         </div>
-
-        <!-- Cells 容器 - JS 生成 HTML，Alpine 激活 -->
-        <div id="cells-container"></div>
+            
+            <template x-for="(cell, index) in cells" :key="index">
+                <div>
+                    <template x-if="cell.type === 'section'">
+                        <div class="section" :id="'section-' + index" :class="{ 'screenshot-hidden': !isSelected(index) }">
+                            <div class="section-title" x-show="cell.title" x-text="cell.title"></div>
+                            <div class="section-content">
+                                <template x-for="(subCell, subIndex) in cell.content" :key="subIndex">
+                                    <div>
+                                        <template x-if="subCell.type === 'title'">
+                                            <div class="cell">
+                                                <div class="cell-title">
+                                                    <h1 x-show="subCell.options.level === 1" x-text="subCell.content"></h1>
+                                                    <h2 x-show="subCell.options.level === 2" x-text="subCell.content"></h2>
+                                                    <h3 x-show="subCell.options.level === 3" x-text="subCell.content"></h3>
+                                                </div>
+                                            </div>
+                                        </template>
+                                        <template x-if="subCell.type === 'text'">
+                                            <div class="cell"><div class="cell-text" :class="'text-' + subCell.options.style" x-text="subCell.content"></div></div>
+                                        </template>
+                                        <template x-if="subCell.type === 'markdown'">
+                                            <div class="cell"><div class="markdown-content" x-html="renderMarkdown(subCell.content)"></div></div>
+                                        </template>
+                                        <template x-if="subCell.type === 'code'">
+                                            <div class="cell" style="padding: 0; overflow: hidden;">
+                                                <div class="cell-code">
+                                                    <div class="code-block">
+                                                        <div class="code-header">
+                                                            <span class="code-lang" x-text="subCell.content.lang || 'Python'"></span>
+                                                        </div>
+                                                        <div class="code-input"><pre x-text="subCell.content.code"></pre></div>
+                                                        <div class="code-output" x-show="subCell.content.output" x-text="subCell.content.output"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    <template x-if="subCell.type === 'table'">
+                                        <div class="cell">
+                                            <div class="cell-table">
+                                                <h3 x-show="subCell.title" x-text="subCell.title"></h3>
+                                                <div x-data="table({id: 'table-' + index + '-' + subIndex, data: subCell.content, cols: getTableCols(subCell), ...getTableOptions(subCell)})"></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'metrics'">
+                                        <div class="cell">
+                                            <div class="cell-metrics">
+                                                <h3 x-show="subCell.title" x-text="subCell.title"></h3>
+                                                <div class="metrics-grid" :style="'--columns: ' + (subCell.options.columns || 4)">
+                                                    <template x-for="metric in subCell.content" :key="metric.name">
+                                                        <div class="metric-card" :class="getMetricClass(metric.value)">
+                                                            <div class="metric-value" x-text="metric.value"></div>
+                                                            <div class="metric-label" x-text="metric.name"></div>
+                                                            <div class="metric-desc" x-show="metric.desc" x-text="metric.desc"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'chart'">
+                                        <div class="cell">
+                                            <div class="cell-chart">
+                                                <h3 x-show="subCell.title" x-text="subCell.title"></h3>
+                                                <div :id="'chart-' + index + '-' + subIndex" class="chart-container" :style="'--height: ' + (subCell.options.height || 400) + 'px'"></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'heatmap'">
+                                        <div class="cell">
+                                            <div class="cell-heatmap">
+                                                <h3 x-show="subCell.title" x-text="subCell.title"></h3>
+                                                <div :id="'heatmap-' + index + '-' + subIndex" class="heatmap-container"></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'pyecharts'">
+                                        <div class="cell">
+                                            <div class="cell-chart">
+                                                <h3 x-show="subCell.title" x-text="subCell.title"></h3>
+                                                <div :id="'pyecharts-' + index + '-' + subIndex" class="chart-container" :style="'--height: ' + subCell.content.height"></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'html'">
+                                        <div class="cell"><div class="cell-html" x-html="subCell.content"></div></div>
+                                    </template>
+                                    <template x-if="subCell.type === 'divider'">
+                                        <div class="cell-divider"></div>
+                                    </template>
+                                    <template x-if="subCell.type === 'collapsible'">
+                                        <div class="cell-collapsible">
+                                            <button class="collapse-toggle" :class="{'expanded': !subCell.options.collapsed}" @click="subCell.options.collapsed = !subCell.options.collapsed">
+                                                <span x-text="subCell.title"></span>
+                                                <span class="arrow" x-text="subCell.options.collapsed ? '▶' : '▼'"></span>
+                                            </button>
+                                            <div class="collapse-content" x-show="!subCell.options.collapsed">
+                                                <template x-for="(collCell, collIndex) in subCell.content" :key="collIndex">
+                                                    <div>
+                                                        <template x-if="collCell.type === 'table'">
+                                                            <div x-data="table({id: 'coll-table-' + index + '-' + subIndex + '-' + collIndex, data: collCell.content, cols: getTableCols(collCell), ...getTableOptions(collCell)})"></div>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <template x-if="subCell.type === 'section'">
+                                        <div class="section nested-section">
+                                            <div class="section-title" x-show="subCell.title" x-text="subCell.title"></div>
+                                            <div class="section-content">
+                                                <template x-for="(deepCell, deepIndex) in subCell.content" :key="deepIndex">
+                                                    <div>
+                                                        <template x-if="deepCell.type === 'table'">
+                                                            <div class="cell">
+                                                                <div class="cell-table">
+                                                                    <h3 x-show="deepCell.title" x-text="deepCell.title"></h3>
+                                                                    <div x-data="table({id: 'table-' + index + '-' + subIndex + '-' + deepIndex, data: deepCell.content, cols: getTableCols(deepCell), ...getTableOptions(deepCell)})"></div>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'metrics'">
+                                                            <div class="cell">
+                                                                <div class="cell-metrics">
+                                                                    <h3 x-show="deepCell.title" x-text="deepCell.title"></h3>
+                                                                    <div class="metrics-grid" :style="'--columns: ' + (deepCell.options.columns || 4)">
+                                                                        <template x-for="metric in deepCell.content" :key="metric.name">
+                                                                            <div class="metric-card" :class="getMetricClass(metric.value)">
+                                                                                <div class="metric-value" x-text="metric.value"></div>
+                                                                                <div class="metric-label" x-text="metric.name"></div>
+                                                                            </div>
+                                                                        </template>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'chart'">
+                                                            <div class="cell">
+                                                                <div class="cell-chart">
+                                                                    <h3 x-show="deepCell.title" x-text="deepCell.title"></h3>
+                                                                    <div :id="'chart-' + index + '-' + subIndex + '-' + deepIndex" class="chart-container" :style="'--height: ' + (deepCell.options.height || 400) + 'px'"></div>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'pyecharts'">
+                                                            <div class="cell">
+                                                                <div class="cell-chart">
+                                                                    <h3 x-show="deepCell.title" x-text="deepCell.title"></h3>
+                                                                    <div :id="'pyecharts-' + index + '-' + subIndex + '-' + deepIndex" class="chart-container" :style="'--height: ' + deepCell.content.height"></div>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'text'">
+                                                            <div class="cell"><div class="cell-text" x-text="deepCell.content"></div></div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'code'">
+                                                            <div class="cell" style="padding: 0; overflow: hidden;">
+                                                                <div class="cell-code">
+                                                                    <div class="code-block">
+                                                                        <div class="code-header">
+                                                                            <span class="code-lang" x-text="deepCell.content.lang || 'Python'"></span>
+                                                                        </div>
+                                                                        <div class="code-input"><pre x-text="deepCell.content.code"></pre></div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                        <template x-if="deepCell.type === 'section'">
+                                                            <div class="section nested-section" style="border-left-color: #ff9500;">
+                                                                <div class="section-title" style="color: #c68a00;" x-show="deepCell.title" x-text="deepCell.title"></div>
+                                                                <div class="section-content">
+                                                                    <template x-for="(lv3Cell, lv3Index) in deepCell.content" :key="lv3Index">
+                                                                        <div>
+                                                                            <template x-if="lv3Cell.type === 'table'">
+                                                                                <div class="cell">
+                                                                                    <div class="cell-table">
+                                                                                        <h3 x-show="lv3Cell.title" x-text="lv3Cell.title"></h3>
+                                                                                        <div x-data="table({id: 'table-' + index + '-' + subIndex + '-' + deepIndex + '-' + lv3Index, data: lv3Cell.content, cols: getTableCols(lv3Cell), ...getTableOptions(lv3Cell)})"></div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </template>
+                                                                            <template x-if="lv3Cell.type === 'metrics'">
+                                                                                <div class="cell">
+                                                                                    <div class="cell-metrics">
+                                                                                        <h3 x-show="lv3Cell.title" x-text="lv3Cell.title"></h3>
+                                                                                        <div class="metrics-grid" :style="'--columns: ' + (lv3Cell.options.columns || 4)">
+                                                                                            <template x-for="m in lv3Cell.content" :key="m.name">
+                                                                                                <div class="metric-card">
+                                                                                                    <div class="metric-value" x-text="m.value"></div>
+                                                                                                    <div class="metric-label" x-text="m.name"></div>
+                                                                                                </div>
+                                                                                            </template>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </template>
+                                                                            <template x-if="lv3Cell.type === 'text'">
+                                                                                <div class="cell"><div class="cell-text" x-text="lv3Cell.content"></div></div>
+                                                                            </template>
+                                                                        </div>
+                                                                    </template>
+                                                                </div>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                    <template x-if="cell.type !== 'section'">
+                    <div class="cell">
+                        <template x-if="cell.type === 'title'">
+                            <div class="cell-title">
+                                <h1 x-show="cell.options.level === 1" x-text="cell.content"></h1>
+                                <h2 x-show="cell.options.level === 2" x-text="cell.content"></h2>
+                                <h3 x-show="cell.options.level === 3" x-text="cell.content"></h3>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'text'">
+                            <div class="cell-text" :class="'text-' + cell.options.style" x-text="cell.content"></div>
+                        </template>
+                        <template x-if="cell.type === 'markdown'">
+                            <div class="markdown-content" x-html="renderMarkdown(cell.content)"></div>
+                        </template>
+                        <template x-if="cell.type === 'code'">
+                            <div class="cell-code" style="padding: 0;">
+                                <div class="code-block">
+                                    <div class="code-header">
+                                        <span class="code-lang" x-text="cell.content.lang || 'Python'"></span>
+                                    </div>
+                                    <div class="code-input"><pre x-text="cell.content.code"></pre></div>
+                                    <div class="code-output" x-show="cell.content.output" x-text="cell.content.output"></div>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'table'">
+                            <div class="cell-table">
+                                <h3 x-show="cell.title" x-text="cell.title"></h3>
+                                <div x-data="table({id: 'table-' + index, data: cell.content, cols: getTableCols(cell), ...getTableOptions(cell)})"></div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'metrics'">
+                            <div class="cell-metrics">
+                                <h3 x-show="cell.title" x-text="cell.title"></h3>
+                                <div class="metrics-grid" :style="'--columns: ' + (cell.options.columns || 4)">
+                                    <template x-for="metric in cell.content" :key="metric.name">
+                                        <div class="metric-card" :class="getMetricClass(metric.value)">
+                                            <div class="metric-value" x-text="metric.value"></div>
+                                            <div class="metric-label" x-text="metric.name"></div>
+                                            <div class="metric-desc" x-show="metric.desc" x-text="metric.desc"></div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'chart'">
+                            <div class="cell-chart">
+                                <h3 x-show="cell.title" x-text="cell.title"></h3>
+                                <div :id="'chart-' + index" class="chart-container" :style="'--height: ' + (cell.options.height || 400) + 'px'"></div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'heatmap'">
+                            <div class="cell-heatmap">
+                                <h3 x-show="cell.title" x-text="cell.title"></h3>
+                                <div :id="'heatmap-' + index" class="heatmap-container"></div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'pyecharts'">
+                            <div class="cell-chart">
+                                <h3 x-show="cell.title" x-text="cell.title"></h3>
+                                <div :id="'pyecharts-' + index" class="chart-container" :style="'--height: ' + cell.content.height"></div>
+                            </div>
+                        </template>
+                        <template x-if="cell.type === 'divider'">
+                            <div class="cell-divider"></div>
+                        </template>
+                        <template x-if="cell.type === 'html'">
+                            <div class="cell-html" x-html="cell.content"></div>
+                        </template>
+                        <template x-if="cell.type === 'collapsible'">
+                            <div class="cell-collapsible">
+                                <button class="collapse-toggle" :class="{'expanded': !cell.options.collapsed}" @click="cell.options.collapsed = !cell.options.collapsed">
+                                    <span x-text="cell.title"></span>
+                                    <span class="arrow" x-text="cell.options.collapsed ? '▶' : '▼'"></span>
+                                </button>
+                                <div class="collapse-content" x-show="!cell.options.collapsed">
+                                    <template x-for="(subCell, subIndex) in cell.content" :key="subIndex">
+                                        <div>
+                                            <template x-if="subCell.type === 'table'">
+                                                <div x-data="table({id: 'coll-table-' + index + '-' + subIndex, data: subCell.content, cols: getTableCols(subCell), ...getTableOptions(subCell)})"></div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </template>
     </div>
-
-    <!-- 外部脚本 -->
+    
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/alpine-table.js"></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/alpine.min.js" defer></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/snapdom.min.js"></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/echarts.min.js"></script>
     <script id="notebook-data" type="application/json">{{ data_json | safe }}</script>
-
     <script>
-    // ========== 工具函数 ==========
+    // Toast 提示函数
     function showToast(message, type = 'info', duration = 3000) {
         const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         toast.textContent = message;
         container.appendChild(toast);
-        requestAnimationFrame(() => toast.classList.add('show'));
+        
+        // 触发显示动画
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+        
+        // 自动移除
         setTimeout(() => {
             toast.classList.remove('show');
-            setTimeout(() => container.removeChild(toast), 300);
+            setTimeout(() => {
+                container.removeChild(toast);
+            }, 300);
         }, duration);
     }
-
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    function renderMarkdown(text) {
-        return text
-            .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-            .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-            .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .trim()
-            .replace(/\n+/g, '\n')
-            .replace(/\n/g, '<br>');
-    }
-
-    function getMetricClass(value) {
-        if (typeof value === 'string' && value.includes('%')) {
-            const num = parseFloat(value);
-            if (num > 0) return 'positive';
-            if (num < 0) return 'negative';
-        }
-        return '';
-    }
-
-    // ========== 递归生成 HTML 函数 ==========
-    function renderCellHtml(cell, cellId, app) {
-        // Section 类型
-        if (cell.type === 'section') {
-            const depth = cellId.split('-').length;
-            const nestedClass = depth > 1 ? 'nested-section' : '';
-            const childrenHtml = cell.content ? cell.content.map((subCell, i) =>
-                renderCellHtml(subCell, `${cellId}-${i}`, app)
-            ).join('') : '';
-
-            const sectionIndex = cellId.split('-')[0];
-            return `
-                <div class="section ${nestedClass}"
-                     id="section-${sectionIndex}"
-                     x-data="sectionComponent('${cellId}')"
-                     x-init="init()">
-                    ${cell.title ? `<div class="section-title">${escapeHtml(cell.title)}</div>` : ''}
-                    <div class="section-content">${childrenHtml}</div>
-                </div>
-            `;
-        }
-
-        // Collapsible 类型
-        if (cell.type === 'collapsible') {
-            const collapsed = cell.options?.collapsed || false;
-            const childrenHtml = cell.content ? cell.content.map((subCell, i) =>
-                renderCellHtml(subCell, `${cellId}-${i}`, app)
-            ).join('') : '';
-
-            return `
-                <div class="cell-collapsible" x-data="collapsibleComponent('${cellId}', ${collapsed})" x-init="init()">
-                    <button class="collapse-toggle" :class="{'expanded': expanded}" @click="toggle()">
-                        <span>${escapeHtml(cell.title || '')}</span>
-                        <span class="arrow" x-text="expanded ? '▼' : '▶'"></span>
-                    </button>
-                    <div class="collapse-content" x-show="expanded">${childrenHtml}</div>
-                </div>
-            `;
-        }
-
-        // Title 类型
-        if (cell.type === 'title') {
-            const level = cell.options?.level || 1;
-            const tag = level === 1 ? 'h1' : level === 2 ? 'h2' : 'h3';
-            return `
-                <div class="cell">
-                    <div class="cell-title">
-                        <${tag}>${escapeHtml(cell.content)}</${tag}>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Text 类型
-        if (cell.type === 'text') {
-            const style = cell.options?.style || '';
-            return `
-                <div class="cell">
-                    <div class="cell-text ${style ? 'text-' + style : ''}">${escapeHtml(cell.content)}</div>
-                </div>
-            `;
-        }
-
-        // Markdown 类型
-        if (cell.type === 'markdown') {
-            return `
-                <div class="cell">
-                    <div class="markdown-content">${renderMarkdown(cell.content)}</div>
-                </div>
-            `;
-        }
-
-        // Code 类型
-        if (cell.type === 'code') {
-            const lang = cell.content?.lang || 'Python';
-            const code = cell.content?.code || '';
-            const output = cell.content?.output;
-            return `
-                <div class="cell" style="padding: 0; overflow: hidden;">
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span class="code-lang">${escapeHtml(lang)}</span>
-                        </div>
-                        <div class="code-input"><pre>${escapeHtml(code)}</pre></div>
-                        ${output ? `<div class="code-output">${escapeHtml(output)}</div>` : ''}
-                    </div>
-                </div>
-            `;
-        }
-
-        // Table 类型
-        if (cell.type === 'table') {
-            return `
-                <div class="cell">
-                    <div class="cell-table">
-                        ${cell.title ? `<h3>${escapeHtml(cell.title)}</h3>` : ''}
-                        <div id="table-container-${cellId}"></div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Metrics 类型
-        if (cell.type === 'metrics') {
-            const columns = cell.options?.columns || 4;
-            const metricsHtml = cell.content ? cell.content.map(metric => `
-                <div class="metric-card ${getMetricClass(metric.value)}">
-                    <div class="metric-value">${escapeHtml(String(metric.value))}</div>
-                    <div class="metric-label">${escapeHtml(metric.name)}</div>
-                    ${metric.desc ? `<div class="metric-desc">${escapeHtml(metric.desc)}</div>` : ''}
-                </div>
-            `).join('') : '';
-
-            return `
-                <div class="cell">
-                    <div class="cell-metrics">
-                        ${cell.title ? `<h3>${escapeHtml(cell.title)}</h3>` : ''}
-                        <div class="metrics-grid" style="--columns: ${columns}">
-                            ${metricsHtml}
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Chart 类型
-        if (cell.type === 'chart') {
-            const height = cell.options?.height || 400;
-            return `
-                <div class="cell">
-                    <div class="cell-chart">
-                        ${cell.title ? `<h3>${escapeHtml(cell.title)}</h3>` : ''}
-                        <div id="chart-${cellId}" class="chart-container" style="--height: ${height}px"></div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Heatmap 类型
-        if (cell.type === 'heatmap') {
-            return `
-                <div class="cell">
-                    <div class="cell-heatmap">
-                        ${cell.title ? `<h3>${escapeHtml(cell.title)}</h3>` : ''}
-                        <div id="heatmap-${cellId}" class="heatmap-container"></div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // Pyecharts 类型
-        if (cell.type === 'pyecharts') {
-            const height = cell.content?.height || 400;
-            return `
-                <div class="cell">
-                    <div class="cell-chart">
-                        ${cell.title ? `<h3>${escapeHtml(cell.title)}</h3>` : ''}
-                        <div id="pyecharts-${cellId}" class="chart-container" style="--height: ${height}px"></div>
-                    </div>
-                </div>
-            `;
-        }
-
-        // HTML 类型
-        if (cell.type === 'html') {
-            return `
-                <div class="cell">
-                    <div class="cell-html">${cell.content}</div>
-                </div>
-            `;
-        }
-
-        // Divider 类型
-        if (cell.type === 'divider') {
-            return '<div class="cell-divider"></div>';
-        }
-
-        return '';
-    }
-
-    // ========== 收集所有 cell 用于初始化组件 ==========
-    function collectAllCells(cells, prefix = '', result = []) {
-        cells.forEach((cell, i) => {
-            const cellId = prefix ? `${prefix}-${i}` : String(i);
-            result.push({ cell, cellId });
-            if (cell.type === 'section' && cell.content) {
-                collectAllCells(cell.content, cellId, result);
-            }
-            if (cell.type === 'collapsible' && cell.content) {
-                collectAllCells(cell.content, cellId, result);
-            }
-        });
-        return result;
-    }
-
-    // ========== 注册 Alpine.js 组件 ==========
-    document.addEventListener('alpine:init', () => {
-        Alpine.data('sectionComponent', (cellId) => ({
-            cellId: cellId,
-            init() {
-                console.log('Section initialized:', cellId);
-            }
-        }));
-
-        Alpine.data('collapsibleComponent', (cellId, initialCollapsed) => ({
-            cellId: cellId,
-            expanded: !initialCollapsed,
-            toggle() {
-                this.expanded = !this.expanded;
-            },
-            init() {
-                console.log('Collapsible initialized:', cellId);
-            }
-        }));
-    });
-
-    // ========== 主应用 ==========
+    
     function notebookApp() {
         const config = JSON.parse(document.getElementById('notebook-data').textContent);
-        let appInstance = null;
-
         return {
             title: config.title,
             createdAt: config.createdAt,
             cells: [],
             tocItems: [],
             selectedItems: new Set(),
-            allCells: [],
-
+            
             init() {
-                appInstance = this;
                 this.cells = config.cells;
-
-                const html = this.cells.map((cell, index) =>
-                    renderCellHtml(cell, String(index), this)
-                ).join('');
-
-                const container = document.getElementById('cells-container');
-                if (container) {
-                    container.innerHTML = html;
-                }
-
-                this.allCells = collectAllCells(this.cells);
                 this.buildToc();
-
+                
                 this.$nextTick(() => {
-                    if (window.Alpine) {
-                        Alpine.initTree(container);
-                        console.log('Alpine 已激活所有组件');
-                        this.initSpecialComponents();
-                    }
+                    this.renderAllComponents();
                 });
             },
-
-            initSpecialComponents() {
-                this.allCells.forEach(({ cell, cellId }) => {
-                    if (cell.type === 'table') {
-                        this.initTable('table-container-' + cellId, cell, cellId);
-                    } else if (cell.type === 'chart') {
-                        this.renderChart('chart-' + cellId, cell);
-                    } else if (cell.type === 'heatmap') {
-                        this.renderHeatmap('heatmap-' + cellId, cell);
-                    } else if (cell.type === 'pyecharts') {
-                        this.renderPyecharts('pyecharts-' + cellId, cell);
-                    }
-                });
+            
+            showToast(message, type, duration) {
+                showToast(message, type, duration);
             },
-
-            initTable(containerId, cell, cellId) {
-                const container = document.getElementById(containerId);
-                if (!container || !window.Alpine) return;
-
-                const tableConfig = {
-                    id: 'table-' + cellId.replace(/-/g, '_'),
-                    data: cell.content,
-                    cols: this.getTableCols(cell),
-                    ...this.getTableOptions(cell)
-                };
-
-                container.setAttribute('x-data', `table(${JSON.stringify(tableConfig)})`);
-                Alpine.initTree(container);
-            },
-
-            buildToc() {
-                const items = [];
-                if (this.title) {
-                    items.push({ title: this.title, type: 'header', index: -1 });
-                }
-                this.cells.forEach((cell, cellIndex) => {
-                    if (cell.type === 'section' && cell.title) {
-                        items.push({ title: cell.title, type: 'section', index: cellIndex });
-                    }
-                });
-                this.tocItems = items;
-
-                this.$nextTick(() => {
-                    const tocList = document.getElementById('toc-list');
-                    if (tocList) {
-                        tocList.innerHTML = this.tocItems.map((item, index) => `
-                            <li>
-                                <a href="#section-${item.index}"
-                                   @click.prevent="scrollToSection(${index})"
-                                   :class="{ 'active': selectedItems.has(${index}) }">
-                                    ${escapeHtml(item.title)}
-                                </a>
-                                <input type="checkbox"
-                                       :checked="selectedItems.has(${index})"
-                                       @change="toggleItemSelection(${index})">
-                            </li>
-                        `).join('');
-                        Alpine.initTree(tocList);
-                    }
-                });
-            },
-
+            
             toggleItemSelection(index) {
                 if (this.selectedItems.has(index)) {
                     this.selectedItems.delete(index);
                 } else {
                     this.selectedItems.add(index);
                 }
+                // 触发响应式更新
                 this.selectedItems = new Set(this.selectedItems);
-                this.refreshDisplay();
             },
-
+            
             toggleSelectAll(checked) {
                 if (checked) {
                     this.tocItems.forEach((_, index) => this.selectedItems.add(index));
@@ -935,50 +1168,24 @@
                     this.selectedItems.clear();
                 }
                 this.selectedItems = new Set(this.selectedItems);
-                this.refreshDisplay();
             },
-
+            
             clearSelection() {
                 this.selectedItems.clear();
                 this.selectedItems = new Set(this.selectedItems);
-                this.refreshDisplay();
             },
-
+            
+            isAllSelected() {
+                return this.tocItems.length > 0 && this.selectedItems.size === this.tocItems.length;
+            },
+            
             isSelected(cellIndex) {
+                // cellIndex: -1 表示 header, >=0 表示 cells 的索引
                 const tocIndex = this.tocItems.findIndex(item => item.index === cellIndex);
                 if (tocIndex === -1) return false;
                 return this.selectedItems.has(tocIndex);
             },
-
-            refreshDisplay() {
-                const html = this.cells.map((cell, index) =>
-                    renderCellHtml(cell, String(index), this)
-                ).join('');
-                const container = document.getElementById('cells-container');
-                if (container) {
-                    container.innerHTML = html;
-                }
-                this.$nextTick(() => {
-                    if (window.Alpine) {
-                        Alpine.initTree(container);
-                        this.initSpecialComponents();
-                    }
-                    this.buildToc();
-                });
-            },
-
-            scrollToSection(index) {
-                const item = this.tocItems[index];
-                if (item.type === 'header') {
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                } else {
-                    const section = document.querySelector(`#section-${item.index}`);
-                    if (section) {
-                        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                }
-            },
-
+            
             async captureScreenshot() {
                 if (this.selectedItems.size === 0) return;
 
@@ -999,15 +1206,19 @@
                     });
 
                     screenshotArea.classList.remove('screenshot-mode');
+
                     const blob = await result.toBlob({ type: 'png' });
 
                     try {
+                        // 确保页面有焦点后再写入剪贴板
                         window.focus();
                         await navigator.clipboard.write([
                             new ClipboardItem({ 'image/png': blob })
                         ]);
                         showToast(`截图已复制到剪贴板 (${this.selectedItems.size}个区域)`);
                     } catch (err) {
+                        console.error('复制到剪贴板失败:', err);
+                        // 降级方案：自动下载图片
                         const url = URL.createObjectURL(blob);
                         const link = document.createElement('a');
                         link.download = `截图_${new Date().toLocaleString().replace(/[/:]/g, '-')}.png`;
@@ -1019,10 +1230,107 @@
                 } catch (error) {
                     screenshotArea.classList.remove('screenshot-mode');
                     console.error('截图失败:', error);
-                    showToast('截图失败：' + error.message, 'error');
+                    showToast('截图失败: ' + error.message, 'error');
                 }
             },
-
+            
+            buildToc() {
+                const items = [];
+                
+                // 添加封面标题
+                if (this.title) {
+                    items.push({
+                        title: this.title,
+                        type: 'header',
+                        index: -1
+                    });
+                }
+                
+                // 添加所有 section（使用 forEach 的 index 而不是 indexOf）
+                this.cells.forEach((cell, cellIndex) => {
+                    if (cell.type === 'section' && cell.title) {
+                        items.push({
+                            title: cell.title,
+                            type: 'section',
+                            index: cellIndex
+                        });
+                    }
+                });
+                
+                this.tocItems = items;
+            },
+            
+            scrollToSection(index) {
+                const item = this.tocItems[index];
+                if (item.type === 'header') {
+                    // 跳转到页面顶部
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                } else {
+                    const section = document.querySelector(`#section-${item.index}`);
+                    if (section) {
+                        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }
+            },
+            
+            renderAllComponents() {
+                this.cells.forEach((cell, index) => {
+                    if (cell.type === 'chart') {
+                        this.renderChart('chart-' + index, cell);
+                    } else if (cell.type === 'heatmap') {
+                        this.renderHeatmap('heatmap-' + index, cell);
+                    } else if (cell.type === 'pyecharts') {
+                        this.renderPyecharts('pyecharts-' + index, cell);
+                    } else if (cell.type === 'section') {
+                        this.renderSectionComponents(cell, index);
+                    }
+                });
+            },
+            
+            renderSectionComponents(section, parentIndex, depth = 1) {
+                if (section.content && Array.isArray(section.content)) {
+                    section.content.forEach((subCell, subIndex) => {
+                        const idPrefix = depth === 1 
+                            ? parentIndex + '-' + subIndex
+                            : parentIndex + '-' + subIndex;
+                        
+                        if (subCell.type === 'chart') {
+                            this.renderChart('chart-' + idPrefix, subCell);
+                        } else if (subCell.type === 'heatmap') {
+                            this.renderHeatmap('heatmap-' + idPrefix, subCell);
+                        } else if (subCell.type === 'pyecharts') {
+                            this.renderPyecharts('pyecharts-' + idPrefix, subCell);
+                        } else if (subCell.type === 'section') {
+                            if (subCell.content && Array.isArray(subCell.content)) {
+                                subCell.content.forEach((deepCell, deepIndex) => {
+                                    const deepId = idPrefix + '-' + deepIndex;
+                                    if (deepCell.type === 'chart') {
+                                        this.renderChart('chart-' + deepId, deepCell);
+                                    } else if (deepCell.type === 'heatmap') {
+                                        this.renderHeatmap('heatmap-' + deepId, deepCell);
+                                    } else if (deepCell.type === 'pyecharts') {
+                                        this.renderPyecharts('pyecharts-' + deepId, deepCell);
+                                    } else if (deepCell.type === 'section') {
+                                        if (deepCell.content && Array.isArray(deepCell.content)) {
+                                            deepCell.content.forEach((lv3Cell, lv3Index) => {
+                                                const lv3Id = deepId + '-' + lv3Index;
+                                                if (lv3Cell.type === 'chart') {
+                                                    this.renderChart('chart-' + lv3Id, lv3Cell);
+                                                } else if (lv3Cell.type === 'heatmap') {
+                                                    this.renderHeatmap('heatmap-' + lv3Id, lv3Cell);
+                                                } else if (lv3Cell.type === 'pyecharts') {
+                                                    this.renderPyecharts('pyecharts-' + lv3Id, lv3Cell);
+                                                }
+                                            });
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+            },
+            
             getTableCols(cell) {
                 if (cell.options && cell.options.columns) {
                     return cell.options.columns.map(col => ({field: col, title: col}));
@@ -1032,28 +1340,35 @@
                 }
                 return [];
             },
-
+            
             getTableOptions(cell) {
                 const opts = cell.options || {};
                 const result = {};
-                if (opts.freeze) result.freeze = opts.freeze;
-                if (opts.page) result.page = opts.page;
+                
+                if (opts.freeze) {
+                    result.freeze = opts.freeze;
+                }
+                
+                if (opts.page) {
+                    result.page = opts.page;
+                }
+                
                 return result;
             },
-
+            
             chartColors: ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4'],
-
+            
             renderChart(containerId, cell) {
                 const container = document.getElementById(containerId);
                 if (!container) return;
-
+                
                 const chart = echarts.init(container);
                 const chartType = cell.content.chart_type;
                 const data = cell.content.data;
                 const colors = this.chartColors;
-
+                
                 let option = {};
-
+                
                 if (chartType === 'line' || chartType === 'area') {
                     option = {
                         color: colors,
@@ -1061,13 +1376,17 @@
                         legend: { data: data.series.map(s => s.name), top: 5 },
                         grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
                         xAxis: { type: 'category', boundaryGap: false, data: data.dates },
-                        yAxis: { type: 'value', scale: true, boundaryGap: ['10%', '10%'] },
+                        yAxis: { 
+                            type: 'value',
+                            scale: true,
+                            boundaryGap: ['10%', '10%']
+                        },
                         series: data.series.map((s, i) => ({
                             name: s.name,
                             type: 'line',
                             data: s.data,
                             smooth: true,
-                            areaStyle: chartType === 'area' ? {
+                            areaStyle: chartType === 'area' ? { 
                                 color: {
                                     type: 'linear',
                                     x: 0, y: 0, x2: 0, y2: 1,
@@ -1083,16 +1402,36 @@
                 } else if (chartType === 'bar') {
                     option = {
                         tooltip: { trigger: 'axis' },
-                        legend: { data: data.series.map(s => ({ name: s.name, icon: 'rect' })), top: 5 },
+                        legend: { 
+                            data: data.series.map(s => ({
+                                name: s.name,
+                                icon: 'rect'
+                            })),
+                            top: 5,
+                            itemStyle: {
+                                color: '#e74c3c'
+                            }
+                        },
                         grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
                         xAxis: { type: 'category', data: data.categories },
-                        yAxis: { type: 'value', scale: true, boundaryGap: ['10%', '10%'] },
+                        yAxis: { 
+                            type: 'value',
+                            scale: true,
+                            boundaryGap: ['10%', '10%']
+                        },
                         series: data.series.map((s, i) => ({
                             name: s.name,
                             type: 'bar',
                             data: s.data,
-                            itemStyle: {
-                                color: (params) => params.value >= 0 ? '#e74c3c' : '#5499c7',
+                            itemStyle: { 
+                                color: function(params) {
+                                    const value = params.value;
+                                    if (value >= 0) {
+                                        return '#e74c3c';
+                                    } else {
+                                        return '#5499c7';
+                                    }
+                                },
                                 borderRadius: [4, 4, 0, 0]
                             }
                         }))
@@ -1100,37 +1439,60 @@
                 } else if (chartType === 'pie') {
                     option = {
                         color: colors,
-                        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-                        legend: { top: 10, left: 'center', orient: 'horizontal' },
+                        tooltip: { 
+                            trigger: 'item',
+                            formatter: '{b}: {c} ({d}%)'
+                        },
+                        legend: { 
+                            top: 10,
+                            left: 'center',
+                            orient: 'horizontal'
+                        },
                         series: [{
                             type: 'pie',
                             radius: ['40%', '70%'],
                             center: ['50%', '55%'],
                             data: data,
-                            label: { show: true, formatter: '{b}\n{c} ({d}%)' },
-                            labelLine: { show: true, length: 15, length2: 10 },
-                            emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } }
+                            label: { 
+                                show: true,
+                                formatter: '{b}\n{c} ({d}%)'
+                            },
+                            labelLine: {
+                                show: true,
+                                length: 15,
+                                length2: 10
+                            },
+                            emphasis: {
+                                label: {
+                                    show: true,
+                                    fontSize: 14,
+                                    fontWeight: 'bold'
+                                }
+                            }
                         }]
                     };
                 }
-
+                
                 option = { ...option, ...cell.options };
                 chart.setOption(option);
+                
                 window.addEventListener('resize', () => chart.resize());
             },
-
+            
             renderHeatmap(containerId, cell) {
                 const container = document.getElementById(containerId);
                 if (!container) return;
-
+                
                 const chart = echarts.init(container);
                 const data = cell.content;
+                
                 const years = Object.keys(data).sort();
                 const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
-
+                
                 const heatmapData = [];
-                let minValue = Infinity, maxValue = -Infinity;
-
+                let minValue = Infinity;
+                let maxValue = -Infinity;
+                
                 years.forEach((year, yIndex) => {
                     months.forEach((month, mIndex) => {
                         const value = data[year][month];
@@ -1142,13 +1504,16 @@
                         }
                     });
                 });
-
+                
+                // 根据数据范围动态设置 visualMap 范围
                 const range = Math.max(Math.abs(minValue), Math.abs(maxValue));
-                const visualMax = Math.ceil(range / 5) * 5;
-
+                const visualMax = Math.ceil(range / 5) * 5;  // 向上取整到5的倍数
+                
                 const option = {
                     tooltip: {
-                        formatter: (params) => years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2] + '%'
+                        formatter: function(params) {
+                            return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2] + '%';
+                        }
                     },
                     grid: { left: '10%', right: '18%', top: '10%', bottom: '12%' },
                     xAxis: { type: 'category', data: months, splitArea: { show: true } },
@@ -1172,19 +1537,41 @@
                         emphasis: { itemStyle: { shadowBlur: 10 } }
                     }]
                 };
-
+                
                 chart.setOption(option);
                 window.addEventListener('resize', () => chart.resize());
             },
-
+            
             renderPyecharts(containerId, cell) {
                 const container = document.getElementById(containerId);
                 if (!container) return;
-
+                
                 const chart = echarts.init(container);
                 const option = JSON.parse(cell.content.option);
                 chart.setOption(option);
+                
                 window.addEventListener('resize', () => chart.resize());
+            },
+            
+            getMetricClass(value) {
+                if (typeof value === 'string' && value.includes('%')) {
+                    const num = parseFloat(value);
+                    if (num > 0) return 'positive';
+                    if (num < 0) return 'negative';
+                }
+                return '';
+            },
+            
+            renderMarkdown(text) {
+                return text
+                    .replace(/^### (.*$)/gm, '<h3>$1</h3>')
+                    .replace(/^## (.*$)/gm, '<h2>$1</h2>')
+                    .replace(/^# (.*$)/gm, '<h1>$1</h1>')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .trim()
+                    .replace(/\n+/g, '\n')
+                    .replace(/\n/g, '<br>');
             }
         };
     }
