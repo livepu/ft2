@@ -34,7 +34,6 @@
     }
     .alpine-table {
       width: 100%;
-      min-width: 1200px;
       border-collapse: separate;
       border-spacing: 0;
       font-size: 14px;
@@ -45,34 +44,143 @@
       border: 1px solid #e5e7eb;
       text-align: left;
       white-space: nowrap;
+      min-width: 80px;  /* 简单设置一个最小宽度 */
     }
+    
+    /* ============================================================================
+       冻结列的 CSS 设置 - 两种思路
+       ============================================================================
+       
+       【思路 1：设置单元格最小宽度】✅ 推荐
+       ----------------------------------------
+       让每个单元格自己控制最小宽度，内容会自动撑大列宽。
+       
+       优点：
+       - 简单直接，只需一行 CSS
+       - 列宽由内容决定，更可控
+       - 每列可以独立设置不同的 min-width
+       - 自动适配，无需计算总宽度
+       
+       示例：
+       .alpine-table th,
+       .alpine-table td {
+         min-width: 80px;  // 所有列最小 80px
+       }
+       
+       // 或者为特定列设置
+       .alpine-table th:nth-child(1) { min-width: 100px; }  // 第 1 列
+       .alpine-table th:nth-child(2) { min-width: 150px; }  // 第 2 列
+       
+       
+       【思路 2：设置表格最大宽度】
+       ----------------------------------------
+       固定表格总宽度，让浏览器自动分配列宽。
+       
+       缺点：
+       - 列宽不可控，可能被平均分配
+       - 内容过长时可能被压缩
+       - 需要额外计算总宽度
+       
+       示例（不推荐）：
+       .alpine-table {
+         min-width: 1200px;  // 固定表格最小总宽
+       }
+       
+       
+       【结论】
+       ----------------------------------------
+       推荐使用【思路 1：设置单元格最小宽度】
+       - 让内容自然撑开列宽
+       - 只需设置最小宽度保证可读性
+       - 冻结列会自动适配实际列宽
+       
+       
+       ============================================================================
+       背景色设置 - 重要说明
+       ============================================================================
+       
+       【问题：为什么必须设置背景色？】
+       ----------------------------------------
+       浏览器默认背景色是 transparent（透明），如果不设置背景色：
+       - 冻结列滚动时，下方的内容会透过来 ❌
+       - 造成视觉混乱，影响阅读体验
+       
+       【示例：透明背景的问题】
+       ----------------------------------------
+       滚动前：
+       ┌────────┬────────────────────────────┐
+       │ 基金代码 │ 易方达基金...              │
+       │ 100001 │ 南方基金...                │
+       └────────┴────────────────────────────┘
+       
+       滚动后（透明背景）：
+       ┌────────┬────────────────────────────┐
+       │ 基金代码 │ ← 看到下方滚动的"混合型"   │ ❌ 透明
+       │ 100001 │ ← 看到下方滚动的"债券型"   │ ❌ 透明
+       └────────┴────────────────────────────┘
+       
+       
+       【解决方案：设置不透明背景色】
+       ----------------------------------------
+       1. 表头背景色
+       .alpine-table th {
+         background: #1a73e8;  // 深蓝色，不透明
+       }
+       
+       2. 单元格背景色（斑马纹）
+       .alpine-table tbody tr:nth-child(odd) td {
+         background: #f0f7ff;  // 奇数行浅蓝
+       }
+       .alpine-table tbody tr:nth-child(even) td {
+         background: #e8f4f8;  // 偶数行更浅
+       }
+       
+       3. Hover 效果
+       .alpine-table tbody tr:hover td {
+         background: #d6eaff;  // hover 时变色
+       }
+       
+       
+       【为什么冻结列自动有背景色？】
+       ----------------------------------------
+       冻结列也是 th/td 元素，CSS 选择器会自动匹配：
+       - .alpine-table th → 匹配冻结的表头列 ✅
+       - .alpine-table td → 匹配冻结的单元格 ✅
+       - :nth-child(odd) td → 匹配奇数行的冻结列 ✅
+       - :hover td → 匹配 hover 行的冻结列 ✅
+       
+       因此，冻结列会自动继承背景色，无需额外设置！
+       
+       
+       【注意事项】
+       ----------------------------------------
+       ⚠️ 必须设置背景色（th/td），不能留空
+       ⚠️ 背景色必须是不透明的（不能用 transparent）
+       ⚠️ 斑马纹和 hover 效果会自动应用到冻结列
+       
+       ============================================================================ */
+    
+    /* 自定义表头背景色 - 深蓝色 */
     .alpine-table th {
-      background: #f9fafb;
+      background: #1a73e8;
+      color: white;
       font-weight: 600;
-      position: relative;
       cursor: pointer;
       user-select: none;
     }
     .alpine-table th:hover {
-      background: #f3f4f6;
-    }
-    .alpine-table tbody tr:hover {
-      background: #f9fafb;
-    }
-    .alpine-table tbody tr:hover .freeze-col {
-      background: #f3f4f6;
+      background: #1557b0;
     }
     
-    /* 冻结列样式 */
-    .alpine-table-freeze {
-      position: relative;
+    /* 自定义单元格背景色 - 斑马纹 */
+    .alpine-table tbody tr:nth-child(odd) td {
+      background: #f0f7ff;
     }
-    .freeze-col {
-      position: sticky;
-      background: inherit;
+    .alpine-table tbody tr:nth-child(even) td {
+      background: #e8f4f8;
     }
-    thead .freeze-col {
-      background: #f9fafb;
+    .alpine-table tbody tr:hover td {
+      background: #d6eaff;
     }
     
     /* 排序指示器 */
