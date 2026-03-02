@@ -250,7 +250,10 @@ class CellBuilder:
             # 宽格式模式：第一列作为 Y轴，其余列作为 X轴
             # 如果index是默认数字索引(RangeIndex)，则将第一列设为index
             # 相关性矩阵等场景，index已设置好，无需处理
-            if isinstance(df.index, pd.RangeIndex) and len(df.columns) > 1:
+            # 检查第一列是否已被用作索引名，避免重复设置
+            if (isinstance(df.index, pd.RangeIndex) 
+                and len(df.columns) > 1 
+                and df.index.name != df.columns[0]):
                 df = df.set_index(df.columns[0])
             
             # 转换为嵌套字典
