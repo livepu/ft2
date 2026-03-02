@@ -1,8 +1,10 @@
-# Notebook 可视化设计方案 V3
+# Notebook 可视化设计方案 V3.5
 
-> 制定时间：2025-02-27
-> 目标：构建统一、规范、简洁的可视化系统
-> 技术方案：Section 模块化布局 + pyecharts 图表 + Notion 风格样式
+> 制定时间：2025-02-27  
+> 修订时间：2026-03-02  
+> 目标：构建统一、规范、简洁的可视化系统  
+> 技术方案：Section 模块化布局 + pyecharts 图表 + Notion 风格样式  
+> **渲染架构：Alpine.js 声明式模板（接受代码重复，确保功能稳定）**
 
 ---
 
@@ -21,9 +23,9 @@
 │  ├── Cell: 内容单元（类型 + 内容 + 标题 + 配置）          │
 │  └── CellBuilder: 静态工厂方法创建各类 Cell              │
 ├─────────────────────────────────────────────────────────┤
-│  渲染层                                                  │
-│  ├── Jinja2 模板: 渲染 HTML 结构                         │
-│  ├── Alpine.js: 交互逻辑（表格排序、折叠展开）            │
+│  渲染层 (V3.5 稳定版)                                    │
+│  ├── Alpine 声明式模板：x-for + x-if 条件渲染            │
+│  ├── 三级嵌套：手动复制（Alpine 不支持递归组件）          │
 │  ├── ECharts: 图表渲染                                   │
 │  └── Notion 风格 CSS: 模块化视觉设计                     │
 └─────────────────────────────────────────────────────────┘
@@ -32,14 +34,15 @@
 ### 1.2 设计理念
 
 ```
-简洁的 API + 清晰的架构 + 灵活的扩展
+简洁的 API + 清晰的架构 + 稳定的渲染
 ```
 
 **核心原则**:
-- **少即是多**: 7个图表方法 → 1个 `chart()`
+- **少即是多**: 7 个图表方法 → 1 个 `chart()`
 - **统一入口**: 用户无需记忆多个方法
 - **自动识别**: pyecharts 对象智能识别
 - **分层清晰**: 用户接口 / 数据结构 / 渲染分离
+- **稳定优先**: 接受代码重复，确保功能正常工作
 
 ---
 
@@ -71,7 +74,7 @@ class CellType(Enum):
 class Cell:
     type: CellType            # 类型
     content: Any              # 内容（根据类型变化）
-    title: Optional[str]      # 标题（可选）
+    title: Optional[str]       # 标题（可选）
     options: Dict             # 配置选项
     created_at: datetime      # 创建时间
 ```
@@ -119,7 +122,7 @@ nb.export_html("report.html")
 ### 3.2 Section 模块化用法
 
 ```python
-# 方式1: 上下文管理器（推荐）
+# 方式 1: 上下文管理器（推荐）
 with nb.section("收益分析"):
     nb.metrics([...], title="收益指标")
     nb.chart('line', {'dates': dates, 'series': series}, title="净值曲线")
@@ -127,7 +130,7 @@ with nb.section("收益分析"):
     with nb.section("月度统计"):  # 嵌套
         nb.chart('bar', {'categories': months, 'series': returns}, title="月度收益")
 
-# 方式2: 链式调用（Section 内）
+# 方式 2: 链式调用（Section 内）
 with nb.section("风险分析"):
     nb.metrics([...], title="风险指标") \
       .chart('area', {'dates': dates, 'series': drawdowns}, title="回撤曲线") \
@@ -164,7 +167,7 @@ chart(chart_type, data=None, title=None, **options)
     #   - 'bar': 柱状图
     #   - 'pie': 饼图
     #   - 'heatmap': 热力图
-    #   - pyecharts 对象: 自动识别
+    #   - pyecharts 对象：自动识别
     # data 格式:
     #   - line/area: {'dates': [...], 'series': [...]}
     #   - bar: {'categories': [...], 'series': [...]}
@@ -272,164 +275,124 @@ def chart(self, chart_type, data=None, title=None, **options):
 | heatmap | `{'2024': {'01': 0.05, ...}, ...}` |
 | pyecharts | 直接传对象 |
 
-### 5.3 DataFrame 转换
-
-#### 折线图/面积图
-
-```python
-# DataFrame 结构
-df = pd.DataFrame({
-    'date': ['2024-01-01', '2024-01-02', ...],
-    'strategy': [1.0, 1.05, ...],
-    'benchmark': [1.0, 1.03, ...]
-})
-
-# 转换
-dates = df['date'].tolist()
-series = [
-    {'name': '策略净值', 'data': df['strategy'].tolist()},
-    {'name': '基准净值', 'data': df['benchmark'].tolist()}
-]
-nb.chart('line', {'dates': dates, 'series': series})
-```
-
-#### 柱状图
-
-```python
-# DataFrame 结构
-df = pd.DataFrame({
-    'category': ['股票', '债券', '现金'],
-    'current': [60, 25, 15],
-    'target': [50, 30, 20]
-})
-
-# 转换
-categories = df['category'].tolist()
-series = [
-    {'name': '当前配置', 'data': df['current'].tolist()},
-    {'name': '目标配置', 'data': df['target'].tolist()}
-]
-nb.chart('bar', {'categories': categories, 'series': series})
-```
-
-#### 饼图
-
-```python
-# DataFrame 结构
-df = pd.DataFrame({
-    'name': ['股票', '债券', '现金'],
-    'value': [60, 25, 15]
-})
-
-# 转换（最简单）
-nb.chart('pie', df.to_dict('records'))
-```
-
-#### 热力图（月度收益）
-
-```python
-# DataFrame 结构
-df = pd.DataFrame({
-    'date': pd.date_range('2024-01-01', periods=12, freq='M'),
-    'return': [0.05, -0.02, ...]
-})
-df['year'] = df['date'].dt.year.astype(str)
-df['month'] = df['date'].dt.month.astype(str).str.zfill(2)
-
-# 转换
-monthly_returns = df.groupby('year').apply(
-    lambda x: x.set_index('month')['return'].to_dict()
-).to_dict()
-nb.chart('heatmap', monthly_returns)
-```
-
-#### 辅助函数封装
-
-```python
-def df_to_line_chart(df, date_col='date', value_cols=None):
-    """DataFrame 转折线图格式"""
-    dates = df[date_col].tolist()
-    cols = value_cols or [c for c in df.columns if c != date_col]
-    series = [{'name': col, 'data': df[col].tolist()} for col in cols]
-    return {'dates': dates, 'series': series}
-
-def df_to_bar_chart(df, category_col, value_cols=None):
-    """DataFrame 转柱状图格式"""
-    categories = df[category_col].tolist()
-    cols = value_cols or [c for c in df.columns if c != category_col]
-    series = [{'name': col, 'data': df[col].tolist()} for col in cols]
-    return {'categories': categories, 'series': series}
-
-# 使用
-nb.chart('line', df_to_line_chart(df, 'date', ['strategy', 'benchmark']))
-nb.chart('bar', df_to_bar_chart(df, 'category'))
-```
-
-### 5.4 使用示例
+### 5.3 使用示例
 
 ```python
 # 折线图
-nb.chart('line', {'dates': dates, 'series': series}, title='净值曲线')
+df = pd.DataFrame({
+    'date': pd.date_range('2024-01-01', periods=12, freq='M'),
+    'strategy': [1.0, 1.05, 1.08, 1.12, 1.15, 1.20, 1.18, 1.25, 1.30, 1.28, 1.35, 1.42],
+    'benchmark': [1.0, 1.02, 1.04, 1.06, 1.08, 1.10, 1.09, 1.12, 1.15, 1.14, 1.18, 1.22]
+})
+nb.chart('line', df_to_line_chart(df, 'date', ['strategy', 'benchmark']), title='净值走势')
 
 # 柱状图
-nb.chart('bar', {'categories': categories, 'series': series}, title='持仓')
+allocation = pd.DataFrame({
+    'category': ['股票', '债券', '现金', '其他'],
+    'current': [60, 25, 10, 5],
+    'target': [50, 30, 15, 5]
+})
+nb.chart('bar', df_to_bar_chart(allocation, 'category'), title='资产配置')
 
 # 饼图
-nb.chart('pie', [{'name': '股票', 'value': 60}, ...], title='配置')
+positions = [{'name': '茅台', 'value': 30}, {'name': '平安', 'value': 25}, {'name': '万科', 'value': 20}, {'name': '现金', 'value': 25}]
+nb.chart('pie', positions, title='持仓分布')
 
 # 热力图
-nb.chart('heatmap', monthly_returns, title='月度收益')
+monthly_returns = {
+    '2023': {'1月': 0.02, '2月': -0.01, '3月': 0.03},
+    '2024': {'1月': 0.05, '2月': -0.02, '3月': 0.08}
+}
+nb.chart('heatmap', monthly_returns, title='月度收益热力图')
 
-# pyecharts 对象（自动识别）
-from pyecharts.charts import Kline, Grid
-kline = Kline().add_xaxis(dates).add_yaxis("K线", data)
-nb.chart(kline, title='K线图', height=600)
-
-# 复杂 pyecharts（Grid 布局）
-grid = Grid()
-grid.add(line1, grid_opts=opts.GridOpts(pos_left="5%", pos_right="55%"))
-grid.add(line2, grid_opts=opts.GridOpts(pos_left="55%", pos_right="5%"))
-nb.chart(grid, title='双轴图')
+# 导出
+nb.export_html('report.html')
 ```
 
 ---
 
-## 6. 表格系统
+## 6. 渲染架构（V3.5 稳定版）
 
-### 6.1 功能特性
+### 6.1 核心思路
 
-| 特性 | 说明 |
-|------|------|
-| 数据类型 | List[dict] 或 DataFrame（自动识别） |
-| 冻结列 | `freeze=2` 或 `freeze={'left': 2, 'right': 1}` |
-| 折叠 | `collapsed=True` |
-| 分页 | `page={'limit': 20}` |
+**Alpine.js 声明式模板（三级嵌套，手动复制）**
 
-### 6.2 使用示例
-
-```python
-# 基础表格
-nb.table(data)
-
-# 指定列
-nb.table(data, columns=['code', 'name', 'type'], title='基金列表')
-
-# DataFrame 自动识别
-nb.table(df, title='数据表')
-
-# 冻结列
-nb.table(data, freeze=2)
-nb.table(data, freeze={'left': 2, 'right': 1})
-
-# 可折叠表格
-nb.table(data, title='详细数据', collapsed=True)
-
-# 冻结 + 折叠
-nb.table(data, title='详细数据', freeze=2, collapsed=True)
-
-# 分页
-nb.table(data, page={'limit': 20, 'limits': [10, 20, 50]})
 ```
+JSON 数据 
+  ↓ (Jinja2 模板渲染)
+HTML 模板（包含 x-data、x-for、x-if 指令）
+  ↓ (Alpine.js 自动扫描初始化)
+Alpine 组件激活
+  ↓ (init() 生命周期)
+表格/图表渲染
+```
+
+### 6.2 模板结构
+
+```html
+<!-- 三级嵌套 Section - 手动复制 -->
+<template x-for="(cell, index) in cells" :key="index">
+    <div>
+        <!-- Level 1: Section -->
+        <template x-if="cell.type === 'section'">
+            <div class="section">
+                <div class="section-title" x-text="cell.title"></div>
+                <div class="section-content">
+                    <template x-for="(subCell, subIndex) in cell.content">
+                        <!-- Level 2: Nested Section -->
+                        <template x-if="subCell.type === 'section'">
+                            <div class="section nested-section">
+                                ...
+                                <template x-for="(deepCell, deepIndex) in subCell.content">
+                                    <!-- Level 3: Deep Nested -->
+                                    <template x-if="deepCell.type === 'section'">
+                                        ...
+                                    </template>
+                                </template>
+                            </div>
+                        </template>
+                        
+                        <!-- Table: x-data 声明式 -->
+                        <template x-if="subCell.type === 'table'">
+                            <div x-data="table({data: subCell.content, ...})"></div>
+                        </template>
+                    </template>
+                </div>
+            </div>
+        </template>
+        
+        <!-- 非 Section 类型 -->
+        <template x-if="cell.type !== 'section'">
+            ...
+        </template>
+    </div>
+</template>
+```
+
+### 6.3 为什么选择声明式模板
+
+| 特性 | JS 生成 HTML | Alpine 声明式 | 结论 |
+|------|-------------|--------------|------|
+| 嵌套层级 | 理论无限 | 3 级手动 | ✅ 声明式足够 |
+| 代码重复 | 1 次 | 4 次 | JS 生成更少 |
+| 冻结功能 | ❌ 不工作 | ✅ 正常 | **声明式稳定** |
+| 初始化时机 | ❌ 复杂 | ✅ 自动 | **声明式可靠** |
+| 维护成本 | 低 | 中等 | 可接受 |
+| 复杂度 | 高（需处理 initTree） | 低（声明即用） | **声明式简单** |
+
+### 6.4 失败尝试总结（V4 方案）
+
+**V4 尝试的方案**：JS 递归生成 HTML + Alpine.initTree() 激活
+
+**失败原因**：
+1. **Alpine 不支持动态初始化**：页面加载后，`x-data` 属性必须已存在于 HTML 中
+2. **表格冻结功能失效**：`alpine-table.js` 依赖组件实例（`this.$refs`、`this.$nextTick`），动态添加的属性无法触发组件初始化
+3. **初始化链路复杂**：需要精确控制 `innerHTML` → `Alpine.initTree()` → 组件初始化的时序
+
+**教训**：
+- Alpine.js 设计理念是"声明式优先"，不适合"动态生成 HTML"的模式
+- Vue/React 有真正的组件系统（`$mount` / `createApp`），Alpine 没有
+- 接受代码重复，选择稳定的架构，比追求"完美"更重要
 
 ---
 
@@ -438,173 +401,148 @@ nb.table(data, page={'limit': 20, 'limits': [10, 20, 50]})
 ### 7.1 HTML 结构
 
 ```html
-<div class="notebook-container">
-    <div class="notebook-header">
-        <h1>{{ title }}</h1>
-        <span>{{ createdAt }}</span>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }}</title>
+    <style>
+        <!-- Notion 风格 CSS -->
+    </style>
+</head>
+<body x-data="notebookApp" x-init="init()">
+    <!-- Toast 容器 -->
+    <!-- TOC 目录面板 -->
+    
+    <div class="notebook-container">
+        <!-- Header -->
+        
+        <!-- 三级嵌套 Section 模板（手动复制） -->
+        <template x-for="(cell, index) in cells">
+            ...
+        </template>
     </div>
     
-    <template x-for="cell in cells">
-        <!-- Section 类型 -->
-        <template x-if="cell.type === 'section'">
-            <div class="section">
-                <div class="section-title" x-text="cell.title"></div>
-                <div class="section-content">
-                    <!-- 渲染子 Cells -->
-                </div>
-            </div>
-        </template>
-        
-        <!-- 其他类型 -->
-        <template x-if="cell.type !== 'section'">
-            <div class="cell">
-                <!-- 根据类型渲染 -->
-            </div>
-        </template>
-    </template>
-</div>
+    <!-- 依赖脚本 -->
+    <script src="alpine-table.js"></script>
+    <script src="alpine.min.js" defer></script>
+    <script src="echarts.min.js"></script>
+    
+    <!-- 数据 + 应用逻辑 -->
+    <script id="notebook-data">{{ data_json | safe }}</script>
+    <script>
+        function notebookApp() { ... }
+    </script>
+</body>
+</html>
 ```
 
-### 7.2 Notion 风格 CSS
+### 7.2 表格组件（冻结功能关键）
+
+```javascript
+// alpine-table.js
+window.table = function(config) {
+    return {
+        id: config.id,
+        data: config.data || [],
+        cols: config.cols || [],
+        freeze: config.freeze || {left: 0, right: 0},
+        
+        init() {
+            // 关键：依赖 Alpine 自动初始化
+            injectFreezeStyles();
+            this.loadDataFromConfig();
+            
+            this.$nextTick(() => {
+                this.render();  // 渲染表格 + 应用冻结样式
+            });
+        },
+        
+        render() {
+            // 生成表格 HTML
+            // ...
+            
+            // 冻结功能核心
+            if (this.freeze.left > 0 || this.freeze.right > 0) {
+                this.$nextTick(() => {
+                    this.applyFreezeStyles();  // 设置 CSS sticky + ResizeObserver
+                });
+            }
+        }
+    };
+};
+```
+
+**冻结功能工作原理**：
+1. **CSS sticky 定位**：`position: sticky` + `left/right` 偏移
+2. **z-index 层级**：表头 100，冻结列 50，滚动区域 10
+3. **ResizeObserver**：监听表格宽度变化，动态更新 CSS 变量
+4. **依赖组件实例**：必须在 Alpine 初始化时创建组件实例
+
+### 7.3 样式规范（Notion 风格）
 
 ```css
-/* Section 模块 */
+.notebook-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
 .section {
-    border-radius: 6px;
     margin: 12px 0;
     background: #fff;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     border: 1px solid #e9e9e9;
-}
-.section-title {
-    font-size: 15px;
-    font-weight: 600;
-    padding: 14px 16px;
-    background: linear-gradient(90deg, #fafafa 0%, #fff 100%);
-    color: #37352f;
-}
-.section-content {
-    padding: 14px 16px;
-}
-
-/* Cell 内容块 */
-.cell {
-    background: #f7f6f3;
     border-radius: 6px;
-    margin: 8px 0;
-    padding: 12px 14px;
 }
 
-/* 嵌套 Section */
 .nested-section {
     border-left: 4px solid #9b51e0;
     background: #faf9f7;
 }
-```
 
-### 7.3 层级颜色规范
+.nested-section .nested-section {
+    border-left-color: #ff9500;
+    background: #fffdf7;
+}
 
-| 层级 | 左边框 | 标题颜色 | 背景 |
-|------|--------|---------|------|
-| Level 1 | 无 | #37352f | 白色 |
-| Level 2 | #9b51e0 紫色 | #6b5b95 | #faf9f7 |
-| Level 3 | #ff9500 橙色 | #c68a00 | #fffdf7 |
+/* 冻结列关键样式 */
+.alpine-table-freeze {
+    overflow-x: auto;
+    position: relative;
+}
 
----
+.alpine-table-freeze .freeze-col {
+    position: sticky;
+    background: inherit;
+}
 
-## 8. 文件结构
-
-```
-ft2/
-├── notebook/
-│   ├── __init__.py              # 导出 Notebook, Cell, CellType
-│   ├── notebook.py              # Notebook 主类 + SectionContext
-│   ├── cell.py                  # Cell 数据类 + CellBuilder
-│   └── Notebook设计方案.md      # 本文档
-├── template/
-│   ├── notebook.html            # 主模板（Notion 风格）
-│   └── js/
-│       ├── alpine.min.js        # Alpine.js
-│       ├── alpine-table.js      # 表格组件
-│       └── echarts.min.js       # ECharts
-└── test_notebook.py             # 综合测试示例
+.alpine-table-freeze thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
 ```
 
 ---
 
-## 9. 特性总结
-
-### 9.1 核心特性
-
-| 特性 | 说明 |
-|------|------|
-| **简洁 API** | 方法命名无 `add_` 前缀，直观易用 |
-| **统一图表** | `chart()` 一个入口搞定所有图表 |
-| **自动识别** | pyecharts 对象智能识别 |
-| **模块化布局** | Section 容器 + Cell 内容块，层次清晰 |
-| **上下文管理** | `with nb.section()` 语法，自动层级计算 |
-| **链式调用** | 所有方法返回 self |
-| **表格增强** | 冻结列、折叠、分页 |
-| **pyecharts** | 直接集成，支持所有 ECharts 图表 |
-
-### 9.2 与 V2 对比
-
-| 项目 | V2 | V3 |
-|------|-----|-----|
-| 方法命名 | `add_xxx` | `xxx`（简洁） |
-| 图表方法 | 7个独立方法 | 1个 `chart()` |
-| 表格方法 | 3个独立方法 | 1个 `table()` |
-| 快捷方法 | 多个 | 精简 |
-| API 复杂度 | 较高 | **极简** |
-
----
-
-## 10. 使用示例
-
-### 10.1 简单报告
+## 8. 导出流程
 
 ```python
-nb = Notebook("日报")
-nb.title("今日行情", level=1)
-nb.metrics([
-    {'name': '上证指数', 'value': '3,050.21', 'desc': '+0.52%'},
-    {'name': '深证成指', 'value': '9,875.43', 'desc': '+0.81%'},
-])
-nb.export_html("daily.html")
-```
-
-### 10.2 复杂报告
-
-```python
-nb = Notebook("策略回测报告")
-
-with nb.section("报告概述"):
-    nb.markdown("**策略**: 双均线 | **周期**: 2024-01 ~ 2024-12")
-
-with nb.section("核心指标"):
-    nb.metrics([...], title="收益指标")
-    nb.metrics([...], title="风险指标")
-
-with nb.section("收益分析"):
-    nb.chart('line', {'dates': dates, 'series': series}, title="净值曲线")
+def export_html(self, filename):
+    # 1. 构建完整数据
+    data = {
+        'title': self.title,
+        'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'cells': self.cells
+    }
     
-    with nb.section("月度统计"):
-        nb.chart('bar', {'categories': months, 'series': returns}, title="月度收益")
-        nb.chart('heatmap', monthly_data, title="热力图")
-
-with nb.section("交易记录"):
-    nb.table(trades, title="历史明细", collapsed=True, freeze=2)
-
-nb.export_html("report.html")
+    # 2. 渲染 Jinja2 模板
+    html = self._render_template(data)
+    
+    # 3. 写入文件
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write(html)
 ```
-
----
-
-## 11. 参考文档
-
-- pyecharts: https://pyecharts.org/
-- ECharts: https://echarts.apache.org/
-- Alpine.js: https://alpinejs.dev/
 
 ---
 
@@ -615,3 +553,22 @@ nb.export_html("report.html")
 | V1 | 2025-02 | 基础 Notebook 系统，pyecharts 集成 |
 | V2 | 2025-02-19 | Section 模块化布局，Notion 风格，上下文管理器 |
 | V3 | 2025-02-27 | **API 极简化**：统一 `chart()`、`table()`，移除 `add_` 前缀 |
+| V3.5 | 2026-03-02 | **架构稳定化**：回归 Alpine 声明式模板，接受代码重复 |
+
+### V3.5 核心决策
+
+**问题驱动**：
+- V4 尝试 JS 递归生成 HTML + Alpine.initTree() 激活
+- 表格冻结功能失效（Alpine 初始化时机问题）
+- 动态添加 x-data 后组件无法正常初始化
+
+**解决方案**：
+- 回归 Alpine.js 声明式模板
+- 手动复制三级嵌套 Section 代码（代码重复但功能稳定）
+- 冻结、分页、排序等功能正常工作
+
+**技术要点**：
+1. 表格使用 `x-data="table({...})"` 直接声明
+2. 图表使用 JS 手动初始化（echarts.init）
+3. Section 三级嵌套用模板复制（Alpine 不支持递归组件）
+4. **稳定优先**：功能正确 > 代码简洁
