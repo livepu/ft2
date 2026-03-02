@@ -310,7 +310,8 @@ function getNestedValue(obj, path) {
 }
 
 /**
- * 注入冻结列所需的CSS样式
+ * 注入冻结列所需的 CSS 样式
+ * 只设置功能性样式（sticky、z-index），不设置装饰性样式（背景色）
  */
 function injectFreezeStyles() {
   const styleId = 'alpine-table-freeze-styles';
@@ -324,16 +325,14 @@ function injectFreezeStyles() {
       overflow-x: auto;
       position: relative;
     }
-    /* 冻结列单元格 */
+    /* 冻结列单元格 - 只设置 sticky 定位 */
     .alpine-table-freeze .freeze-col {
       position: sticky;
-      background: inherit;
     }
     /* 表头整体冻结在顶部（仅冻结模式） */
     .alpine-table-freeze thead th {
       position: sticky;
       top: 0;
-      background: #f9fafb;
       z-index: 10;
     }
     /* 表头中的冻结列需要更高的 z-index */
@@ -343,18 +342,10 @@ function injectFreezeStyles() {
     .alpine-table-freeze tbody .freeze-col {
       z-index: 50;
     }
-    .alpine-table-freeze tbody tr:hover .freeze-col {
-      background: #f3f4f6;
-    }
     /* 表格边框（仅冻结模式需要 separate） */
     .alpine-table-freeze .alpine-table {
       border-collapse: separate;
       border-spacing: 0;
-    }
-    /* 冻结列背景色 */
-    .alpine-table-freeze .alpine-table th,
-    .alpine-table-freeze .alpine-table td {
-      background: white;
     }
   `;
   document.head.appendChild(style);
@@ -924,12 +915,14 @@ window.table = function table(config = {}) {
       const root = this.getRootElement();
       if (!root) return;
       
+      // 设置左侧冻结列的偏移量
       let accLeft = 0;
       for (let i = 0; i < freezeLeft; i++) {
         root.style.setProperty(`--freeze-left-${i}`, accLeft + 'px');
         accLeft += colWidths[i] || 100;
       }
       
+      // 设置右侧冻结列的偏移量
       let accRight = 0;
       for (let i = 0; i < freezeRight; i++) {
         root.style.setProperty(`--freeze-right-${i}`, accRight + 'px');
