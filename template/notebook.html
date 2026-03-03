@@ -15,23 +15,21 @@
     <div id="app">
         <div class="notebook-container" :class="{ 'screenshot-mode': isScreenshotMode }">
             <!-- 头部 -->
-            <header class="notebook-header">
+            <div class="notebook-header">
                 <h1>{{ title }}</h1>
                 <div class="meta">
                     <span>📅 {{ createdAt }}</span>
                 </div>
-            </header>
+            </div>
             
             <!-- 内容区域 -->
-            <main class="notebook-content">
-                <cell-renderer 
-                    v-for="(cell, index) in cells" 
-                    :key="index"
-                    :cell="cell"
-                    :cell-id="index"
-                    :level="0">
-                </cell-renderer>
-            </main>
+            <cell-renderer 
+                v-for="(cell, index) in cells" 
+                :key="index"
+                :cell="cell"
+                :cell-id="index"
+                :level="0">
+            </cell-renderer>
         </div>
         
         <!-- TOC 目录面板 -->
