@@ -2,8 +2,8 @@
  * Vue 3 Table Component
  * 基于 alpine-table.js 重构，适配 Vue 3 组合式 API
  * 
- * 使用方式：
- * <vue-table :id="'table-1'" :data="tableData" :cols="columns" :freeze="{left: 2}" :page="{limit: 20}"></vue-table>
+ * 使用方式（Ant Design 风格）：
+ * <vue-table :id="'table-1'" :data-source="tableData" :columns="columns" :freeze="{left: 2}" :pagination="{pageSize: 20}"></vue-table>
  */
 
 const VueTable = {
@@ -14,21 +14,21 @@ const VueTable = {
       type: String,
       required: true
     },
-    data: {
+    dataSource: {
       type: Array,
       default: () => []
     },
-    cols: {
+    columns: {
       type: Array,
       default: () => []
+    },
+    pagination: {
+      type: [Object, Boolean],
+      default: false
     },
     freeze: {
       type: Object,
       default: () => ({ left: 0, right: 0 })
-    },
-    page: {
-      type: [Object, Boolean],
-      default: false
     }
   },
 
@@ -37,7 +37,7 @@ const VueTable = {
     
     // ========== 响应式数据 ==========
     const currentPage = ref(1);
-    const pageSize = ref(props.page?.limit || 20);
+    const pageSize = ref(props.pagination?.pageSize || 20);
     const sortField = ref('');
     const sortOrder = ref('asc');
     const multiSort = ref([]);
@@ -49,10 +49,10 @@ const VueTable = {
     // 排序后的数据
     const sortedData = computed(() => {
       if (!sortField.value && multiSort.value.length === 0) {
-        return props.data;
+        return props.dataSource;
       }
       
-      return [...props.data].sort((a, b) => {
+      return [...props.dataSource].sort((a, b) => {
         // 优先使用多字段排序
         if (multiSort.value.length > 0) {
           for (const sort of multiSort.value) {
@@ -74,28 +74,28 @@ const VueTable = {
 
     // 分页后的数据
     const paginatedData = computed(() => {
-      if (!props.page) return sortedData.value;
+      if (!props.pagination) return sortedData.value;
       const start = (currentPage.value - 1) * pageSize.value;
       return sortedData.value.slice(start, start + pageSize.value);
     });
 
     // 总页数
     const totalPages = computed(() => {
-      if (!props.page) return 1;
-      return Math.ceil(props.data.length / pageSize.value) || 1;
+      if (!props.pagination) return 1;
+      return Math.ceil(props.dataSource.length / pageSize.value) || 1;
     });
 
     // 总记录数
-    const totalRecords = computed(() => props.data.length);
+    const totalRecords = computed(() => props.dataSource.length);
 
-    // 显示的列（处理 cols 格式）
-    const displayCols = computed(() => {
-      if (props.cols && props.cols.length > 0) {
-        return props.cols;
+    // 显示的列（处理 columns 格式）
+    const displayColumns = computed(() => {
+      if (props.columns && props.columns.length > 0) {
+        return props.columns;
       }
       // 从数据自动推断列
-      if (props.data.length > 0) {
-        return Object.keys(props.data[0]).map(key => ({
+      if (props.dataSource.length > 0) {
+        return Object.keys(props.dataSource[0]).map(key => ({
           field: key,
           title: key
         }));
@@ -109,8 +109,8 @@ const VueTable = {
     });
 
     // 分页选项
-    const pageLimits = computed(() => {
-      return props.page?.limits || [10, 20, 50, 100];
+    const pageSizeOptions = computed(() => {
+      return props.pagination?.pageSizeOptions || [10, 20, 50, 100];
     });
 
     // ========== 方法 ==========
@@ -183,7 +183,7 @@ const VueTable = {
       if (!hasFreeze.value) return false;
       const left = props.freeze.left || 0;
       const right = props.freeze.right || 0;
-      const total = displayCols.value.length;
+      const total = displayColumns.value.length;
       
       return index < left || index >= total - right;
     };
@@ -282,10 +282,10 @@ const VueTable = {
     // ========== 生命周期 ==========
     
     onMounted(() => {
-      // 注入冻结列样式（如果还没有）
-      injectFreezeStyles();
+      // 注入表格样式（如果还没有）
+      injectTableStyles();
       
-      // 应用冻结样式
+      // 应用冻结样式（如果有冻结列）
       if (hasFreeze.value) {
         nextTick(() => {
           applyFreezeStyles();
@@ -309,7 +309,7 @@ const VueTable = {
     });
 
     // 监听数据变化，重新应用冻结样式
-    watch(() => props.data, () => {
+    watch(() => props.dataSource, () => {
       if (hasFreeze.value) {
         nextTick(() => {
           applyFreezeStyles();
@@ -318,7 +318,7 @@ const VueTable = {
     }, { deep: true });
 
     // 监听列变化
-    watch(() => props.cols, () => {
+    watch(() => displayColumns.value, () => {
       if (hasFreeze.value) {
         nextTick(() => {
           applyFreezeStyles();
@@ -326,76 +326,48 @@ const VueTable = {
       }
     });
 
-    // ========== 注入 CSS ==========
+    // ========== 注入 CSS（仅冻结相关核心样式） ==========
     
-    const injectFreezeStyles = () => {
+    const injectTableStyles = () => {
       if (document.getElementById('vue-table-freeze-styles')) return;
       
       const style = document.createElement('style');
       style.id = 'vue-table-freeze-styles';
       style.textContent = `
-        .vue-table-container {
+        /* 冻结容器 */
+        .vue-table-freeze {
           overflow-x: auto;
           position: relative;
         }
         
-        .vue-table {
-          width: 100%;
-          border-collapse: separate;
-          border-spacing: 0;
-          font-size: 14px;
-          text-align: left;
-        }
-        
-        .vue-table th,
-        .vue-table td {
-          white-space: nowrap;
-          min-width: 80px;
-          background: white;
-          padding: 10px 12px;
-          border-bottom: 1px solid #eee;
-        }
-        
-        .vue-table th {
-          background: #f7f6f3;
-          font-weight: 600;
-          border-bottom: 2px solid #e9e9e9;
-          cursor: pointer;
-          user-select: none;
-        }
-        
-        .vue-table th:hover {
-          background: #e9e9e9;
-        }
-        
-        .vue-table tbody tr:hover td {
-          background: #fafafa;
-        }
-        
-        /* 冻结列 */
+        /* 冻结列单元格 - 只设置 sticky 定位 */
         .vue-table-freeze .freeze-col {
           position: sticky;
-          background: inherit;
-          z-index: 50;
         }
         
-        /* 表头冻结 */
+        /* 表头整体冻结在顶部（仅冻结模式） */
         .vue-table-freeze thead th {
           position: sticky;
           top: 0;
-          background: #f7f6f3;
+          z-index: 10;
+        }
+        
+        /* 表头中的冻结列需要更高的 z-index */
+        .vue-table-freeze thead .freeze-col {
           z-index: 100;
         }
         
-        .vue-table-freeze thead .freeze-col {
-          z-index: 150;
+        .vue-table-freeze tbody .freeze-col {
+          z-index: 50;
         }
         
-        /* 左侧冻结 */
-        .vue-table-freeze .freeze-left {
-          left: var(--freeze-left, 0);
+        /* 表格边框（仅冻结模式需要 separate） */
+        .vue-table-freeze .vue-table {
+          border-collapse: separate;
+          border-spacing: 0;
         }
         
+        /* 左侧冻结阴影 */
         .vue-table-freeze .freeze-left::after {
           content: '';
           position: absolute;
@@ -406,11 +378,7 @@ const VueTable = {
           background: linear-gradient(to right, rgba(0,0,0,0.1), transparent);
         }
         
-        /* 右侧冻结 */
-        .vue-table-freeze .freeze-right {
-          right: var(--freeze-right, 0);
-        }
-        
+        /* 右侧冻结阴影 */
         .vue-table-freeze .freeze-right::before {
           content: '';
           position: absolute;
@@ -420,82 +388,20 @@ const VueTable = {
           width: 2px;
           background: linear-gradient(to left, rgba(0,0,0,0.1), transparent);
         }
-        
-        /* 排序指示器 */
-        .vue-table .sort-indicator {
-          margin-left: 5px;
-          font-size: 12px;
-          color: #e64340;
-        }
-        
-        .vue-table .sort-priority {
-          font-size: 10px;
-          margin-right: 2px;
-        }
-        
-        /* 正负增长 */
-        .vue-table .positive {
-          color: #e64340;
-        }
-        
-        .vue-table .negative {
-          color: #00b300;
-        }
-        
-        /* 分页 */
-        .vue-table-pagination {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin: 10px 0;
-          gap: 10px;
-          flex-wrap: wrap;
-        }
-        
-        .vue-table-pagination button {
-          padding: 5px 10px;
-          border: 1px solid #e9e9e9;
-          background-color: #fff;
-          color: #333;
-          cursor: pointer;
-          border-radius: 3px;
-          transition: all 0.2s;
-        }
-        
-        .vue-table-pagination button:hover:not(:disabled) {
-          background-color: #f5f5f5;
-        }
-        
-        .vue-table-pagination button:disabled {
-          background-color: #f5f5f5;
-          color: #999;
-          cursor: not-allowed;
-        }
-        
-        .vue-table-pagination select {
-          padding: 5px;
-          border: 1px solid #e0e0e0;
-          border-radius: 3px;
-        }
-        
-        .vue-table-pagination .page-info {
-          font-size: 13px;
-          color: #666;
-        }
       `;
       document.head.appendChild(style);
     };
 
     return {
       tableContainer,
-      displayCols,
+      displayColumns,
       paginatedData,
       currentPage,
       totalPages,
       totalRecords,
       pageSize,
       hasFreeze,
-      pageLimits,
+      pageSizeOptions,
       handleSort,
       handleMultiSort,
       getSortIndicator,
@@ -519,7 +425,7 @@ const VueTable = {
           <thead>
             <tr>
               <th 
-                v-for="(col, index) in displayCols" 
+                v-for="(col, index) in displayColumns" 
                 :key="col.field"
                 :class="getFreezeClass(index)"
                 @click="handleMultiSort(col, $event)"
@@ -532,7 +438,7 @@ const VueTable = {
           <tbody>
             <tr v-for="(row, rowIndex) in paginatedData" :key="rowIndex">
               <td 
-                v-for="(col, colIndex) in displayCols" 
+                v-for="(col, colIndex) in displayColumns" 
                 :key="col.field"
                 :class="[getFreezeClass(colIndex), getCellClass(row[col.field])]"
               >
@@ -544,7 +450,7 @@ const VueTable = {
       </div>
       
       <!-- 分页 -->
-      <div v-if="page" class="vue-table-pagination">
+      <div v-if="pagination" class="vue-table-pagination">
         <button 
           @click="handlePageChange(currentPage - 1)"
           :disabled="currentPage <= 1"
@@ -564,8 +470,8 @@ const VueTable = {
         </button>
         
         <select v-model="pageSize" @change="handlePageSizeChange(pageSize)">
-          <option v-for="limit in pageLimits" :key="limit" :value="limit">
-            {{ limit }} 条/页
+          <option v-for="size in pageSizeOptions" :key="size" :value="size">
+            {{ size }} 条/页
           </option>
         </select>
       </div>
