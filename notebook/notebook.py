@@ -293,7 +293,7 @@ class Notebook:
         }
         data_json = json.dumps(data, ensure_ascii=False, default=str, indent=2)
         
-        html_content = template.render(data_json=data_json)
+        html_content = template.render(title=self.nb_title, data_json=data_json)
         
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
