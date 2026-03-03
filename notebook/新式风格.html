@@ -1031,8 +1031,242 @@ CONFIG = {
             </div>
         </div>
         
+        <!-- 模式对比 -->
+        <h2 class="section-title-main">8. 自由模式 vs 强Section模式</h2>
+        <div class="styles-grid">
+            <!-- 自由模式 -->
+            <div class="style-card">
+                <h2>自由模式（推荐）</h2>
+                <div class="desc">内容直接展示，图表保持Section卡片，阅读流畅</div>
+                <div class="notion">
+                    <!-- 标题：无卡片 -->
+                    <div style="padding: 16px 0;">
+                        <h2 style="font-size: 18px; font-weight: 600; color: #37352f; margin-bottom: 12px;">收益分析</h2>
+                        
+                        <!-- Metrics：无外层卡片，自带样式 -->
+                        <div style="margin-bottom: 16px;">
+                            <h3 style="font-size: 14px; font-weight: 500; color: #666; margin-bottom: 8px;">核心指标</h3>
+                            <div class="metrics-grid">
+                                <div class="metric-card positive">
+                                    <div class="metric-value">45.6%</div>
+                                    <div class="metric-label">总收益</div>
+                                </div>
+                                <div class="metric-card">
+                                    <div class="metric-value">1.85</div>
+                                    <div class="metric-label">夏普比率</div>
+                                </div>
+                                <div class="metric-card negative">
+                                    <div class="metric-value">-12.3%</div>
+                                    <div class="metric-label">最大回撤</div>
+                                </div>
+                                <div class="metric-card">
+                                    <div class="metric-value">58.3%</div>
+                                    <div class="metric-label">胜率</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 分隔线 -->
+                        <div class="divider"></div>
+                        
+                        <!-- 图表：保持Section卡片 -->
+                        <div class="section" style="margin: 16px 0;">
+                            <div class="section-title">净值曲线</div>
+                            <div class="section-content">
+                                <div class="chart-placeholder">📈 折线图 - 策略净值 vs 基准</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 第二个章节 -->
+                    <div style="padding: 16px 0; border-top: 1px solid #e9e9e9;">
+                        <h2 style="font-size: 18px; font-weight: 600; color: #37352f; margin-bottom: 12px;">持仓明细</h2>
+                        
+                        <!-- 表格：无卡片，直接展示 -->
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>代码</th>
+                                    <th>名称</th>
+                                    <th>持仓</th>
+                                    <th>收益</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>000001</td><td>平安银行</td><td>1000</td><td class="positive">+5.2%</td></tr>
+                                <tr><td>600519</td><td>贵州茅台</td><td>100</td><td class="positive">+12.8%</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 强Section模式 -->
+            <div class="style-card">
+                <h2>强Section模式</h2>
+                <div class="desc">每个内容都包裹在卡片中，模块感强</div>
+                <div class="notion">
+                    <div class="section">
+                        <div class="section-title">收益分析</div>
+                        <div class="section-content">
+                            <!-- Metrics 被卡片包裹 -->
+                            <div class="cell">
+                                <div style="font-size: 14px; font-weight: 500; color: #666; margin-bottom: 8px;">核心指标</div>
+                                <div class="metrics-grid">
+                                    <div class="metric-card positive">
+                                        <div class="metric-value">45.6%</div>
+                                        <div class="metric-label">总收益</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">1.85</div>
+                                        <div class="metric-label">夏普比率</div>
+                                    </div>
+                                    <div class="metric-card negative">
+                                        <div class="metric-value">-12.3%</div>
+                                        <div class="metric-label">最大回撤</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">58.3%</div>
+                                        <div class="metric-label">胜率</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 图表：被卡片包裹 -->
+                            <div class="cell" style="padding: 0; overflow: hidden;">
+                                <div class="chart-placeholder" style="border-radius: 0;">📈 净值曲线</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <div class="section-title">持仓明细</div>
+                        <div class="section-content">
+                            <!-- 表格被卡片包裹 -->
+                            <div class="cell" style="padding: 0; overflow: hidden;">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>代码</th>
+                                            <th>名称</th>
+                                            <th>持仓</th>
+                                            <th>收益</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td>000001</td><td>平安银行</td><td>1000</td><td class="positive">+5.2%</td></tr>
+                                        <tr><td>600519</td><td>贵州茅台</td><td>100</td><td class="positive">+12.8%</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 自由模式详细示例 -->
+        <h2 class="section-title-main">9. 自由模式完整示例</h2>
+        <div class="styles-grid single">
+            <div class="style-card">
+                <h2>策略回测报告（自由模式）</h2>
+                <div class="desc">Notion风格：内容自由排版，图表用Section卡片突出</div>
+                <div class="notion" style="background: #fff; border-radius: 8px;">
+                    <div style="padding: 20px;">
+                        <!-- 页面标题 -->
+                        <h1 style="font-size: 24px; font-weight: 700; color: #37352f; margin-bottom: 4px;">策略回测报告</h1>
+                        <p style="font-size: 13px; color: #999; margin-bottom: 20px;">📅 2026-03-03 | 趋势跟踪策略</p>
+                        
+                        <!-- 章节标题 -->
+                        <h2 style="font-size: 18px; font-weight: 600; color: #37352f; padding-bottom: 8px; border-bottom: 2px solid #9b51e0; margin-bottom: 16px;">一、核心指标</h2>
+                        
+                        <!-- Metrics 直接展示 -->
+                        <div class="metrics-grid" style="margin-bottom: 24px;">
+                            <div class="metric-card positive">
+                                <div class="metric-value">45.6%</div>
+                                <div class="metric-label">总收益</div>
+                                <div class="metric-desc">累计收益</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-value">1.85</div>
+                                <div class="metric-label">夏普比率</div>
+                                <div class="metric-desc">风险调整后</div>
+                            </div>
+                            <div class="metric-card negative">
+                                <div class="metric-value">-12.3%</div>
+                                <div class="metric-label">最大回撤</div>
+                                <div class="metric-desc">历史最大</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-value">156</div>
+                                <div class="metric-label">交易次数</div>
+                                <div class="metric-desc">策略期间</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 分隔线 -->
+                        <hr style="border: none; border-top: 1px solid #e9e9e9; margin: 20px 0;">
+                        
+                        <!-- 章节标题 -->
+                        <h2 style="font-size: 18px; font-weight: 600; color: #37352f; padding-bottom: 8px; border-bottom: 2px solid #9b51e0; margin-bottom: 16px;">二、收益分析</h2>
+                        
+                        <!-- 图表：用Section卡片 -->
+                        <div class="section" style="margin-bottom: 16px;">
+                            <div class="section-title">净值曲线</div>
+                            <div class="section-content">
+                                <div class="chart-placeholder">📈 策略净值 vs 基准净值</div>
+                            </div>
+                        </div>
+                        
+                        <!-- 嵌套Section：月度统计 -->
+                        <div class="section nested-section">
+                            <div class="section-title">月度统计</div>
+                            <div class="section-content" style="padding: 0; overflow: hidden;">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr><th>月份</th><th>收益</th><th>交易</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td>1月</td><td class="positive">+5.2%</td><td>38</td></tr>
+                                        <tr><td>2月</td><td class="negative">-2.1%</td><td>42</td></tr>
+                                        <tr><td>3月</td><td class="positive">+8.5%</td><td>45</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- 分隔线 -->
+                        <hr style="border: none; border-top: 1px solid #e9e9e9; margin: 20px 0;">
+                        
+                        <!-- 章节标题 -->
+                        <h2 style="font-size: 18px; font-weight: 600; color: #37352f; padding-bottom: 8px; border-bottom: 2px solid #9b51e0; margin-bottom: 16px;">三、持仓明细</h2>
+                        
+                        <!-- 表格直接展示 -->
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>代码</th><th>名称</th><th>持仓</th><th>成本</th><th>收益</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr><td>000001</td><td>平安银行</td><td>1,000</td><td>10.50</td><td class="positive">+5.2%</td></tr>
+                                <tr><td>600519</td><td>贵州茅台</td><td>100</td><td>1680.00</td><td class="positive">+12.8%</td></tr>
+                                <tr><td>000858</td><td>五粮液</td><td>200</td><td>156.20</td><td class="negative">-3.1%</td></tr>
+                            </tbody>
+                        </table>
+                        
+                        <!-- 图表：用Section卡片 -->
+                        <div class="section" style="margin-top: 16px;">
+                            <div class="section-title">持仓分布</div>
+                            <div class="section-content">
+                                <div class="chart-placeholder">🥧 饼图 - 持仓占比</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- 综合示例 -->
-        <h2 class="section-title-main">8. 综合示例</h2>
+        <h2 class="section-title-main">10. 综合示例（原版）</h2>
         <div class="styles-grid single">
             <div class="style-card">
                 <h2>完整报告结构</h2>

@@ -4,26 +4,28 @@ from datetime import datetime
 import json
 from jinja2 import Environment, FileSystemLoader
 
-from .cell import Cell, CellType, CellBuilder
+from .cell import Cell, Section, CellType, CellBuilder, CellLike
 
 
 class SectionContext:
     """Section 上下文管理器"""
     
-    def __init__(self, notebook: 'Notebook', title: str, level: int = 1):
+    def __init__(self, notebook: 'Notebook', title: str, 
+                 level: int = 1, collapsed: bool = None):
         self.notebook = notebook
         self.title = title
         self.level = level
-        self.cells: List[Cell] = []
+        self.collapsed = collapsed
+        self.children: List[CellLike] = []
     
     def __enter__(self) -> 'Notebook':
         self.notebook._push_section(self)
         return self.notebook
     
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
-        section_cell = CellBuilder.section(self.title, self.cells, self.level)
         self.notebook._pop_section()
-        self.notebook._add_cell(section_cell)
+        section = CellBuilder.section(self.title, self.children, self.level, self.collapsed)
+        self.notebook._add_cell(section)
         return False
 
 
@@ -36,18 +38,22 @@ class Notebook:
         nb.title("回测结果")
         nb.table(data, columns=['code', 'name'], freeze=2)
         nb.metrics([{'name': '收益率', 'value': '15%'}])
-        nb.chart('line', {'dates': dates, 'series': series})
+        nb.chart('line', {'x': dates, 'series': series})
         nb.export_html("report.html")
         
         # Section 容器
         with nb.section("收益分析"):
             nb.metrics([...], title="核心指标")
-            nb.chart('line', {'dates': dates, 'series': series}, title="净值曲线")
+            nb.chart('line', {'x': dates, 'series': series}, title="净值曲线")
+        
+        # 可折叠 Section
+        with nb.section("详细数据", collapsed=True):
+            nb.table(data)
     """
     
     def __init__(self, title: str = "Notebook Report"):
         self.nb_title = title
-        self.cells: List[Cell] = []
+        self.children: List[CellLike] = []
         self.created_at = datetime.now()
         self._cell_counter = 0
         self._section_stack: List[SectionContext] = []
@@ -60,7 +66,7 @@ class Notebook:
         """退出 Section"""
         return self._section_stack.pop()
     
-    def _add_cell(self, cell: Cell, title: str = None) -> 'Notebook':
+    def _add_cell(self, cell: CellLike, title: str = None) -> 'Notebook':
         """
         添加单元格并返回self以支持链式调用
 
@@ -72,26 +78,27 @@ class Notebook:
         self._cell_counter += 1
 
         if self._section_stack:
-            # 在 with 内：添加到当前 Section，Cell 保留 title
-            self._section_stack[-1].cells.append(cell)
+            self._section_stack[-1].children.append(cell)
         elif title:
-            # 不在 with 内但有 title：自动创建 Section，Cell 清空 title 避免重复
-            cell.title = None
-            section_cell = CellBuilder.section(title, [cell], level=1)
-            self.cells.append(section_cell)
+            if isinstance(cell, Cell):
+                cell.title = None
+            section = CellBuilder.section(title, [cell], level=1)
+            self.children.append(section)
         else:
-            # 不在 with 内且无 title：普通 Cell
-            self.cells.append(cell)
+            self.children.append(cell)
 
         return self
     
-    def section(self, title: str, level: int = None) -> SectionContext:
+    def section(self, title: str, collapsed: bool = None) -> SectionContext:
         """
         创建 Section 容器（上下文管理器）
         
         Args:
             title: Section 标题
-            level: 层级（自动计算）
+            collapsed: 折叠状态
+                - None: 不可折叠（默认）
+                - True: 可折叠，默认折叠
+                - False: 可折叠，默认展开
         
         Returns:
             SectionContext: 上下文管理器
@@ -99,10 +106,12 @@ class Notebook:
         Usage:
             with nb.section("收益分析"):
                 nb.metrics([...], title="核心指标")
+            
+            with nb.section("详细数据", collapsed=True):
+                nb.table(data)
         """
-        if level is None:
-            level = len(self._section_stack) + 1
-        return SectionContext(self, title, level)
+        level = len(self._section_stack) + 1
+        return SectionContext(self, title, level, collapsed)
     
     # ========== 标题和文本 ==========
     
@@ -171,11 +180,12 @@ class Notebook:
             df_data = data
             cols = columns
         
-        collapsed = options.get('collapsed')
+        collapsed = options.pop('collapsed', None)
         
         if collapsed is not None:
             cell = CellBuilder.table(df_data, cols, None, options)
-            return self.collapsible(title, [cell], collapsed)
+            section = CellBuilder.section(title, [cell], level=1, collapsed=collapsed)
+            return self._add_cell(section)
         else:
             return self._add_cell(CellBuilder.table(df_data, cols, title, options), title)
     
@@ -203,9 +213,8 @@ class Notebook:
                 - 'pie': 饼图
                 - 'heatmap': 热力图
                 - pyecharts 对象: 直接传入，自动识别
-            data: 图表数据（格式因类型而异）
-                - line/area: {'dates': [...], 'series': [{'name': '', 'data': []}, ...]}
-                - bar: {'categories': [...], 'series': [{'name': '', 'data': []}, ...]}
+            data: 图表数据（格式因类型而异，参考 ECharts 命名）
+                - line/area/bar: {'xAxis': [...], 'series': [{'name': '', 'data': []}, ...]}
                 - pie: [{'name': '', 'value': 0}, ...]
                 - heatmap: {'2024': {'01': 0.05, ...}, ...}
             title: 标题
@@ -216,10 +225,10 @@ class Notebook:
         
         Examples:
             # 折线图
-            nb.chart('line', {'dates': dates, 'series': series})
+            nb.chart('line', {'xAxis': dates, 'series': series})
             
             # 柱状图
-            nb.chart('bar', {'categories': categories, 'series': series})
+            nb.chart('bar', {'xAxis': categories, 'series': series})
             
             # 饼图
             nb.chart('pie', [{'name': '股票', 'value': 60}, ...])
@@ -230,23 +239,28 @@ class Notebook:
             # pyecharts 对象（自动识别）
             nb.chart(kline_chart)
         """
-        # 自动识别 pyecharts 对象
         if hasattr(chart_type, 'dump_options'):
             return self._add_cell(CellBuilder.pyecharts(chart_type, title, **options), title)
         
-        # 热力图单独处理
         if chart_type == 'heatmap':
             return self._add_cell(CellBuilder.heatmap(data, title, **options), title)
         
-        # 普通图表
         return self._add_cell(CellBuilder.chart(chart_type, data, title, **options), title)
     
-    # ========== 可折叠区域 ==========
+    # ========== 热力图 ==========
     
-    def collapsible(self, title: str, cells: List[Cell],
-                    collapsed: bool = True) -> 'Notebook':
-        """添加可折叠区域"""
-        return self._add_cell(CellBuilder.collapsible(title, cells, collapsed))
+    def heatmap(self, data, title=None, **options) -> 'Notebook':
+        """
+        添加热力图
+        
+        Args:
+            data: 数据源，支持格式：
+                - dict: 嵌套字典 {y: {x: value, ...}, ...}
+                - DataFrame: 第一列作为Y轴，其余列作为X轴
+            title: 标题
+            **options: 其他配置
+        """
+        return self._add_cell(CellBuilder.heatmap(data, title, **options), title)
     
     # ========== HTML ==========
     
@@ -260,13 +274,13 @@ class Notebook:
         """转换为字典"""
         return {
             'title': self.nb_title,
-            'created_at': self.created_at.isoformat(),
-            'cells': [cell.to_dict() for cell in self.cells]
+            'createdAt': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'children': [c.to_dict() for c in self.children]
         }
     
     def to_json(self) -> str:
         """导出为JSON"""
-        return json.dumps(self.to_dict(), ensure_ascii=False, default=str)
+        return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
     
     def export_html(self, output_path: str, template_path: str = None) -> str:
         """
@@ -289,7 +303,7 @@ class Notebook:
         data = {
             'title': self.nb_title,
             'createdAt': self.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'cells': [cell.to_dict() for cell in self.cells]
+            'children': [c.to_dict() for c in self.children]
         }
         data_json = json.dumps(data, ensure_ascii=False, default=str, indent=2)
         
@@ -302,10 +316,10 @@ class Notebook:
         return str(output_path)
     
     def __repr__(self):
-        return f"<Notebook '{self.nb_title}' with {len(self.cells)} cells>"
+        return f"<Notebook '{self.nb_title}' with {len(self.children)} items>"
     
     def __len__(self):
-        return len(self.cells)
+        return len(self.children)
     
     def __getitem__(self, index):
-        return self.cells[index]
+        return self.children[index]

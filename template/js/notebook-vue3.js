@@ -66,14 +66,23 @@ const CellRenderer = {
 
         // 初始化图表
         const initChart = () => {
-            if (!chartRef.value || !props.cell.content) return;
+            console.log('initChart called for cell type:', props.cell.type);
+            console.log('chartRef.value:', chartRef.value);
+            console.log('cell.content:', props.cell.content);
+            
+            if (!chartRef.value || !props.cell.content) {
+                console.warn('Chart init skipped: no chartRef or content');
+                return;
+            }
 
             const cell = props.cell;
             const content = cell.content;
 
             if (cell.type === 'chart' || cell.type === 'heatmap') {
+                const chartType = content.chart_type || content.type;
+                console.log('Initializing chart with type:', chartType, 'data:', content.data);
                 chartInstance = echarts.init(chartRef.value);
-                const option = buildChartOption(cell.type, content, cell.options);
+                const option = buildChartOption(cell.type, chartType, content.data || content, cell.options);
                 chartInstance.setOption(option);
             } else if (cell.type === 'pyecharts') {
                 chartInstance = echarts.init(chartRef.value);
@@ -82,14 +91,13 @@ const CellRenderer = {
         };
 
         // 构建图表配置
-        const buildChartOption = (type, content, options = {}) => {
+        const buildChartOption = (type, chartType, data, options = {}) => {
             const baseOption = {
                 tooltip: { trigger: 'axis' },
                 grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true }
             };
 
             if (type === 'chart') {
-                const chartType = content.type || 'line';
                 const isLine = chartType === 'line';
                 const isBar = chartType === 'bar';
                 const isArea = chartType === 'area';
@@ -98,11 +106,11 @@ const CellRenderer = {
                     ...baseOption,
                     xAxis: {
                         type: 'category',
-                        data: content.dates || content.categories || [],
+                        data: data.dates || data.categories || [],
                         boundaryGap: isBar
                     },
                     yAxis: { type: 'value' },
-                    series: (content.series || []).map(s => ({
+                    series: (data.series || []).map(s => ({
                         name: s.name,
                         type: isArea ? 'line' : chartType,
                         data: s.data,
@@ -160,7 +168,25 @@ const CellRenderer = {
         };
     },
     template: `
-        <div class="cell">
+        <!-- Section - 直接渲染，不包裹 .cell -->
+        <div v-if="cell.type === 'section'" 
+             class="section"
+             :class="{ 'nested-section': level > 0 }"
+             :id="'section-' + cellId">
+            <div v-if="cell.title" class="section-title">{{ cell.title }}</div>
+            <div class="section-content">
+                <cell-renderer 
+                    v-for="(subCell, idx) in cell.content" 
+                    :key="idx"
+                    :cell="subCell"
+                    :cell-id="cellId + '-' + idx"
+                    :level="level + 1">
+                </cell-renderer>
+            </div>
+        </div>
+        
+        <!-- 其他类型 - 包裹在 .cell 中 -->
+        <div v-else class="cell">
             <!-- 标题 -->
             <div v-if="cell.type === 'title'" class="cell-title">
                 <h1 v-if="cell.options?.level === 1">{{ cell.content }}</h1>
@@ -239,23 +265,6 @@ const CellRenderer = {
                     <span>{{ cell.options?.collapsed ? '▶' : '▼' }}</span>
                 </button>
                 <div v-show="!cell.options?.collapsed" class="collapse-content">
-                    <cell-renderer 
-                        v-for="(subCell, idx) in cell.content" 
-                        :key="idx"
-                        :cell="subCell"
-                        :cell-id="cellId + '-' + idx"
-                        :level="level + 1">
-                    </cell-renderer>
-                </div>
-            </div>
-            
-            <!-- Section - 递归渲染 -->
-            <div v-else-if="cell.type === 'section'" 
-                 class="section"
-                 :class="{ 'nested-section': level > 0 }"
-                 :id="'section-' + cellId">
-                <div v-if="cell.title" class="section-title">{{ cell.title }}</div>
-                <div class="section-content">
                     <cell-renderer 
                         v-for="(subCell, idx) in cell.content" 
                         :key="idx"
