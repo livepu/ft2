@@ -367,7 +367,12 @@ const VueTable = {
           border-spacing: 0;
         }
         
-        /* 左侧冻结阴影 */
+        /* 左侧冻结 - alpine-table.js 无此样式，新增增强 */
+        .vue-table-freeze .freeze-left {
+          left: var(--freeze-left, 0);
+        }
+        
+        /* 左侧冻结阴影效果 - alpine-table.js 无此样式，新增增强 */
         .vue-table-freeze .freeze-left::after {
           content: '';
           position: absolute;
@@ -378,7 +383,12 @@ const VueTable = {
           background: linear-gradient(to right, rgba(0,0,0,0.1), transparent);
         }
         
-        /* 右侧冻结阴影 */
+        /* 右侧冻结 - alpine-table.js 无此样式，新增增强 */
+        .vue-table-freeze .freeze-right {
+          right: var(--freeze-right, 0);
+        }
+        
+        /* 右侧冻结阴影效果 - alpine-table.js 无此样式，新增增强 */
         .vue-table-freeze .freeze-right::before {
           content: '';
           position: absolute;
@@ -450,7 +460,7 @@ const VueTable = {
       </div>
       
       <!-- 分页 -->
-      <div v-if="pagination" class="vue-table-pagination">
+      <div v-if="pagination !== false" class="vue-table-pagination">
         <button 
           @click="handlePageChange(currentPage - 1)"
           :disabled="currentPage <= 1"
