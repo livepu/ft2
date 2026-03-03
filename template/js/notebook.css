@@ -12,10 +12,37 @@ body {
     line-height: 1.6;
 }
 
+/* TOC 面板宽度 + 间距 */
+:root {
+    --toc-width: 200px;
+    --toc-gap: 20px;
+    --container-max-width: 900px;
+}
+
+/* 主容器：默认靠左，给 TOC 留出空间 */
 .notebook-container {
-    max-width: 900px;
-    margin: 0 auto;
+    max-width: var(--container-max-width);
+    margin: 0 20px;
     padding: 20px;
+    /* 确保不被 TOC 遮挡 */
+    margin-right: calc(var(--toc-width) + var(--toc-gap) + 20px);
+}
+
+/* 当空间足够时（屏幕宽度 > 容器宽度 + TOC宽度 + 间距），居中显示 */
+@media (min-width: calc(900px + 200px + 20px + 40px)) {
+    .notebook-container {
+        margin: 0 auto;
+        /* 给 TOC 留出空间，避免遮挡 */
+        margin-right: calc(var(--toc-width) + var(--toc-gap));
+    }
+}
+
+/* 小屏幕：TOC 隐藏或调整时，主体可以占满宽度 */
+@media (max-width: 768px) {
+    .notebook-container {
+        margin: 0 10px;
+        padding: 10px;
+    }
 }
 
 .notebook-header {
@@ -264,7 +291,7 @@ body {
     position: fixed;
     top: 20px;
     right: 20px;
-    width: 200px;
+    width: var(--toc-width);
     max-height: calc(100vh - 40px);
     background: #fff;
     border: 1px solid #e5e5e5;
@@ -272,6 +299,18 @@ body {
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
     z-index: 1000;
     overflow: hidden;
+}
+
+/* 小屏幕：调整 TOC 面板 */
+@media (max-width: 768px) {
+    .toc-panel {
+        position: relative;
+        top: auto;
+        right: auto;
+        width: auto;
+        max-height: none;
+        margin: 10px;
+    }
 }
 
 .toc-header {

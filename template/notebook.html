@@ -11,6 +11,7 @@
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/snapdom.min.js"></script>
 </head>
 <body>
+    {% raw %}
     <div id="app">
         <div class="notebook-container" :class="{ 'screenshot-mode': isScreenshotMode }">
             <!-- 头部 -->
@@ -18,7 +19,6 @@
                 <h1>{{ title }}</h1>
                 <div class="meta">
                     <span>📅 {{ createdAt }}</span>
-                    <span>📝 Notebook</span>
                 </div>
             </header>
             
@@ -58,10 +58,22 @@
             </div>
         </aside>
     </div>
+    {% endraw %}
 
+    <!-- Notebook 数据注入（Jinja2 渲染） -->
+    <script id="notebook-data" type="application/json">{{ data_json | safe }}</script>
+    
     <!-- Notebook Vue3 JS -->
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/notebook-vue3.js"></script>
     <script>
+        // 从 Jinja2 注入的数据创建配置
+        const dataElement = document.getElementById('notebook-data');
+        window.notebookConfig = dataElement ? JSON.parse(dataElement.textContent) : {
+            title: '未命名 Notebook',
+            createdAt: new Date().toLocaleString(),
+            cells: []
+        };
+        
         // 创建并挂载应用
         createNotebookApp().mount('#app');
     </script>
