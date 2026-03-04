@@ -24,6 +24,11 @@ const CellRenderer = {
         // 热力图放大倍数控制
         const heatmapMultiplier = ref(1);
         const heatmapRawData = ref(null);
+        
+        // 饼图显示控制
+        const pieShowValue = ref(true);
+        const pieShowPercent = ref(true);
+        const pieRawData = ref(null);
 
         // 渲染 Markdown
         const renderMarkdown = (content) => {
@@ -123,7 +128,12 @@ const CellRenderer = {
                     else heatmapMultiplier.value = 1;
                 }
                 
-                const option = buildChartOption(cell.type, chartType, content.data || content, cell.options, heatmapMultiplier.value);
+                // 饼图特殊处理：保存原始数据
+                if (chartType === 'pie') {
+                    pieRawData.value = content.data || content;
+                }
+                
+                const option = buildChartOption(cell.type, chartType, content.data || content, cell.options, heatmapMultiplier.value, pieShowValue.value, pieShowPercent.value);
                 chartInstance.setOption(option);
             } else if (cell.type === 'pyecharts') {
                 chartInstance = echarts.init(chartRef.value);
@@ -137,12 +147,19 @@ const CellRenderer = {
             const option = buildChartOption('heatmap', 'heatmap', heatmapRawData.value, props.cell.options, heatmapMultiplier.value);
             chartInstance.setOption(option);
         };
+        
+        // 更新饼图（当显示选项改变时）
+        const updatePie = () => {
+            if (!chartInstance || !pieRawData.value) return;
+            const option = buildChartOption('chart', 'pie', pieRawData.value, props.cell.options, 1, pieShowValue.value, pieShowPercent.value);
+            chartInstance.setOption(option);
+        };
 
         // 暖冷渐变系4 配色方案
         const chartColors = ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4'];
 
         // 构建图表配置
-        const buildChartOption = (type, chartType, data, options = {}, multiplier = 1) => {
+        const buildChartOption = (type, chartType, data, options = {}, multiplier = 1, showValue = true, showPercent = true) => {
             const baseOption = {
                 tooltip: { trigger: 'axis' },
                 grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true }
@@ -156,6 +173,16 @@ const CellRenderer = {
 
                 // 饼图特殊处理
                 if (isPie) {
+                    // 构建 label 格式
+                    let labelFormatter = '{b}';
+                    if (showValue && showPercent) {
+                        labelFormatter = '{b}\n{c} ({d}%)';
+                    } else if (showValue) {
+                        labelFormatter = '{b}\n{c}';
+                    } else if (showPercent) {
+                        labelFormatter = '{b}\n({d}%)';
+                    }
+                    
                     return {
                         color: chartColors,
                         tooltip: { 
@@ -171,10 +198,10 @@ const CellRenderer = {
                             type: 'pie',
                             data: data,
                             radius: ['40%', '70%'],
-                            center: ['50%', '55%'],
+                            center: ['45%', '55%'],
                             label: { 
                                 show: true, 
-                                formatter: '{b}\n{c} ({d}%)' 
+                                formatter: labelFormatter 
                             },
                             labelLine: {
                                 show: true,
@@ -351,6 +378,9 @@ const CellRenderer = {
             chartRef,
             heatmapMultiplier,
             updateHeatmap,
+            pieShowValue,
+            pieShowPercent,
+            updatePie,
             renderMarkdown,
             getMetricClass,
             getTableCols,
@@ -445,7 +475,38 @@ const CellRenderer = {
                 </div>
             </div>
             
-            <!-- 图表 -->
+            <!-- 饼图（带显示控制） -->
+            <div v-else-if="cell.type === 'chart' && cell.content?.chart_type === 'pie'" 
+                 class="cell-chart pie-with-control">
+                <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div class="pie-wrapper">
+                    <div ref="chartRef" 
+                         class="chart-container"
+                         :style="{'--height': (cell.options?.height || 400) + 'px'}">
+                    </div>
+                    <div class="pie-control">
+                        <div class="control-label">显示选项</div>
+                        <div class="checkbox-group">
+                            <label class="checkbox-item">
+                                <input 
+                                    type="checkbox" 
+                                    v-model="pieShowValue"
+                                    @change="updatePie">
+                                <span>原始数据</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input 
+                                    type="checkbox" 
+                                    v-model="pieShowPercent"
+                                    @change="updatePie">
+                                <span>百分比</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 其他图表 -->
             <div v-else-if="cell.type === 'chart' || cell.type === 'pyecharts'" 
                  class="cell-chart">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
