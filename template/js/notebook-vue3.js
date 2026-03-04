@@ -262,7 +262,11 @@ const CellRenderer = {
             <!-- 表格 -->
             <div v-else-if="cell.type === 'table'" class="cell-table">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div v-if="!cell.content || cell.content.length === 0" class="table-empty">
+                    暂无数据
+                </div>
                 <vue-table 
+                    v-else
                     :id="'table-' + cellId"
                     :data-source="cell.content"
                     :columns="getTableCols(cell)"
@@ -327,8 +331,8 @@ const CellRenderer = {
 function createNotebookApp() {
     return createApp({
         components: {
-            CellRenderer,
-            VueTable
+            CellRenderer
+            // VueTable 已由 vue3-table.js 全局注册，无需在此声明
         },
 
         setup() {
@@ -424,9 +428,19 @@ function createNotebookApp() {
                 });
 
                 try {
-                    // 3. 逐个截图
+                    // 3. 等待表格组件渲染完成
+                    // vue-table 是异步渲染，需要给予足够时间
+                    await new Promise(resolve => setTimeout(resolve, 300));
+
+                    // 4. 逐个截图
                     const imageBlobs = [];
                     for (const el of elementsToCapture) {
+                        // 检查元素内是否有表格，如果有额外等待
+                        const hasTable = el.querySelector('vue-table, .vue-table, table');
+                        if (hasTable) {
+                            await new Promise(resolve => setTimeout(resolve, 200));
+                        }
+                        
                         const result = await snapdom(el, {
                             scale: 2,
                             backgroundColor: '#f5f5f5',
