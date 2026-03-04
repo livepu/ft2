@@ -333,9 +333,10 @@ const VueTable = {
     }, { deep: true });
 
     // ========== 注入 CSS ==========
-    // 设计原则：最小化注入，只包含功能性样式
+    // 设计原则：最小化注入，只包含功能性样式 + 微量视觉增强
     // - 功能性样式（注入）：position: sticky, z-index, overflow
-    // - 装饰性样式（外部CSS）：背景色、阴影、边框颜色
+    // - 视觉增强（注入）：冻结列阴影（微量 CSS，提升用户体验）
+    // - 装饰性样式（外部CSS）：背景色、边框颜色
     // - 动态偏移量（JS）：style.left/right 直接设置，不用 CSS 变量
     
     const injectTableStyles = () => {
@@ -371,6 +372,14 @@ const VueTable = {
         .vue-table-freeze .vue-table {
           border-collapse: separate;
           border-spacing: 0;
+        }
+        /* 左侧冻结列阴影 */
+        .vue-table-freeze .freeze-left {
+          box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+        }
+        /* 右侧冻结列阴影 */
+        .vue-table-freeze .freeze-right {
+          box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
         }
       `;
       document.head.appendChild(style);
