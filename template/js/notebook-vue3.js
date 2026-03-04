@@ -611,6 +611,20 @@ function createNotebookApp() {
             const cells = ref(config.children || config.cells || []);
             const selectedIndices = ref(new Set());
             const isScreenshotMode = ref(false);
+            
+            // Toast 提示
+            const toastMessage = ref('');
+            const toastType = ref('info');
+            let toastTimer = null;
+            
+            const showToast = (message, type = 'info', duration = 3000) => {
+                toastMessage.value = message;
+                toastType.value = type;
+                if (toastTimer) clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => {
+                    toastMessage.value = '';
+                }, duration);
+            };
 
             // 计算目录项
             const tocItems = computed(() => {
@@ -721,7 +735,7 @@ function createNotebookApp() {
                         await navigator.clipboard.write([
                             new ClipboardItem({ 'image/png': finalBlob })
                         ]);
-                        console.log('截图已复制到剪贴板');
+                        showToast(`已复制 ${selectedIndices.value.size} 个选中区域到剪贴板`, 'success');
                     } catch (clipboardErr) {
                         console.warn('复制到剪贴板失败，尝试下载:', clipboardErr);
                         const reader = new FileReader();
@@ -732,11 +746,12 @@ function createNotebookApp() {
                             link.click();
                         };
                         reader.readAsDataURL(finalBlob);
+                        showToast('已下载截图（剪贴板需要页面焦点）', 'info');
                     }
 
                 } catch (err) {
                     console.error('截图失败:', err);
-                    alert('截图失败: ' + err.message);
+                    showToast('截图失败: ' + err.message, 'error');
                 }
             };
 
@@ -810,25 +825,41 @@ function createNotebookApp() {
 
             // 全页截图
             const captureAll = async () => {
-                isScreenshotMode.value = true;
-                await nextTick();
+                const element = document.querySelector('.notebook-container');
+                if (!element) {
+                    showToast('未找到截图区域', 'error');
+                    return;
+                }
 
                 try {
-                    const element = document.querySelector('.notebook-container');
-                    const canvas = await snapdom(element, {
-                        scale: 2,
-                        backgroundColor: '#f5f5f5'
+                    const result = await snapdom(element, {
+                        backgroundColor: '#f5f5f5',
+                        scale: 1,
+                        cache: 'auto'
                     });
-
-                    const link = document.createElement('a');
-                    link.download = `${title.value || 'notebook'}-全页.png`;
-                    link.href = canvas.toDataURL();
-                    link.click();
+                    
+                    const blob = await result.toBlob({ type: 'png' });
+                    
+                    try {
+                        window.focus();
+                        await navigator.clipboard.write([
+                            new ClipboardItem({ 'image/png': blob })
+                        ]);
+                        showToast('全页截图已复制到剪贴板', 'success');
+                    } catch (err) {
+                        console.error('复制到剪贴板失败:', err);
+                        // 降级：下载图片
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.download = `截图_${new Date().toLocaleString().replace(/[/:]/g, '-')}.png`;
+                        link.href = url;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        showToast('已自动下载截图（剪贴板需要页面焦点）');
+                    }
                 } catch (err) {
                     console.error('截图失败:', err);
-                    alert('截图失败: ' + err.message);
-                } finally {
-                    isScreenshotMode.value = false;
+                    showToast('截图失败: ' + err.message, 'error');
                 }
             };
 
@@ -843,6 +874,8 @@ function createNotebookApp() {
                 tocItems,
                 selectedCount,
                 isScreenshotMode,
+                toastMessage,
+                toastType,
                 isSelected,
                 toggleSelection,
                 selectAll,

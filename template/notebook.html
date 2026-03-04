@@ -13,6 +13,11 @@
 <body>
     {% raw %}
     <div id="app">
+        <!-- Toast 提示容器 -->
+        <div class="toast-container" v-if="toastMessage">
+            <div class="toast" :class="toastType">{{ toastMessage }}</div>
+        </div>
+        
         <!-- 整体居中 wrapper -->
         <div class="notebook-wrapper">
             <!-- 主体容器 -->
@@ -58,7 +63,7 @@
                     <button @click="captureScreenshot" :disabled="selectedCount === 0">截图选中</button>
                 </div>
                 <div class="toc-footer">
-                    <button @click="captureAll" class="full-btn">🖼️ 全页截图</button>
+                    <button @click="captureAll" class="full-btn">📋 全页截图</button>
                 </div>
             </aside>
         </div>

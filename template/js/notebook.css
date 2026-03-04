@@ -1,6 +1,15 @@
 /**
  * Notebook CSS - Notebook 样式文件
  * 从 notebook.html 分离出来的样式
+ *
+ * ========== Notion 风格大红大紫配色方案 ==========
+ * 二级嵌套：紫罗兰 #9b51e0 + 浅紫背景 #faf9f7
+ * 三级嵌套：粉红 #ec4899 + 浅粉背景 #fdf2f8
+ * 主按钮：深粉 #db2777（悬停：中粉 #ec4899）
+ * 选中高亮：紫罗兰 #9b51e0
+ * 表格正数：红色 #e64340
+ * 表格负数：绿色 #00b300
+ * ================================================
  */
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -10,6 +19,56 @@ body {
     background: #f5f5f5;
     color: #333;
     line-height: 1.6;
+}
+
+/* ========== Toast 提示 ========== */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.toast {
+    background: #f3e8ff;
+    color: #6b21a8;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    animation: toastIn 0.3s ease;
+    border: 1px solid #e9d5ff;
+}
+
+.toast.success {
+    background: #f3e8ff;
+    color: #6b21a8;
+    border-color: #9b51e0;
+}
+
+.toast.error {
+    background: #fdf2f8;
+    color: #be185d;
+    border-color: #ec4899;
+}
+
+.toast.info {
+    background: #f7f6f3;
+    color: #37352f;
+    border-color: #e9e9e9;
+}
+
+@keyframes toastIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* TOC 面板宽度 + 间距 */
@@ -24,7 +83,6 @@ body {
     display: flex;
     justify-content: center;
     gap: var(--toc-gap);
-    padding: 20px;
     max-width: calc(var(--container-max-width) + var(--toc-width) + var(--toc-gap));
     margin: 0 auto;
 }
@@ -33,6 +91,7 @@ body {
     flex: 1;
     min-width: 0;  /* 允许收缩 */
     max-width: var(--container-max-width);
+    padding: 20px;
 }
 
 /* TOC 面板 - sticky 定位，保持固定宽度 */
@@ -49,6 +108,7 @@ body {
     z-index: 1000;
     overflow: hidden;
     flex-shrink: 0;  /* 不收缩 */
+    margin-top: 20px;
 }
 
 /* 空间不够时，切换成上下布局 */
@@ -446,17 +506,18 @@ body {
 .toc-footer .full-btn {
     width: 100%;
     padding: 8px 12px;
-    background: linear-gradient(135deg, #9333ea 0%, #6b21a8 100%);
+    background: #ec4899;
     color: #fff;
     border: none;
     border-radius: 4px;
     cursor: pointer;
     font-size: 13px;
     font-weight: 500;
+    transition: background 0.2s;
 }
 
 .toc-footer .full-btn:hover {
-    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    background: #db2777;
 }
 
 /* 空状态 */
