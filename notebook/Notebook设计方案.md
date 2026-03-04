@@ -1,9 +1,9 @@
-# Notebook 可视化设计方案 V4.4
+# Notebook 可视化设计方案 V5.0
 
 > 制定时间：2025-02-27
-> 修订时间：2026-03-04
+> 修订时间：2026-03-05
 > 目标：构建统一、规范、简洁的可视化系统
-> 技术方案：Section 模块化布局 + pyecharts 图表 + Notion 风格样式
+> 技术方案：Section 模块化布局 + ECharts 图表 + Notion 风格样式
 > **渲染架构：Vue3 组合式 API + Jinja2 模板**
 > **JSON 规范：content/children 分离，语义清晰**
 
@@ -67,7 +67,7 @@
 │  │ │ ├────────┼────────┼────────┼────────┼────────┤  │  │  │
 │  │ │ │ 000001 │ 平安   │ 1000   │ 10.5   │ +5.2%  │  │  │  │
 │  │ │ │ ...    │ ...    │ ...    │ ...    │ ...    │  │  │  │
-│  │ │ └────────────────────────────────────────────────┘  │  │
+│  │ │ └────────────────────────────────────────────────┘  │  │  │
 │  └────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -79,106 +79,15 @@
 | **Section** | 卡片容器 + 标题（可折叠） | 模块化分组 |
 | **Metrics** | 指标卡片网格 | 核心数据展示 |
 | **Table** | 数据表格 | 明细数据，支持冻结/分页 |
-| **Chart** | ECharts 图表 | 折线/柱状/饼图 |
+| **Chart** | ECharts 图表 | 折线/柱状/饼图/面积图 |
 | **Heatmap** | 热力图 | 月度收益矩阵 |
 | **Title/Text** | 标题/文本 | 说明内容 |
 
 ---
 
-## 2. Python 数据层
+## 2. 用法标准
 
-### 2.1 数据流
-
-```
-用户 API 调用
-      ↓
-Notebook 实例
-      ↓
-Cell[] (Python 对象)
-      ↓
-to_dict() 序列化
-      ↓
-JSON 数据
-      ↓
-Jinja2 注入 HTML
-```
-
-### 2.2 核心类设计
-
-#### Cell 数据类
-
-```python
-@dataclass
-class Cell:
-    type: CellType            # 类型枚举
-    content: Any              # 核心数据（原子类型）
-    children: List[Cell]      # 子节点（容器类型）
-    title: Optional[str]      # 标题
-    options: Dict             # 配置选项
-```
-
-#### 字段语义
-
-| 字段 | 含义 | 适用类型 |
-|------|------|----------|
-| `type` | 类型标识 | 所有 |
-| `content` | 核心数据 | 原子类型（table, chart, metrics 等） |
-| `children` | 子节点列表 | 容器类型（section） |
-| `title` | 标题 | 所有（可选） |
-| `options` | 展示配置 | 所有（可选） |
-
-#### options 字段说明
-
-| 字段 | 适用类型 | 含义 |
-|------|----------|------|
-| `level` | section | 层级（1, 2, 3...） |
-| `collapsed` | section | 折叠状态（`true`=折叠，`false`=展开，省略=不可折叠） |
-| `columns` | table, metrics | 列配置 |
-| `freeze` | table | 冻结列配置 |
-| `page` | table | 分页配置 |
-| `height` | chart, heatmap, pyecharts | 图表高度 |
-
-#### 类型划分
-
-```
-原子类型（有 content，无 children）
-├── text, markdown, html
-├── code
-├── table, metrics
-├── chart, heatmap, pyecharts
-└── divider
-
-容器类型（有 children，无 content）
-└── section
-```
-
-#### CellType 枚举
-
-```python
-class CellType(Enum):
-    # 原子类型
-    TITLE = "title"           # 标题
-    TEXT = "text"             # 纯文本
-    MARKDOWN = "markdown"     # Markdown
-    CODE = "code"             # 代码块
-    TABLE = "table"           # 数据表格
-    METRICS = "metrics"       # 指标卡片
-    CHART = "chart"           # ECharts 图表
-    HEATMAP = "heatmap"       # 热力图
-    PYECHARTS = "pyecharts"   # pyecharts 图表
-    DIVIDER = "divider"       # 分隔线
-    HTML = "html"             # 原始 HTML
-    
-    # 容器类型
-    SECTION = "section"       # 章节容器
-
-# 容器类型标记
-CONTAINER_TYPES = {CellType.SECTION}
-```
-
-### 2.3 Notebook API
-
-#### 基础用法
+### 2.1 Python API 基础用法
 
 ```python
 from notebook import Notebook
@@ -196,7 +105,7 @@ nb.title("回测结果", level=1) \
 nb.export_html("report.html")
 ```
 
-#### Section 用法
+### 2.2 Section 用法
 
 ```python
 # 方式1: with 上下文管理器
@@ -215,114 +124,282 @@ with nb.section("详细数据", collapsed=True):
     nb.table(data)
 ```
 
-#### Jupyter 风格书写习惯
+### 2.3 ECharts 图表详细规范
 
-Notebook 采用类似 Jupyter 的增量构建模式，代码执行顺序即报告生成顺序：
+#### 2.3.1 折线图 / 面积图 / 柱状图
 
-**核心思想：**
-- `nb` 是增量构建的容器，所有 API 调用都在往 `children` 追加内容
-- `with` 语句表达代码模块的层次结构，缩进直观对应报告层级
-- 最后统一 `export_html()` 生成完整报告
-
+**函数签名：**
 ```python
-nb = Notebook("策略分析")
-
-# 数据处理模块
-with nb.section("数据概览"):
-    nb.metrics([{'name': '样本数', 'value': 1000}])
-    nb.table(df)
-
-# 模型训练模块
-with nb.section("模型训练"):
-    nb.metrics([{'name': '准确率', 'value': '85%'}])
+def chart(self, chart_type, data, title=None, **options) -> Notebook:
+    """
+    创建图表
     
-    with nb.section("交叉检验"):  # 嵌套层级
-        nb.heatmap(cv_results)
-
-# 回测结果模块
-with nb.section("回测结果"):
-    nb.chart('line', {...})
-    nb.table(trades, title="交易明细")
-
-# 最后统一输出
-nb.export_html("report.html")
+    Args:
+        chart_type: 图表类型 - 'line' | 'bar' | 'area' | 'pie'
+        data: 图表数据，格式见下文
+        title: 图表标题
+        **options: 其他配置，如 height, width 等
+    
+    Returns:
+        Notebook: 支持链式调用
+    """
 ```
 
-**优势：**
-
-| 特性 | 说明 |
-|------|------|
-| 代码即文档 | Python 代码结构 = 报告结构 |
-| 层次清晰 | `with` 缩进直观表达嵌套关系 |
-| 模块化 | 每个 `with` 块对应一个报告章节 |
-| 简洁输出 | 仅需最后调用一次 `export_html()` |
-
-### 2.4 设计决策
-
-#### 决策1: options 字段松散是合理的
-
-不同 Cell 类型有各自专属配置：
-- `TableCell.options.columns` = 列名列表
-- `MetricsCell.options.columns` = 每行显示列数
-
-同名不同义，符合各自业务语义。统一反而增加复杂度。
-
-#### 决策2: Section 自动分类
-
-`_add_cell` 方法三种分支：
-
-| 场景 | 代码 | 效果 |
-|------|------|------|
-| with 内 | `with nb.section("分析"): nb.table(data, title="明细")` | 添加到 Section，title 保留为小标题 |
-| with 外有 title | `nb.table(data, title="基金列表")` | **自动创建 Section** |
-| with 外无 title | `nb.text("说明文字")` | 普通 Cell，不包装 |
-
-**核心思想**：用户不用显式创建 Section，给 `title` 参数就自动分组。
-
-### 2.5 JSON 输出格式
-
-#### 结构概览
-
-```
-顶层结构
-├── title: 报告标题
-├── createdAt: 创建时间
-└── children: Cell[] 列表
-
-原子类型 Cell（有 content，无 children）
-├── type: 类型标识
-├── content: 核心数据
-├── title?: 可选标题
-└── options?: 可选配置
-
-容器类型 Section（有 children，无 content）
-├── type: "section"
-├── children: 子节点列表
-├── title?: 可选标题
-└── options?: {level, collapsed}
-```
-
-#### 格式规范
-
-```json
+**数据格式：**
+```python
+# 标准格式
 {
-  "type": "<类型>",
-  "content": "<核心数据>",      // 原子类型
-  "children": [...],           // 容器类型
-  "title": "<可选标题>",
-  "options": {<可选配置>}
+    'xAxis': ['1月', '2月', '3月', '4月', '5月'],  # X轴数据
+    'series': [
+        {
+            'name': '策略',           # 系列名称
+            'data': [1.0, 1.05, 1.08, 1.12, 1.15]  # Y轴数据
+        },
+        {
+            'name': '基准',
+            'data': [1.0, 1.02, 1.04, 1.05, 1.06]
+        }
+    ]
+}
+
+# 简化格式（单系列）
+{
+    'xAxis': ['1月', '2月', '3月'],
+    'series': {'data': [100, 120, 140]}
 }
 ```
 
-#### 设计原则
+**使用示例：**
+```python
+# 折线图
+nb.chart('line', {
+    'xAxis': ['2024-01', '2024-02', '2024-03'],
+    'series': [
+        {'name': '策略净值', 'data': [1.0, 1.05, 1.12]},
+        {'name': '基准净值', 'data': [1.0, 1.02, 1.04]}
+    ]
+}, title="净值曲线", height=400)
 
-| 原则 | 说明 |
-|------|------|
-| **语义分离** | `content` = 数据，`children` = 子节点，职责分明 |
-| **类型区分** | Vue3 通过 `type` 判断原子/容器，递归渲染简单直观 |
-| **字段省略** | `title`/`options` 为空时省略，减少 JSON 体积 |
+# 柱状图
+nb.chart('bar', {
+    'xAxis': ['1月', '2月', '3月'],
+    'series': [
+        {'name': '收益', 'data': [5.2, -2.1, 8.3]}
+    ]
+}, title="月度收益")
 
-#### 完整示例
+# 面积图
+nb.chart('area', {
+    'xAxis': ['周一', '周二', '周三', '周四', '周五'],
+    'series': [
+        {'name': '成交量', 'data': [120, 200, 150, 80, 70]}
+    ]
+}, title="成交量趋势")
+```
+
+**前端交互：**
+- 柱状图：正数红色、负数蓝色，自动区分
+- 面积图：渐变色填充效果
+- 坐标轴：Y轴自动缩放，留有边距
+
+#### 2.3.2 饼图
+
+**数据格式：**
+```python
+# 对象数组格式
+[
+    {'name': '股票', 'value': 60},
+    {'name': '债券', 'value': 30},
+    {'name': '现金', 'value': 10}
+]
+```
+
+**使用示例：**
+```python
+nb.chart('pie', [
+    {'name': '股票', 'value': 60},
+    {'name': '债券', 'value': 30},
+    {'name': '现金', 'value': 10}
+], title="资产配置")
+```
+
+**前端交互：**
+- 支持显示原始数据、百分比或同时显示
+- 通过右侧控制面板切换
+- 环形图样式，标签引导线
+
+#### 2.3.3 热力图
+
+**函数签名：**
+```python
+def heatmap(self, data, title=None, **options) -> Notebook:
+    """
+    创建热力图
+    
+    Args:
+        data: 数据源，支持格式：
+            - dict: 嵌套字典 {y: {x: value, ...}, ...}
+            - DataFrame: 第一列作为Y轴，其余列作为X轴
+        title: 标题
+        **options: 其他配置（如 height）
+    
+    Returns:
+        Notebook: 支持链式调用
+    """
+```
+
+**数据格式：**
+```python
+# 嵌套字典格式（外层 key = Y轴，内层 key = X轴）
+{
+    '2023': {'1月': 0.02, '2月': -0.01, '3月': 0.03},
+    '2024': {'1月': 0.05, '2月': -0.02, '3月': 0.08}
+}
+
+# DataFrame 格式（第一列 = Y轴，其余列 = X轴）
+#     年    1月    2月    3月
+# 0  2023  0.02  -0.01  0.03
+# 1  2024  0.05  -0.02  0.08
+```
+
+**使用示例：**
+```python
+# 方式1：嵌套字典
+nb.heatmap({
+    '2023': {'1月': 0.02, '2月': -0.01, '3月': 0.03},
+    '2024': {'1月': 0.05, '2月': -0.02, '3月': 0.08}
+}, title='月度收益热力图')
+
+# 方式2：DataFrame
+import pandas as pd
+df = pd.DataFrame({
+    '年': ['2023', '2024'],
+    '1月': [0.02, 0.05],
+    '2月': [-0.01, -0.02],
+    '3月': [0.03, 0.08]
+})
+nb.heatmap(df, title='月度收益热力图')
+
+# 方式3：通过 chart 方法
+nb.chart('heatmap', data, title='热力图', height=500)
+```
+
+**前端交互：**
+- 支持数据缩放（×1000, ×100, ×10, 原始, 1/10, 1/100）
+- 默认显示原始数据
+- 根据数据范围自动调整颜色映射（蓝红渐变）
+
+#### 2.3.4 图表参数总结
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `chart_type` | str | ✅ | 'line'/'bar'/'area'/'pie'/'heatmap' |
+| `data` | dict/list | ✅ | 图表数据，格式见各类型说明 |
+| `title` | str | ❌ | 图表标题 |
+| `height` | int | ❌ | 图表高度（像素），默认 400 |
+| `width` | int | ❌ | 图表宽度（像素），默认自适应 |
+
+### 2.4 表格详细规范
+
+**函数签名：**
+```python
+def table(self, data, columns=None, title=None, **options) -> Notebook:
+    """
+    创建表格
+    
+    Args:
+        data: 表格数据，支持 List[dict] 或 DataFrame
+        columns: 列配置，格式：['col1', 'col2'] 或 {'col1': '列名1', 'col2': '列名2'}
+        title: 表格标题
+        **options: 其他配置
+            - freeze: 冻结列配置，如 {'left': 2, 'right': 0}
+            - page: 分页配置，如 {'pageSize': 10}
+    
+    Returns:
+        Notebook: 支持链式调用
+    """
+```
+
+**使用示例：**
+```python
+# 基础用法
+nb.table([
+    {'code': '000001', 'name': '平安银行', 'profit': '+5.2%'},
+    {'code': '600519', 'name': '贵州茅台', 'profit': '+12.8%'},
+], title="持仓明细")
+
+# 指定列及顺序
+nb.table(data, columns=['name', 'code', 'profit'])
+
+# 冻结列 + 分页
+nb.table(data, 
+    columns=['code', 'name', 'shares', 'cost', 'profit'],
+    freeze={'left': 2, 'right': 0},
+    page={'pageSize': 20},
+    title="交易明细"
+)
+```
+
+### 2.5 指标卡片详细规范
+
+**函数签名：**
+```python
+def metrics(self, data, columns=4, title=None, **options) -> Notebook:
+    """
+    创建指标卡片网格
+    
+    Args:
+        data: 指标数据列表，每个元素为 {'name': str, 'value': str, 'desc': str}
+        columns: 每行显示列数，默认 4
+        title: 标题
+        **options: 其他配置
+    
+    Returns:
+        Notebook: 支持链式调用
+    """
+```
+
+**数据格式：**
+```python
+[
+    {'name': '总收益', 'value': '45.6%', 'desc': '累计'},
+    {'name': '夏普比率', 'value': '1.85', 'desc': '风险调整后'},
+    {'name': '最大回撤', 'value': '-12.3%', 'desc': '历史最大'},
+    {'name': '交易次数', 'value': '156', 'desc': '总交易'}
+]
+```
+
+**使用示例：**
+```python
+nb.metrics([
+    {'name': '总收益', 'value': '45.6%', 'desc': '累计'},
+    {'name': '夏普比率', 'value': '1.85', 'desc': '风险调整后'},
+    {'name': '最大回撤', 'value': '-12.3%', 'desc': '历史最大'},
+    {'name': '交易次数', 'value': '156', 'desc': '总交易'}
+], columns=4, title="核心指标")
+```
+
+---
+
+## 3. Vue3 实现逻辑（简要）
+
+### 3.1 数据流
+
+```
+Python Notebook
+      ↓ to_dict()
+JSON 数据
+      ↓ Jinja2 注入
+HTML 页面 (window.notebookConfig)
+      ↓ Vue3 createApp
+CellRenderer 组件递归渲染
+      ↓
+最终页面
+```
+
+### 3.2 JSON 规范
+
+**核心原则：** `content`/`children` 分离
 
 ```json
 {
@@ -336,10 +413,7 @@ nb.export_html("report.html")
         {
           "type": "metrics",
           "title": "核心指标",
-          "content": [
-            {"name": "总收益", "value": "45.6%", "desc": "累计"},
-            {"name": "夏普比率", "value": "1.85", "desc": "风险调整后"}
-          ],
+          "content": [...],
           "options": {"columns": 4}
         },
         {
@@ -347,7 +421,7 @@ nb.export_html("report.html")
           "title": "净值曲线",
           "content": {
             "chart_type": "line",
-            "data": {"x": [...], "series": [...]}
+            "data": {"xAxis": [...], "series": [...]}
           },
           "options": {"height": 400}
         }
@@ -358,179 +432,31 @@ nb.export_html("report.html")
 }
 ```
 
-#### 嵌套示例
+**字段规则：**
+- 原子类型（table/chart/metrics）：有 `content`，无 `children`
+- 容器类型（section）：有 `children`，无 `content`
+- `title`/`options` 为空时省略
 
-```json
-{
-  "type": "section",
-  "title": "收益分析",
-  "children": [
-    {
-      "type": "metrics",
-      "content": [...]
-    },
-    {
-      "type": "section",
-      "title": "月度统计",
-      "children": [
-        {"type": "chart", "content": {...}}
-      ],
-      "options": {"level": 2}
-    }
-  ],
-  "options": {"level": 1}
-}
-```
-
-#### 折叠示例
-
-```json
-{
-  "type": "section",
-  "title": "详细数据",
-  "children": [
-    {"type": "table", "content": [...]}
-  ],
-  "options": {"level": 1, "collapsed": true}
-}
-```
-
-#### 字段省略规则
-
-| 条件 | 处理 |
-|------|------|
-| `title` 为 `None` | 省略该字段 |
-| `options` 为空对象 `{}` | 省略该字段 |
-| `options.collapsed` 省略 | 不可折叠（默认行为） |
-| `content` 为 `None`（如 divider） | 保留 `"content": null` |
-| `children` 为空列表 | 保留 `"children": []` |
-
----
-
-## 3. Vue3 渲染层
-
-### 3.1 渲染流程
-
-```
-Jinja2 模板
-    ↓ (注入 JSON 到 window.notebookConfig)
-HTML 页面
-    ↓ (Vue3 createApp)
-CellRenderer 组件
-    ↓ (递归渲染)
-最终页面
-```
-
-### 3.2 模板结构 (notebook.html)
-
-```html
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ title }}</title>
-    <!-- 依赖: Vue3, ECharts, 表格组件 -->
-</head>
-<body>
-    <div id="app">
-        <!-- Header -->
-        <div class="notebook-header">
-            <h1>{{ title }}</h1>
-            <span>📅 {{ createdAt }}</span>
-        </div>
-        
-        <!-- Cell 列表 -->
-        <cell-renderer 
-            v-for="(cell, index) in children" 
-            :key="index"
-            :cell="cell"
-            :cell-id="index"
-            :level="0">
-        </cell-renderer>
-    </div>
-    
-    <!-- 数据注入 -->
-    <script id="notebook-data" type="application/json">
-        {{ data_json | safe }}
-    </script>
-    
-    <!-- Vue3 应用 -->
-    <script src="notebook-vue3.js"></script>
-    <script>
-        window.notebookConfig = JSON.parse(
-            document.getElementById('notebook-data').textContent
-        );
-        createNotebookApp().mount('#app');
-    </script>
-</body>
-</html>
-```
-
-### 3.3 CellRenderer 组件
+### 3.3 渲染组件
 
 ```javascript
+// CellRenderer 根据 type 递归渲染
 const CellRenderer = {
-    name: 'CellRenderer',
-    props: {
-        cell: { type: Object, required: true },
-        cellId: { type: [String, Number], required: true },
-        level: { type: Number, default: 0 }
-    },
+    props: ['cell', 'cellId', 'level'],
     template: `
         <!-- Section: 递归渲染 children -->
         <div v-if="cell.type === 'section'" class="section">
-            <!-- 可折叠 -->
-            <details v-if="cell.options?.collapsed !== undefined" 
-                     :open="!cell.options.collapsed">
-                <summary class="section-title">{{ cell.title }}</summary>
-                <div class="section-content">
-                    <cell-renderer 
-                        v-for="(subCell, idx) in cell.children" 
-                        :key="idx"
-                        :cell="subCell"
-                        :cell-id="cellId + '-' + idx"
-                        :level="level + 1">
-                    </cell-renderer>
-                </div>
-            </details>
-            
-            <!-- 不可折叠 -->
-            <template v-else>
-                <div class="section-title">{{ cell.title }}</div>
-                <div class="section-content">
-                    <cell-renderer 
-                        v-for="(subCell, idx) in cell.children" 
-                        :key="idx"
-                        :cell="subCell"
-                        :cell-id="cellId + '-' + idx"
-                        :level="level + 1">
-                    </cell-renderer>
-                </div>
-            </template>
+            <cell-renderer 
+                v-for="(subCell, idx) in cell.children" 
+                :key="idx"
+                :cell="subCell"
+                :level="level + 1">
+            </cell-renderer>
         </div>
         
-        <!-- Table: 渲染 content -->
-        <div v-else-if="cell.type === 'table'" class="cell-table">
-            <h3 v-if="cell.title">{{ cell.title }}</h3>
-            <vue-table :data-source="cell.content" ...></vue-table>
-        </div>
-        
-        <!-- Metrics: 渲染 content -->
-        <div v-else-if="cell.type === 'metrics'" class="cell-metrics">
-            <h3 v-if="cell.title">{{ cell.title }}</h3>
-            <div class="metrics-grid">
-                <div v-for="m in cell.content" class="metric-card">
-                    <div class="metric-value">{{ m.value }}</div>
-                    <div class="metric-label">{{ m.name }}</div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Chart/Heatmap/Pyecharts: 渲染 content -->
-        <div v-else-if="['chart','heatmap','pyecharts'].includes(cell.type)" 
-             class="cell-chart">
-            <h3 v-if="cell.title">{{ cell.title }}</h3>
-            <div ref="chartRef" class="chart-container"></div>
+        <!-- 原子类型: 渲染 content -->
+        <div v-else-if="cell.type === 'chart'" class="cell-chart">
+            <div ref="chartRef"></div>
         </div>
         
         <!-- 其他类型... -->
@@ -538,91 +464,41 @@ const CellRenderer = {
 };
 ```
 
-#### 渲染规则
-
-| 类型 | 数据字段 | 渲染方式 |
-|------|----------|----------|
-| `section` | `children` | 递归渲染子节点 |
-| `section` (折叠) | `options.collapsed` | `<details>` 标签 |
-| `table` | `content` | 渲染表格数据 |
-| `metrics` | `content` | 渲染指标卡片 |
-| `chart` | `content` | 渲染图表配置 |
-
 ### 3.4 图表初始化
 
 ```javascript
-setup(props) {
-    const chartRef = ref(null);
-    let chartInstance = null;
-    
-    onMounted(() => {
-        if (['chart', 'heatmap', 'pyecharts'].includes(props.cell.type)) {
-            nextTick(() => {
-                chartInstance = echarts.init(chartRef.value);
-                const option = buildChartOption(props.cell);
-                chartInstance.setOption(option);
-            });
-        }
-    });
-    
-    return { chartRef };
-}
+// ECharts 初始化
+onMounted(() => {
+    if (['chart', 'heatmap'].includes(props.cell.type)) {
+        chartInstance = echarts.init(chartRef.value);
+        const option = buildChartOption(props.cell);
+        chartInstance.setOption(option);
+    }
+});
+
+// 窗口 resize 自适应
+window.addEventListener('resize', () => {
+    chartInstance?.resize();
+});
 ```
 
-### 3.5 样式规范 (Notion 风格)
+### 3.5 配色方案
 
 ```css
-/* Section 卡片 */
-.section {
-    margin: 12px 0;
-    background: #fff;
-    border: 1px solid #e9e9e9;
-    border-radius: 6px;
-}
-
-.section-title {
-    padding: 12px 16px;
-    font-size: 16px;
-    font-weight: 600;
-    border-bottom: 1px solid #e9e9e9;
-}
-
-/* 嵌套 Section */
-.nested-section {
-    border-left: 4px solid #9b51e0;
-    background: #faf9f7;
-}
-
-/* 指标卡片 */
-.metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(var(--columns, 4), 1fr);
-    gap: 16px;
-    padding: 16px;
-}
-
-.metric-card {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 16px;
-    text-align: center;
-}
-
-.metric-value {
-    font-size: 24px;
-    font-weight: 600;
-    color: #333;
-}
-
-.metric-value.positive { color: #52c41a; }
-.metric-value.negative { color: #ff4d4f; }
+/* Notion 风格大红大紫 */
+/* 二级嵌套：紫罗兰 #9b51e0 + 浅紫背景 #faf9f7 */
+/* 三级嵌套：粉红 #ec4899 + 浅粉背景 #fdf2f8 */
+/* 主按钮：中粉 #ec4899（悬停深粉 #db2777） */
+/* 选中高亮：紫罗兰 #9b51e0 */
+/* 表格正数：红色 #e64340 */
+/* 表格负数：绿色 #00b300 */
 ```
 
 ---
 
-## 4. 完整示例
+## 附录A：完整示例
 
-### 4.1 Python 代码
+### A.1 Python 代码
 
 ```python
 from notebook import Notebook
@@ -639,10 +515,10 @@ with nb.section("收益分析"):
     ], title="核心指标")
     
     nb.chart('line', {
-        'dates': ['2024-01', '2024-02', ...],
+        'xAxis': ['2024-01', '2024-02', '2024-03'],
         'series': [
-            {'name': '策略', 'data': [1.0, 1.05, 1.08, ...]},
-            {'name': '基准', 'data': [1.0, 1.02, 1.04, ...]}
+            {'name': '策略', 'data': [1.0, 1.05, 1.08]},
+            {'name': '基准', 'data': [1.0, 1.02, 1.04]}
         ]
     }, title="净值曲线")
 
@@ -654,14 +530,14 @@ nb.table(
     ],
     columns=['code', 'name', 'shares', 'profit'],
     title="持仓明细",
-    freeze=2  # 冻结前2列
+    freeze={'left': 2}
 )
 
 # 导出
 nb.export_html("report.html")
 ```
 
-### 4.2 生成的 JSON
+### A.2 生成的 JSON
 
 ```json
 {
@@ -689,10 +565,10 @@ nb.export_html("report.html")
           "content": {
             "chart_type": "line",
             "data": {
-              "x": ["2024-01", "2024-02"],
+              "xAxis": ["2024-01", "2024-02", "2024-03"],
               "series": [
-                {"name": "策略", "data": [1.0, 1.05]},
-                {"name": "基准", "data": [1.0, 1.02]}
+                {"name": "策略", "data": [1.0, 1.05, 1.08]},
+                {"name": "基准", "data": [1.0, 1.02, 1.04]}
               ]
             }
           },
@@ -725,27 +601,7 @@ nb.export_html("report.html")
 
 ---
 
-## 5. 文件结构
-
-```
-ft2/
-├── notebook/
-│   ├── __init__.py
-│   ├── notebook.py      # Notebook 主类
-│   └── cell.py          # Cell + CellBuilder
-│
-└── template/
-    ├── notebook.html        # Jinja2 + Vue3 模板
-    └── js/
-        ├── notebook-vue3.js # Vue3 组件
-        ├── vue.global.prod.js
-        ├── echarts.min.js
-        └── vue3-table.js    # 表格组件
-```
-
----
-
-## 附录A：图表数据格式对比
+## 附录B：图表数据格式对比
 
 ### 设计原则
 
@@ -754,7 +610,7 @@ Notebook 的数据格式设计遵循以下原则：
 2. **简化用户输入**：相比 ECharts 原生格式更简洁，省略冗余配置
 3. **兼容 pyecharts**：命名风格与 pyecharts 相似，便于迁移
 
-### A.1 折线图 / 面积图 / 柱状图
+### B.1 折线图 / 面积图 / 柱状图
 
 **pyecharts:**
 ```python
@@ -793,9 +649,7 @@ nb.chart('line', {
 | 系列数据 | `add_yaxis(name, data)` | `series[].data` | `series[].data` |
 | 简化程度 | ⭐⭐⭐ | ⭐ | ⭐⭐⭐ |
 
----
-
-### A.2 饼图
+### B.2 饼图
 
 **pyecharts:**
 ```python
@@ -825,152 +679,9 @@ nb.chart('pie', [
 ])
 ```
 
-| 对比项 | pyecharts | ECharts | Notebook |
-|--------|-----------|---------|----------|
-| 数据结构 | 元组列表 `[(name, value)]` | 对象数组 | 对象数组 |
-| 键名 | 隐式 | `name`, `value` | `name`, `value` |
-| 简化程度 | ⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ |
+### B.3 热力图
 
----
-
-### A.3 热力图
-
-#### 输入参数格式
-
-```python
-def heatmap(data, title=None, **options) -> Notebook:
-    """
-    创建热力图
-    
-    Args:
-        data: 数据源，支持格式：
-            - dict: 嵌套字典 {y: {x: value, ...}, ...}
-            - DataFrame: 第一列作为Y轴，其余列作为X轴
-        title: 标题
-        **options: 其他配置（如 height）
-    
-    Returns:
-        Notebook: 支持链式调用
-    """
-```
-
-#### 数据格式说明
-
-嵌套字典与 DataFrame 宽格式结构等价，可互转：
-
-**例1：年月收益**
-```python
-# dict 嵌套格式（外层 key = Y轴，内层 key = X轴）
-{
-    '2023': {'1月': 0.02, '2月': -0.01, '3月': 0.03},
-    '2024': {'1月': 0.05, '2月': -0.02, '3月': 0.08}
-}
-
-# DataFrame 格式（第一列 = Y轴，其余列 = X轴）
-#     年    1月    2月    3月
-# 0  2023  0.02  -0.01  0.03
-# 1  2024  0.05  -0.02  0.08
-```
-
-**例2：相关性矩阵**
-```python
-# dict 嵌套格式
-{
-    '茅台': {'茅台': 1.00, '平安': 0.35, '万科': 0.28},
-    '平安': {'茅台': 0.35, '平安': 1.00, '万科': 0.52},
-    '万科': {'茅台': 0.28, '平安': 0.52, '万科': 1.00}
-}
-
-# DataFrame 格式（索引已设置）
-#        茅台   平安   万科
-# 茅台  1.00  0.35  0.28
-# 平安  0.35  1.00  0.52
-# 万科  0.28  0.52  1.00
-```
-
-**例3：交叉检验（模型对比）**
-```python
-# dict 嵌套格式：不同模型在各折上的准确率
-{
-    'RandomForest': {'Fold1': 0.85, 'Fold2': 0.87, 'Fold3': 0.84, 'Fold4': 0.86, 'Fold5': 0.88},
-    'XGBoost':      {'Fold1': 0.88, 'Fold2': 0.86, 'Fold3': 0.89, 'Fold4': 0.87, 'Fold5': 0.90},
-    'LightGBM':     {'Fold1': 0.87, 'Fold2': 0.89, 'Fold3': 0.86, 'Fold4': 0.88, 'Fold5': 0.91},
-    'NeuralNet':    {'Fold1': 0.82, 'Fold2': 0.84, 'Fold3': 0.83, 'Fold4': 0.85, 'Fold5': 0.86}
-}
-
-# DataFrame 格式
-#          Model   Fold1  Fold2  Fold3  Fold4  Fold5
-# 0  RandomForest   0.85   0.87   0.84   0.86   0.88
-# 1       XGBoost   0.88   0.86   0.89   0.87   0.90
-# 2      LightGBM   0.87   0.89   0.86   0.88   0.91
-# 3     NeuralNet   0.82   0.84   0.83   0.85   0.86
-
-# 调用示例
-cv_results = pd.DataFrame({
-    'Model': ['RandomForest', 'XGBoost', 'LightGBM', 'NeuralNet'],
-    'Fold1': [0.85, 0.88, 0.87, 0.82],
-    'Fold2': [0.87, 0.86, 0.89, 0.84],
-    'Fold3': [0.84, 0.89, 0.86, 0.83],
-    'Fold4': [0.86, 0.87, 0.88, 0.85],
-    'Fold5': [0.88, 0.90, 0.91, 0.86]
-})
-nb.heatmap(cv_results, title='5折交叉检验准确率对比')
-```
-
-#### DataFrame 转换规则
-
-| DataFrame 索引类型 | 处理方式 |
-|-------------------|----------|
-| `RangeIndex`（默认 0,1,2...） | 自动 `set_index(第一列)` → Y轴 |
-| 已命名索引（如年/股票名） | 直接使用 → Y轴 |
-
-```python
-# 情况1：默认索引 → 自动转换
-df = pd.DataFrame({'年': ['2023', '2024'], '1月': [0.02, 0.05]})
-# RangeIndex(0, 2) → set_index('年') → {'2023': {'1月': 0.02}, ...}
-
-# 情况2：已设置索引 → 直接使用
-df = pd.DataFrame({'1月': [0.02, 0.05]}, index=['2023', '2024'])
-# Index(['2023', '2024']) → {'2023': {'1月': 0.02}, ...}
-```
-
-#### 格式互转
-
-```python
-# dict → DataFrame
-pd.DataFrame.from_dict(data, orient='index')
-
-# DataFrame → dict
-df.to_dict(orient='index')
-```
-
-#### 调用示例
-
-```python
-# 方式1：嵌套字典
-nb.heatmap({
-    '2023': {'1月': 0.02, '2月': -0.01, '3月': 0.03},
-    '2024': {'1月': 0.05, '2月': -0.02, '3月': 0.08}
-}, title='月度收益热力图')
-
-# 方式2：DataFrame
-df = pd.DataFrame({
-    '年': ['2023', '2024'],
-    '1月': [0.02, 0.05],
-    '2月': [-0.01, -0.02],
-    '3月': [0.03, 0.08]
-})
-nb.heatmap(df, title='月度收益热力图')
-
-# 方式3：通过 chart 方法
-nb.chart('heatmap', data, title='热力图', height=500)
-```
-
----
-
-#### 与其他方案对比
-
-**pyecharts:** (与 ECharts 相同，需手动计算坐标索引)
+**pyecharts:** (需手动计算坐标索引)
 ```python
 HeatMap() \
     .add_xaxis(['1月', '2月', '3月']) \
@@ -995,19 +706,10 @@ HeatMap() \
 
 **Notebook:** (语义化嵌套字典，自动转换坐标)
 ```python
-# 方式1: 嵌套字典
 nb.heatmap({
     '2023': {'1月': 0.05, '2月': 0.03, '3月': 0.08},
     '2024': {'1月': 0.10, '2月': -0.02, '3月': 0.06}
 })
-
-# 方式2: DataFrame（自动转换）
-df = pd.DataFrame({
-    '月份': ['1月', '2月', '3月'],
-    '2023': [0.05, 0.03, 0.08],
-    '2024': [0.10, -0.02, 0.06]
-})
-nb.heatmap(df)  # 第一列自动作为Y轴索引
 ```
 
 | 对比项 | pyecharts | ECharts | Notebook |
@@ -1017,52 +719,7 @@ nb.heatmap(df)  # 第一列自动作为Y轴索引
 | 用户负担 | 需计算索引 | 需计算索引 | **直接语义化** ✅ |
 | 简化程度 | ⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐ |
 
----
-
-### A.4 表格数据格式
-
-Notebook 的 `table()` 方法支持两种数据格式：
-
-**方式1: List[dict]（字典列表）**
-```python
-nb.table([
-    {'code': '000001', 'name': '平安银行', 'shares': 1000, 'profit': '+5.2%'},
-    {'code': '600519', 'name': '贵州茅台', 'shares': 100, 'profit': '+12.8%'},
-])
-```
-
-**方式2: DataFrame（自动转换）**
-```python
-df = pd.DataFrame({
-    'code': ['000001', '600519'],
-    'name': ['平安银行', '贵州茅台'],
-    'shares': [1000, 100],
-    'profit': ['+5.2%', '+12.8%']
-})
-nb.table(df)  # 自动识别列名
-```
-
-**格式对比：**
-
-| 对比项 | List[dict] | DataFrame |
-|--------|------------|-----------|
-| 数据来源 | API返回、手动构造 | pandas处理结果 |
-| 列顺序 | 不保证（字典无序） | 按 DataFrame 列顺序 |
-| columns参数 | 可指定列及顺序 | 同左，或 None 使用全部列 |
-| 适用场景 | 简单数据、JSON转换 | 数据分析结果展示 |
-
-**columns 参数示例：**
-```python
-# 指定列及顺序
-nb.table(df, columns=['name', 'code', 'profit'])
-
-# 不指定，使用全部列
-nb.table(df)
-```
-
----
-
-### A.5 总结对比表
+### B.4 总结对比表
 
 | 图表类型 | pyecharts 风格 | ECharts 键名 | Notebook 简化 |
 |---------|---------------|-------------|--------------|
@@ -1074,13 +731,93 @@ nb.table(df)
 
 ---
 
-## 6. 选择性截图功能
+## 附录C：Python 数据层设计
 
-### 6.1 功能需求
+### C.1 数据流
+
+```
+用户 API 调用
+      ↓
+Notebook 实例
+      ↓
+Cell[] (Python 对象)
+      ↓
+to_dict() 序列化
+      ↓
+JSON 数据
+      ↓
+Jinja2 注入 HTML
+```
+
+### C.2 核心类设计
+
+#### Cell 数据类
+
+```python
+@dataclass
+class Cell:
+    type: CellType            # 类型枚举
+    content: Any              # 核心数据（原子类型）
+    children: List[Cell]      # 子节点（容器类型）
+    title: Optional[str]      # 标题
+    options: Dict             # 配置选项
+```
+
+#### 字段语义
+
+| 字段 | 含义 | 适用类型 |
+|------|------|----------|
+| `type` | 类型标识 | 所有 |
+| `content` | 核心数据 | 原子类型（table, chart, metrics 等） |
+| `children` | 子节点列表 | 容器类型（section） |
+| `title` | 标题 | 所有（可选） |
+| `options` | 展示配置 | 所有（可选） |
+
+#### 类型划分
+
+```
+原子类型（有 content，无 children）
+├── text, markdown, html
+├── code
+├── table, metrics
+├── chart, heatmap, pyecharts
+└── divider
+
+容器类型（有 children，无 content）
+└── section
+```
+
+### C.3 设计决策
+
+#### 决策1: options 字段松散是合理的
+
+不同 Cell 类型有各自专属配置：
+- `TableCell.options.columns` = 列名列表
+- `MetricsCell.options.columns` = 每行显示列数
+
+同名不同义，符合各自业务语义。统一反而增加复杂度。
+
+#### 决策2: Section 自动分类
+
+`_add_cell` 方法三种分支：
+
+| 场景 | 代码 | 效果 |
+|------|------|------|
+| with 内 | `with nb.section("分析"): nb.table(data, title="明细")` | 添加到 Section，title 保留为小标题 |
+| with 外有 title | `nb.table(data, title="基金列表")` | **自动创建 Section** |
+| with 外无 title | `nb.text("说明文字")` | 普通 Cell，不包装 |
+
+**核心思想**：用户不用显式创建 Section，给 `title` 参数就自动分组。
+
+---
+
+## 附录D：选择性截图功能
+
+### D.1 功能需求
 
 用户可以在 TOC 面板中勾选需要截图的内容（支持多选），点击"截图选中"按钮后，将选中内容截图并复制到剪贴板。
 
-### 6.2 技术挑战
+### D.2 技术挑战
 
 | 挑战 | 说明 |
 |------|------|
@@ -1088,29 +825,18 @@ nb.table(df)
 | **Canvas 克隆** | `cloneNode()` 无法克隆 Canvas 内容，ECharts 图表会丢失 |
 | **布局变化** | 使用 `display: none` 隐藏元素会触发重排，影响图表尺寸 |
 
-### 6.3 最终方案：逐个截图 + Canvas 拼接（V2.0）
+### D.3 最终方案：逐个截图 + Canvas 拼接
 
-#### 架构演进
-
-**V1.0（已弃用）**: DOM 克隆 → 独立容器 → 手动 Canvas 复制 → snapdom 截图
-- 问题：`cloneNode()` 不保留折叠状态、表格滚动位置
-
-**V2.0（当前）**: 逐个元素直接截图 → Canvas 拼接 → 输出 PNG
-- 优势：所见即所得，无需 DOM 克隆
-
-#### 架构设计
-
+**架构设计：**
 ```
 ┌──────────────────────────────────────────────┐
 │  主体容器 (.notebook-container)               │
 │  ├── Header ──────────────────────────────┐  │
 │  │  ↓ snapdom(element)                     │  │
 │  │  → Blob 1                              │  │
-│  ├─────────────────────────────────────────┤  │
 │  ├── Section 0 (已折叠) ─────────────────┐ │  │
 │  │  ↓ snapdom(element)                     │ │  │
 │  │  → Blob 2                              │ │  │
-│  ├─────────────────────────────────────────┤  │
 │  ├── Section 1 (展开，表格已滚动) ───────┐│  │
 │  │  ↓ snapdom(element)                    ││  │
 │  │  → Blob 3                             ││  │
@@ -1122,200 +848,21 @@ nb.table(df)
               输出 PNG
 ```
 
-#### 核心代码
-
-```javascript
-// 截图功能 - 逐个元素截图后 Canvas 拼接
-const captureScreenshot = async () => {
-    // 1. 收集需要截图的元素
-    const elementsToCapture = [];
-    
-    if (selectedIndices.value.has(-1)) {
-        elementsToCapture.push(header);
-    }
-    
-    sortedIndices.forEach(index => {
-        const section = document.getElementById('section-' + index);
-        if (section) elementsToCapture.push(section);
-    });
-
-    // 2. 逐个截图（每个元素独立 snapdom）
-    const imageBlobs = [];
-    for (const el of elementsToCapture) {
-        const result = await snapdom(el, {
-            scale: 2,
-            backgroundColor: '#f5f5f5',
-            cache: 'auto'
-        });
-        imageBlobs.push(await result.toBlob({ type: 'png' }));
-    }
-
-    // 3. Canvas 拼接（保留间距和 padding）
-    const finalBlob = await stitchImages(imageBlobs);
-    
-    // 4. 复制到剪贴板
-    await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': finalBlob })
-    ]);
-};
-
-// 图片拼接函数
-const stitchImages = async (imageBlobs) => {
-    const images = await Promise.all(imageBlobs.map(blob => 
-        new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.src = URL.createObjectURL(blob);
-        })
-    ));
-
-    // 配置（与原 CSS 一致）
-    const CONTAINER_PADDING = 20;  // notebook-container padding
-    const MARGIN_TOP = 12;         // section margin-top
-    const MARGIN_BOTTOM = 12;      // section margin-bottom
-
-    // 计算总尺寸
-    const maxContentWidth = Math.max(...images.map(img => img.width));
-    const maxWidth = maxContentWidth + CONTAINER_PADDING * 2;
-    const contentHeight = images.reduce((sum, img) => sum + img.height, 0);
-    const spacingHeight = (images.length - 1) * (MARGIN_TOP + MARGIN_BOTTOM);
-    const totalHeight = contentHeight + spacingHeight + CONTAINER_PADDING * 2;
-
-    // 创建 Canvas
-    const canvas = document.createElement('canvas');
-    canvas.width = maxWidth;
-    canvas.height = totalHeight;
-    const ctx = canvas.getContext('2d');
-
-    // 填充背景
-    ctx.fillStyle = '#f5f5f5';
-    ctx.fillRect(0, 0, maxWidth, totalHeight);
-
-    // 绘制图片（添加间距）
-    let currentY = CONTAINER_PADDING;
-    images.forEach((img, index) => {
-        const x = Math.floor((maxWidth - img.width) / 2);
-        
-        // 添加上边距背景（除第一个）
-        if (index > 0) {
-            ctx.fillRect(0, currentY, maxWidth, MARGIN_TOP);
-            currentY += MARGIN_TOP;
-        }
-        
-        // 绘制图片
-        ctx.drawImage(img, x, currentY);
-        currentY += img.height;
-        
-        // 添加下边距背景
-        if (index < images.length - 1) {
-            ctx.fillRect(0, currentY, maxWidth, MARGIN_BOTTOM);
-            currentY += MARGIN_BOTTOM;
-        }
-        
-        URL.revokeObjectURL(img.src);
-    });
-
-    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-};
-```
-
-### 6.4 方案演进对比
-
-#### 各方案对比
+### D.4 方案对比
 
 | 方案 | 原理 | 问题 | 状态 |
 |------|------|------|------|
 | ❌ CSS `display: none` | 隐藏未选中元素 | 触发重排，图表尺寸变化 | 废弃 |
 | ❌ CSS `visibility: hidden` | 隐藏但保留空间 | 占用空白，截图有空白 | 废弃 |
 | ❌ Vue `:class` 绑定 | 响应式更新 class | Vue 虚拟 DOM 更新可能影响图表 | 废弃 |
-| ⚠️ DOM 克隆 + 独立容器 | 克隆内容到新容器手动复制 Canvas | `cloneNode()` 不保留折叠状态、表格滚动位置 | V1.0 |
+| ⚠️ DOM 克隆 + 独立容器 | 克隆内容到新容器 | `cloneNode()` 不保留折叠状态、表格滚动位置 | V1.0 |
 | ✅ **逐个截图 + Canvas 拼接** | 直接截图原元素后拼接 | 所见即所得，无需 DOM 克隆 | **V2.0** |
-
-#### V1.0 vs V2.0 对比
-
-| 特性 | V1.0 (DOM 克隆) | V2.0 (Canvas 拼接) |
-|------|-----------------|-------------------|
-| DOM 克隆 | ✅ 需要 | ❌ 不需要 |
-| Canvas 手动复制 | ✅ 需要 | ❌ 不需要 |
-| 折叠状态 | ❌ 需同步 | ✅ 所见即所得 |
-| 表格滚动 | ❌ 需处理 | ✅ 所见即所得 |
-| 间距/背景 | ⚠️ 需处理 | ✅ 拼接时添加 |
-| 代码复杂度 | ⭐⭐⭐ | ⭐⭐ |
-
-### 6.5 关键技术点
-
-1. **为何选择逐个截图**
-   - 直接对原 DOM 元素截图，保留所有交互状态
-   - 无需处理 `cloneNode()` 的各种边界情况
-   - 避免 Vue 响应式系统的干扰
-
-2. **Canvas 拼接逻辑**
-   - 计算所有图片的最大宽度和总高度
-   - 添加与原 CSS 一致的间距（margin: 12px）
-   - 添加与原 CSS 一致的容器内边距（padding: 20px）
-   - 填充背景色保持视觉一致性
-
-3. **内存管理**
-   - 使用 `URL.createObjectURL()` 加载图片
-   - 拼接完成后 `URL.revokeObjectURL()` 释放资源
-
-### 6.6 技术讨论：为什么用 ctx.drawImage() 而非 SVG 方案
-
-#### snapdom 的工作原理
-
-snapdom 内部处理流程：
-```
-DOM → SVG (foreignObject) → Canvas 绘制 → PNG 输出
-```
-
-使用 SVG `foreignObject` 将 HTML 嵌入 SVG，再绘制到 Canvas 导出图片。
-
-#### 为什么不用 SVG 方案处理 Canvas？
-
-**方案对比：**
-
-| 方案 | 实现方式 | 复杂度 |
-|------|---------|--------|
-| **ctx.drawImage()** | 3行原生 Canvas API | ⭐ 简洁 |
-| SVG `<image>` | 创建命名空间、设置属性、`toDataURL()` 中转 | ⭐⭐⭐ 复杂 |
-
-**SVG 方案代码示例：**
-```javascript
-// SVG 方案（更复杂，效果相同）
-const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-image.setAttribute('href', canvas.toDataURL('image/png'));  // 还是需要 toDataURL
-svg.appendChild(image);
-canvas.parentNode.replaceChild(svg, canvas);
-```
-
-**当前方案代码示例：**
-```javascript
-// ctx.drawImage() 方案（简洁高效）
-const ctx = clonedCanvas.getContext('2d');
-ctx.drawImage(originalCanvas, 0, 0);  // 直接复制位图
-```
-
-#### 结论
-
-- **Canvas 像素复制**：原生 API `ctx.drawImage()` 最直接
-- **HTML/CSS 处理**：交给 snapdom 的 SVG 流程
-- **各司其职**：不强行统一，让每个工具做最擅长的事
-
-最终技术路径：
-```
-克隆DOM → ctx.drawImage() 复制 Canvas → snapdom(SVG 捕获 HTML) → PNG
-```
-   - Vue 组件状态不变
-   - 图表实例保持活跃
 
 ---
 
-## 附录A：技术探索路径记录（方法论）
+## 附录E：技术探索路径（方法论）
 
-> 本附录记录选择性截图功能的完整技术探索过程，作为后续解决类似问题的参考模式。
-
-### A.1 问题定义
+### E.1 问题定义
 
 **需求**：Vue3 环境下实现选择性截图（勾选部分内容后截图到剪贴板）
 
@@ -1325,93 +872,18 @@ ctx.drawImage(originalCanvas, 0, 0);  // 直接复制位图
 - 表格滚动位置需保留
 - 不能影响原页面交互
 
-### A.2 探索历程
+### E.2 探索历程
 
-#### 尝试 1：CSS 隐藏方案 ❌
+| 尝试 | 方案 | 结果 | 原因 |
+|------|------|------|------|
+| 1 | CSS `display: none` | ❌ | 触发重排，图表尺寸变化 |
+| 2 | CSS `visibility: hidden` | ❌ | 占用空白，截图有空白 |
+| 3 | Vue `:class` 绑定 | ❌ | Vue 虚拟 DOM 更新影响图表 |
+| 4 | 绝对定位移出视口 | ❌ | 仍需操作 Vue 管理的 DOM |
+| 5 | DOM 克隆 + 独立容器 | ⚠️ | 不保留折叠状态、滚动位置 |
+| 6 | **逐个截图 + Canvas 拼接** | ✅ | 所见即所得，无需克隆 |
 
-```css
-/* 隐藏未选中元素 */
-.unselected { display: none; }
-```
-
-**失败原因**：触发重排(reflow)，ECharts 图表尺寸变化，截图时显示不完整。
-
----
-
-#### 尝试 2：CSS visibility 方案 ❌
-
-```css
-/* 隐藏但保留空间 */
-.unselected { visibility: hidden; }
-```
-
-**失败原因**：未选中元素占用空白空间，截图包含大片空白区域。
-
----
-
-#### 尝试 3：Vue `:class` 响应式绑定 ❌
-
-```javascript
-// 通过 Vue 响应式控制显示
-:class="{ 'screenshot-hidden': !isSelected }"
-```
-
-**失败原因**：Vue3 虚拟 DOM diff/patch 可能触发组件重新初始化，ECharts 实例被销毁。
-
----
-
-#### 尝试 4：绝对定位移出视口 ❌
-
-```css
-/* 将未选中元素移出视口 */
-.unselected { position: absolute; left: -99999px; }
-```
-
-**失败原因**：仍然需要操作 Vue 管理的 DOM，响应式系统可能触发更新。
-
----
-
-#### 尝试 5：独立截图容器 + DOM 克隆 ⚠️
-
-```javascript
-// 创建独立的截图容器
-const screenshotContainer = document.getElementById('screenshot-container');
-screenshotContainer.innerHTML = '';
-
-// 克隆选中元素
-selectedElements.forEach(el => {
-    screenshotContainer.appendChild(el.cloneNode(true));
-});
-```
-
-**部分成功**：
-- ✅ 主体 DOM 不受干扰
-- ✅ ECharts 图表可以捕获（配合 Canvas 手动复制）
-- ❌ `cloneNode()` 不保留折叠状态（`v-show` 的 `display: none` 丢失）
-- ❌ 表格滚动位置丢失
-
----
-
-#### 尝试 6（最终方案）：逐个截图 + Canvas 拼接 ✅
-
-```javascript
-// 直接对原元素截图
-const blobs = await Promise.all(elements.map(el => 
-    snapdom(el).then(r => r.toBlob())
-));
-
-// Canvas 拼接（添加间距和背景）
-const finalBlob = await stitchImages(blobs);
-```
-
-**成功原因**：
-- ✅ 不操作 DOM，直接捕获视觉状态
-- ✅ 折叠/展开状态自然保留
-- ✅ 表格滚动位置自然保留
-- ✅ 无需处理 Canvas 克隆问题
-- ✅ 代码更简洁
-
-### A.3 关键洞察
+### E.3 关键洞察
 
 | 洞察 | 说明 |
 |------|------|
@@ -1420,7 +892,7 @@ const finalBlob = await stitchImages(blobs);
 | **直接截图最可靠** | 对最终渲染结果截图，而非试图重建渲染状态 |
 | **工具各司其职** | snapdom 处理 HTML→PNG，手动 Canvas 处理拼接和间距 |
 
-### A.4 可复用的方法论
+### E.4 可复用的方法论
 
 **面对"截图特定内容"类问题时的决策树：**
 
@@ -1435,7 +907,7 @@ const finalBlob = await stitchImages(blobs);
 
 ---
 
-## 附录B：版本记录
+## 附录F：版本记录
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
@@ -1444,7 +916,29 @@ const finalBlob = await stitchImages(blobs);
 | V3 | 2025-02-27 | API 极简化，统一 `chart()` |
 | V3.5 | 2026-03-02 | Alpine 声明式模板 |
 | V4.0 | 2026-03-03 | 重构文档结构：效果 → Python → Vue3 |
-| V4.1 | 2026-03-03 | **JSON 规范优化**：`content`/`children` 分离，`collapsed` 作为 section 可选参数 |
-| V4.2 | 2026-03-04 | **选择性截图 V1.0**：独立截图容器 + Canvas 手动复制技术方案 |
-| V4.3 | 2026-03-04 | **技术讨论**：ctx.drawImage() vs SVG 方案对比分析 |
-| V4.4 | 2026-03-04 | **选择性截图 V2.0**：逐个截图 + Canvas 拼接，实现真正的所见即所得 |
+| V4.1 | 2026-03-03 | **JSON 规范优化**：`content`/`children` 分离 |
+| V4.2 | 2026-03-04 | **选择性截图 V1.0**：独立截图容器 + Canvas 手动复制 |
+| V4.3 | 2026-03-04 | **技术讨论**：ctx.drawImage() vs SVG 方案 |
+| V4.4 | 2026-03-04 | **选择性截图 V2.0**：逐个截图 + Canvas 拼接 |
+| V5.0 | 2026-03-05 | **文档重构**：三段式主体 + 六大附录 |
+
+---
+
+## 附录G：文件结构
+
+```
+ft2/
+├── notebook/
+│   ├── __init__.py
+│   ├── notebook.py      # Notebook 主类
+│   └── cell.py          # Cell + CellBuilder
+│
+└── template/
+    ├── notebook.html        # Jinja2 + Vue3 模板
+    └── js/
+        ├── notebook-vue3.js # Vue3 组件
+        ├── notebook.css     # 样式文件
+        ├── vue.global.prod.js
+        ├── echarts.min.js
+        └── snapdom.min.js   # 截图库
+```
