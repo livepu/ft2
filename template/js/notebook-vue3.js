@@ -8,6 +8,10 @@ const { createApp, ref, computed, onMounted, nextTick } = Vue;
 // ========== Cell 渲染组件（组合式 API）==========
 const CellRenderer = {
     name: 'CellRenderer',
+    components: {
+        // VueTable 会从父组件传递，如果可用
+        VueTable: typeof window !== 'undefined' && window.VueTable ? window.VueTable : null
+    },
     props: {
         cell: { type: Object, required: true },
         cellId: { type: [String, Number], required: true },
@@ -262,6 +266,9 @@ const CellRenderer = {
             <!-- 表格 -->
             <div v-else-if="cell.type === 'table'" class="cell-table">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div style="color: red; font-size: 12px;">
+                    DEBUG: type={{cell.type}}, content={{cell.content?.length}} items, cols={{getTableCols(cell).length}}
+                </div>
                 <div v-if="!cell.content || cell.content.length === 0" class="table-empty">
                     暂无数据
                 </div>
@@ -329,10 +336,14 @@ const CellRenderer = {
 
 // ========== 创建 Notebook 应用 ==========
 function createNotebookApp() {
+    // 从全局获取 VueTable 组件（由 vue3-table.js 暴露到 window）
+    const VueTableComponent = typeof window !== 'undefined' ? window.VueTable : null;
+    console.log('VueTableComponent:', VueTableComponent);
+    
     return createApp({
         components: {
-            CellRenderer
-            // VueTable 已由 vue3-table.js 全局注册，无需在此声明
+            CellRenderer,
+            VueTable: VueTableComponent
         },
 
         setup() {

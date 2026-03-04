@@ -489,11 +489,8 @@ const VueTable = {
   `
 };
 
-// 全局注册（CDN 使用方式）
-if (typeof window !== 'undefined' && window.Vue) {
-  // 注册为全局组件，这样在任意组件模板中可直接使用 <vue-table>
-  window.Vue.component('vue-table', VueTable);
-  // 同时暴露到 window 供需要的地方使用
+// 全局暴露（CDN 使用方式）
+if (typeof window !== 'undefined') {
   window.VueTable = VueTable;
 }
 
