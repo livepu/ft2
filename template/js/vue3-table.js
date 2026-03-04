@@ -188,14 +188,16 @@ const VueTable = {
       return index < left || index >= total - right;
     };
 
-    // 获取冻结列的 CSS 类
+    // 获取冻结列的 CSS 类（必须包含 freeze-col 基础类）
     const getFreezeClass = (index) => {
       if (!isFreezeCol(index)) return '';
       const left = props.freeze.left || 0;
-      return index < left ? 'freeze-left' : 'freeze-right';
+      return index < left ? 'freeze-col freeze-left' : 'freeze-col freeze-right';
     };
 
     // 应用冻结列样式
+    // 原理：JS 获取列宽 → 计算偏移量 → 直接设置 style.left/right
+    // 优势：无需 CSS 变量，无需预设变量名，列数任意，代码更简洁
     const applyFreezeStyles = () => {
       if (!hasFreeze.value || !tableContainer.value) return;
       
@@ -205,47 +207,33 @@ const VueTable = {
       const headerCells = table.querySelectorAll('thead th');
       const rows = table.querySelectorAll('tbody tr');
       
-      // 计算左侧偏移
+      // 获取实际列宽
+      const colWidths = Array.from(headerCells).map(th => th.offsetWidth);
+      
+      // 左侧冻结：直接设置 style.left
       let leftOffset = 0;
       const leftCount = props.freeze.left || 0;
       
       for (let i = 0; i < leftCount && i < headerCells.length; i++) {
-        const cell = headerCells[i];
-        cell.style.setProperty('--freeze-left', `${leftOffset}px`);
-        cell.classList.add('freeze-col', 'freeze-left');
-        
-        // 同步设置 tbody 单元格
+        headerCells[i].style.left = `${leftOffset}px`;
         rows.forEach(row => {
-          const td = row.cells[i];
-          if (td) {
-            td.style.setProperty('--freeze-left', `${leftOffset}px`);
-            td.classList.add('freeze-col', 'freeze-left');
-          }
+          if (row.cells[i]) row.cells[i].style.left = `${leftOffset}px`;
         });
-        
-        leftOffset += cell.offsetWidth;
+        leftOffset += colWidths[i];
       }
 
-      // 计算右侧偏移
+      // 右侧冻结：直接设置 style.right
       let rightOffset = 0;
       const rightCount = props.freeze.right || 0;
-      const totalCols = headerCells.length;
+      const totalCols = colWidths.length;
       
       for (let i = 0; i < rightCount && i < totalCols; i++) {
         const colIndex = totalCols - 1 - i;
-        const cell = headerCells[colIndex];
-        cell.style.setProperty('--freeze-right', `${rightOffset}px`);
-        cell.classList.add('freeze-col', 'freeze-right');
-        
+        headerCells[colIndex].style.right = `${rightOffset}px`;
         rows.forEach(row => {
-          const td = row.cells[colIndex];
-          if (td) {
-            td.style.setProperty('--freeze-right', `${rightOffset}px`);
-            td.classList.add('freeze-col', 'freeze-right');
-          }
+          if (row.cells[colIndex]) row.cells[colIndex].style.right = `${rightOffset}px`;
         });
-        
-        rightOffset += cell.offsetWidth;
+        rightOffset += colWidths[colIndex];
       }
     };
 
@@ -326,77 +314,63 @@ const VueTable = {
       }
     });
 
-    // ========== 注入 CSS（仅冻结相关核心样式） ==========
+    // 监听分页变化（分页后 tbody 行变化，需要重新设置）
+    watch(currentPage, () => {
+      if (hasFreeze.value) {
+        nextTick(() => {
+          applyFreezeStyles();
+        });
+      }
+    });
+
+    // 监听 freeze 配置变化
+    watch(() => props.freeze, () => {
+      if (hasFreeze.value) {
+        nextTick(() => {
+          applyFreezeStyles();
+        });
+      }
+    }, { deep: true });
+
+    // ========== 注入 CSS ==========
+    // 设计原则：最小化注入，只包含功能性样式
+    // - 功能性样式（注入）：position: sticky, z-index, overflow
+    // - 装饰性样式（外部CSS）：背景色、阴影、边框颜色
+    // - 动态偏移量（JS）：style.left/right 直接设置，不用 CSS 变量
     
     const injectTableStyles = () => {
-      if (document.getElementById('vue-table-freeze-styles')) return;
+      const styleId = 'vue-table-freeze-core';
+      if (document.getElementById(styleId)) return;
       
       const style = document.createElement('style');
-      style.id = 'vue-table-freeze-styles';
+      style.id = styleId;
       style.textContent = `
         /* 冻结容器 */
         .vue-table-freeze {
           overflow-x: auto;
           position: relative;
         }
-        
-        /* 冻结列单元格 - 只设置 sticky 定位 */
+        /* 冻结列单元格 */
         .vue-table-freeze .freeze-col {
           position: sticky;
         }
-        
-        /* 表头整体冻结在顶部（仅冻结模式） */
+        /* 表头整体冻结在顶部 */
         .vue-table-freeze thead th {
           position: sticky;
           top: 0;
           z-index: 10;
         }
-        
-        /* 表头中的冻结列需要更高的 z-index */
+        /* 表头中的冻结列 */
         .vue-table-freeze thead .freeze-col {
           z-index: 100;
         }
-        
         .vue-table-freeze tbody .freeze-col {
           z-index: 50;
         }
-        
-        /* 表格边框（仅冻结模式需要 separate） */
+        /* 表格边框 */
         .vue-table-freeze .vue-table {
           border-collapse: separate;
           border-spacing: 0;
-        }
-        
-        /* 左侧冻结 - alpine-table.js 无此样式，新增增强 */
-        .vue-table-freeze .freeze-left {
-          left: var(--freeze-left, 0);
-        }
-        
-        /* 左侧冻结阴影效果 - alpine-table.js 无此样式，新增增强 */
-        .vue-table-freeze .freeze-left::after {
-          content: '';
-          position: absolute;
-          right: 0;
-          top: 0;
-          bottom: 0;
-          width: 2px;
-          background: linear-gradient(to right, rgba(0,0,0,0.1), transparent);
-        }
-        
-        /* 右侧冻结 - alpine-table.js 无此样式，新增增强 */
-        .vue-table-freeze .freeze-right {
-          right: var(--freeze-right, 0);
-        }
-        
-        /* 右侧冻结阴影效果 - alpine-table.js 无此样式，新增增强 */
-        .vue-table-freeze .freeze-right::before {
-          content: '';
-          position: absolute;
-          left: 0;
-          top: 0;
-          bottom: 0;
-          width: 2px;
-          background: linear-gradient(to left, rgba(0,0,0,0.1), transparent);
         }
       `;
       document.head.appendChild(style);

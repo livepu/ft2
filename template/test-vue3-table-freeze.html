@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>冻结列测试 - Vue3 Table</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 20px;
+      background: #f5f5f5;
+    }
+    h1 { color: #333; margin-bottom: 20px; }
+    .test-section {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .test-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 15px;
+      color: #666;
+    }
+    
+    /* ========== 表格基础样式 ========== */
+    .vue-table {
+      width: 100%;
+      font-size: 14px;
+      border-collapse: collapse;
+    }
+    
+    .vue-table th,
+    .vue-table td {
+      padding: 10px 16px;
+      border: 1px solid #e5e7eb;
+      text-align: left;
+      white-space: nowrap;
+      min-width: 80px;
+    }
+    
+    /* ========== 表头样式 ========== */
+    .vue-table th {
+      background: #1a73e8;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+    }
+    
+    .vue-table th:hover {
+      background: #1557b0;
+    }
+    
+    /* 冻结表头（提高优先级覆盖组件默认样式） */
+    .vue-table-freeze thead th {
+      background: #1a73e8;
+    }
+    
+    /* ========== 单元格斑马纹 ========== */
+    .vue-table tbody tr:nth-child(odd) td {
+      background: #f0f7ff;
+    }
+    
+    .vue-table tbody tr:nth-child(even) td {
+      background: #e8f4f8;
+    }
+    
+    .vue-table tbody tr:hover td {
+      background: #d6eaff;
+    }
+    
+    /* ========== 排序指示器 ========== */
+    .sort-indicator {
+      margin-left: 4px;
+      font-size: 12px;
+    }
+    
+    .sort-priority {
+      font-size: 10px;
+      color: #ffd700;
+      margin-left: 2px;
+    }
+    
+    /* ========== 分页样式 ========== */
+    .vue-table-pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 15px;
+      padding: 10px;
+      background: #f9fafb;
+      border-radius: 4px;
+    }
+    
+    .vue-table-pagination button {
+      padding: 6px 12px;
+      border: 1px solid #d1d5db;
+      background: white;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .vue-table-pagination button:hover:not(:disabled) {
+      background: #f3f4f6;
+      border-color: #9ca3af;
+    }
+    
+    .vue-table-pagination button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .vue-table-pagination .page-info {
+      font-size: 14px;
+      color: #666;
+    }
+    
+    .vue-table-pagination select {
+      padding: 6px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      background: white;
+    }
+    
+    /* ========== 冻结列核心样式 ========== */
+    .vue-table-container {
+      overflow-x: auto;
+      position: relative;
+    }
+    
+    .vue-table-freeze {
+      overflow-x: auto;
+      position: relative;
+    }
+    
+    .vue-table-freeze .vue-table {
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    
+    .vue-table-freeze .freeze-col {
+      position: sticky;
+    }
+    
+    .vue-table-freeze thead th {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    
+    .vue-table-freeze thead .freeze-col {
+      z-index: 100;
+    }
+    
+    .vue-table-freeze tbody .freeze-col {
+      z-index: 50;
+      background: inherit;
+    }
+    
+    /* 左侧冻结列定位（left 由 JS 直接设置） */
+    .vue-table-freeze .freeze-left {
+      /* style.left 由 JS 动态设置 */
+    }
+    
+    /* 右侧冻结列定位（right 由 JS 直接设置） */
+    .vue-table-freeze .freeze-right {
+      /* style.right 由 JS 动态设置 */
+    }
+    
+    /* 冻结列背景色 */
+    .vue-table-freeze thead .freeze-left,
+    .vue-table-freeze thead .freeze-right {
+      background: #1a73e8;
+    }
+    
+    .vue-table-freeze tbody tr:nth-child(odd) .freeze-left,
+    .vue-table-freeze tbody tr:nth-child(odd) .freeze-right {
+      background: #f0f7ff;
+    }
+    
+    .vue-table-freeze tbody tr:nth-child(even) .freeze-left,
+    .vue-table-freeze tbody tr:nth-child(even) .freeze-right {
+      background: #e8f4f8;
+    }
+    
+    /* ========== 配置面板 ========== */
+    .config-panel {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+    }
+    
+    .config-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .config-item label {
+      font-size: 14px;
+      color: #666;
+    }
+    
+    .config-item select {
+      padding: 6px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      width: 80px;
+      background: white;
+    }
+    
+    /* ========== 说明面板 ========== */
+    .info-panel {
+      background: #e8f4f8;
+      border-left: 4px solid #1a73e8;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 4px;
+    }
+    
+    .info-panel h3 {
+      margin: 0 0 10px 0;
+      color: #1a73e8;
+    }
+    
+    .info-panel ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+    
+    .info-panel li {
+      margin: 5px 0;
+      color: #555;
+    }
+    
+    .info-panel code {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧊 Vue3 冻结列功能测试</h1>
+  
+  <div class="info-panel">
+    <h3>📋 测试说明</h3>
+    <ul>
+      <li>使用新的命名规范：<code>data-source</code>、<code>columns</code>、<code>pagination</code></li>
+      <li>横向滚动查看冻结列效果（左侧和右侧）</li>
+      <li>点击表头测试排序功能（支持多字段排序：Ctrl+点击）</li>
+      <li>测试分页功能（上一页/下一页/每页条数切换）</li>
+    </ul>
+  </div>
+  
+  <div id="app">
+    
+    <div class="test-section">
+      <div class="test-title">配置面板</div>
+      <div class="config-panel">
+        <div class="config-item">
+          <label>左侧冻结列数：</label>
+          <select v-model.number="freezeLeft" @change="updateTable">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </div>
+        <div class="config-item">
+          <label>右侧冻结列数：</label>
+          <select v-model.number="freezeRight" @change="updateTable">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+          </select>
+        </div>
+        <div class="config-item">
+          <label>每页条数：</label>
+          <select v-model.number="pageSize" @change="updateTable">
+            <option value="10">10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <div class="config-item">
+          <label>数据量：</label>
+          <select v-model.number="dataCount" @change="regenerateData">
+            <option value="100">100条</option>
+            <option value="500">500条</option>
+            <option value="1000">1000条</option>
+            <option value="5000">5000条</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    
+    <div class="test-section">
+      <div class="test-title">
+        测试表格（左侧冻结 {{ freezeLeft }} 列，右侧冻结 {{ freezeRight }} 列）
+        <span style="color: #999; font-weight: normal; margin-left: 10px;">
+          → 横向滚动查看冻结效果，点击表头测试排序
+        </span>
+      </div>
+      <vue-table
+        :id="'freeze-test-table'"
+        :data-source="testData"
+        :columns="columns"
+        :freeze="{ left: freezeLeft, right: freezeRight }"
+        :pagination="{ pageSize: pageSize, pageSizeOptions: [10, 20, 50, 100] }"
+      ></vue-table>
+    </div>
+    
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="js/vue3-table.js"></script>
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+    
+    createApp({
+      components: {
+        VueTable
+      },
+      setup() {
+        const freezeLeft = ref(2);
+        const freezeRight = ref(1);
+        const pageSize = ref(20);
+        const dataCount = ref(100);
+        const testData = ref([]);
+        
+        const columns = [
+          { field: 'code', title: '基金代码' },
+          { field: 'name', title: '基金名称' },
+          { field: 'type', title: '基金类型' },
+          { field: 'company', title: '基金公司' },
+          { field: 'manager', title: '基金经理' },
+          { field: 'nav', title: '单位净值' },
+          { field: 'accNav', title: '累计净值' },
+          { field: 'dayGrowth', title: '日涨跌幅(%)' },
+          { field: 'weekGrowth', title: '周涨跌幅(%)' },
+          { field: 'monthGrowth', title: '月涨跌幅(%)' },
+          { field: 'yearGrowth', title: '年涨跌幅(%)' },
+          { field: 'scale', title: '规模(亿)' },
+          { field: 'createDate', title: '成立日期' },
+          { field: 'riskLevel', title: '风险等级' },
+          { field: 'status', title: '状态' }
+        ];
+        
+        const generateData = () => {
+          const fundCompanies = [
+            '华夏基金', '易方达基金', '南方基金', '嘉实基金', '博时基金',
+            '广发基金', '工银瑞信', '富国基金', '汇添富', '鹏华基金',
+            '招商基金', '景顺长城', '中银基金', '华安基金', '国泰基金'
+          ];
+          const fundTypes = ['股票型', '混合型', '债券型', '指数型', 'QDII', '货币型', 'FOF'];
+          const managers = [
+            '张坤', '刘彦春', '朱少醒', '傅鹏博', '周蔚文',
+            '谢治宇', '董承非', '葛兰', '曲扬', '王崇',
+            '李晓星', '胡昕炜', '萧楠', '刘格菘', '郑澄然'
+          ];
+          
+          const data = [];
+          
+          for (let i = 1; i <= dataCount.value; i++) {
+            const code = String(100000 + i).padStart(6, '0');
+            const nav = (Math.random() * 5 + 0.5).toFixed(4);
+            const accNav = (parseFloat(nav) + Math.random() * 3).toFixed(4);
+            const dayGrowth = (Math.random() * 10 - 5).toFixed(2);
+            const weekGrowth = (Math.random() * 20 - 10).toFixed(2);
+            const monthGrowth = (Math.random() * 30 - 15).toFixed(2);
+            const yearGrowth = (Math.random() * 60 - 30).toFixed(2);
+            const scale = (Math.random() * 100).toFixed(2);
+            
+            data.push({
+              code: code,
+              name: `${fundCompanies[i % fundCompanies.length]}-${['优选', '精选', '成长', '价值', '创新'][i % 5]}${i}`,
+              type: fundTypes[i % fundTypes.length],
+              company: fundCompanies[i % fundCompanies.length],
+              manager: managers[i % managers.length],
+              nav: parseFloat(nav),
+              accNav: parseFloat(accNav),
+              dayGrowth: parseFloat(dayGrowth),
+              weekGrowth: parseFloat(weekGrowth),
+              monthGrowth: parseFloat(monthGrowth),
+              yearGrowth: parseFloat(yearGrowth),
+              scale: parseFloat(scale),
+              createDate: `202${i % 5}-${String((i % 12) + 1).padStart(2, '0')}-${String((i % 28) + 1).padStart(2, '0')}`,
+              riskLevel: ['低风险', '中低风险', '中风险', '中高风险', '高风险'][i % 5],
+              status: i % 10 === 0 ? '暂停申购' : '正常'
+            });
+          }
+          
+          testData.value = data;
+        };
+        
+        const regenerateData = () => {
+          generateData();
+        };
+        
+        const updateTable = () => {
+          console.log('配置已更新：', {
+            freezeLeft: freezeLeft.value,
+            freezeRight: freezeRight.value,
+            pageSize: pageSize.value
+          });
+        };
+        
+        onMounted(() => {
+          generateData();
+        });
+        
+        return {
+          freezeLeft,
+          freezeRight,
+          pageSize,
+          dataCount,
+          testData,
+          columns,
+          regenerateData,
+          updateTable
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

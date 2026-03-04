@@ -64,7 +64,16 @@ const CellRenderer = {
         const getTableOptions = (cell) => {
             const opts = {};
             if (cell.options?.freeze) opts.freeze = cell.options.freeze;
-            if (cell.options?.page) opts.pagination = cell.options.page;
+            // 默认开启分页：数据超过10条时自动分页，也可通过 options.pagination 自定义
+            if (cell.options?.pagination !== false) {
+                const dataLength = cell.content?.length || 0;
+                if (dataLength > 10 || cell.options?.pagination) {
+                    opts.pagination = cell.options?.pagination || {
+                        pageSize: 10,
+                        pageSizeOptions: [10, 20, 50, 100]
+                    };
+                }
+            }
             return opts;
         };
 
