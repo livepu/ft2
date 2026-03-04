@@ -470,7 +470,6 @@ body {
     text-align: left;
     background: #fff;
     border-radius: 6px;
-    overflow: hidden;
 }
 
 /* 表头样式 */
@@ -546,7 +545,7 @@ body {
 }
 
 .vue-table-freeze .vue-table {
-    border-collapse: separate;
+    border-collapse: separate !important;
     border-spacing: 0;
 }
 
@@ -560,7 +559,7 @@ body {
 /* 冻结列单元格 */
 .vue-table-freeze .freeze-col {
     position: sticky;
-    background: white;
+    background: inherit;
 }
 
 /* 表头整体冻结在顶部 */
@@ -573,17 +572,17 @@ body {
 
 /* 表头中的冻结列需要更高的 z-index */
 .vue-table-freeze thead .freeze-col {
-    background: #f7f6f3;
+    background: #f7f6f3 !important;
     z-index: 100;
 }
 
 .vue-table-freeze tbody .freeze-col {
-    background: white;
+    background: white !important;
     z-index: 50;
 }
 
 .vue-table-freeze tbody tr:hover .freeze-col {
-    background: #fafafa;
+    background: #fafafa !important;
 }
 
 /* 冻结列定位（left/right 由 JS 直接设置内联样式） */
@@ -593,25 +592,4 @@ body {
 
 .vue-table-freeze .freeze-right {
     position: sticky;
-}
-
-/* 冻结列阴影效果 */
-.vue-table-freeze .freeze-left::after {
-    content: '';
-    position: absolute;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    width: 4px;
-    background: linear-gradient(to right, rgba(0,0,0,0.12), transparent);
-}
-
-.vue-table-freeze .freeze-right::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 4px;
-    background: linear-gradient(to left, rgba(0,0,0,0.12), transparent);
 }

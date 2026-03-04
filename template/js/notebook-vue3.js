@@ -275,9 +275,6 @@ const CellRenderer = {
             <!-- 表格 -->
             <div v-else-if="cell.type === 'table'" class="cell-table">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
-                <div style="color: red; font-size: 12px;">
-                    DEBUG: type={{cell.type}}, content={{cell.content?.length}} items, cols={{getTableCols(cell).length}}
-                </div>
                 <div v-if="!cell.content || cell.content.length === 0" class="table-empty">
                     暂无数据
                 </div>
