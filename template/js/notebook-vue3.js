@@ -398,87 +398,52 @@ function createNotebookApp() {
                 }
             };
 
-            // 截图功能 - 克隆DOM到专用容器，手动处理Canvas
+            // 截图功能 - 逐个元素截图后 Canvas 拼接（保证所见即所得）
             const captureScreenshot = async () => {
                 if (selectedIndices.value.size === 0) return;
 
                 const mainContainer = document.querySelector('.notebook-container');
-                const screenshotContainer = document.getElementById('screenshot-container');
+
+                // 收集需要截图的元素
+                const elementsToCapture = [];
+
+                // 1. 头部（如果选中）
+                if (selectedIndices.value.has(-1)) {
+                    const header = mainContainer.querySelector('.notebook-header');
+                    if (header) elementsToCapture.push(header);
+                }
+
+                // 2. 按原始顺序收集选中的 sections
+                const sortedIndices = [...selectedIndices.value]
+                    .filter(index => index !== -1)
+                    .sort((a, b) => a - b);
+
+                sortedIndices.forEach(index => {
+                    const section = document.getElementById('section-' + index);
+                    if (section) elementsToCapture.push(section);
+                });
 
                 try {
-                    // 清空截图容器
-                    screenshotContainer.innerHTML = '';
-
-                    // 收集原始canvas和克隆canvas的对应关系
-                    const canvasPairs = [];
-
-                    // 辅助函数：克隆元素并处理canvas
-                    const cloneWithCanvas = (original) => {
-                        const cloned = original.cloneNode(true);
-
-                        // 找到所有canvas元素
-                        const originalCanvases = original.querySelectorAll('canvas');
-                        const clonedCanvases = cloned.querySelectorAll('canvas');
-
-                        originalCanvases.forEach((origCanvas, i) => {
-                            const clonedCanvas = clonedCanvases[i];
-                            if (clonedCanvas && origCanvas.width > 0 && origCanvas.height > 0) {
-                                canvasPairs.push({ original: origCanvas, cloned: clonedCanvas });
-                            }
+                    // 3. 逐个截图
+                    const imageBlobs = [];
+                    for (const el of elementsToCapture) {
+                        const result = await snapdom(el, {
+                            scale: 2,
+                            backgroundColor: '#f5f5f5',
+                            cache: 'auto'
                         });
-
-                        return cloned;
-                    };
-
-                    // 1. 克隆头部（如果选中）
-                    if (selectedIndices.value.has(-1)) {
-                        const header = mainContainer.querySelector('.notebook-header');
-                        if (header) {
-                            screenshotContainer.appendChild(cloneWithCanvas(header));
-                        }
+                        const blob = await result.toBlob({ type: 'png' });
+                        imageBlobs.push(blob);
                     }
 
-                    // 2. 按原始顺序克隆选中的 section（先排序）
-                    const sortedIndices = [...selectedIndices.value]
-                        .filter(index => index !== -1)
-                        .sort((a, b) => a - b);
+                    // 4. Canvas 拼接
+                    const finalBlob = await stitchImages(imageBlobs);
 
-                    sortedIndices.forEach(index => {
-                        const section = document.getElementById('section-' + index);
-                        if (section) {
-                            screenshotContainer.appendChild(cloneWithCanvas(section));
-                        }
-                    });
-
-                    // 3. 复制canvas内容
-                    canvasPairs.forEach(({ original, cloned }) => {
-                        try {
-                            const ctx = cloned.getContext('2d');
-                            cloned.width = original.width;
-                            cloned.height = original.height;
-                            ctx.drawImage(original, 0, 0);
-                        } catch (e) {
-                            console.warn('Canvas复制失败:', e);
-                        }
-                    });
-
-                    // 4. 等待 DOM 稳定
-                    await new Promise(resolve => setTimeout(resolve, 50));
-
-                    // 5. 截图
-                    const result = await snapdom(screenshotContainer, {
-                        scale: 2,
-                        backgroundColor: '#f5f5f5',
-                        cache: 'auto'
-                    });
-
-                    const blob = await result.toBlob({ type: 'png' });
-
-                    // 6. 复制到剪贴板
+                    // 5. 复制到剪贴板
                     try {
                         window.focus();
                         await navigator.clipboard.write([
-                            new ClipboardItem({ 'image/png': blob })
+                            new ClipboardItem({ 'image/png': finalBlob })
                         ]);
                         console.log('截图已复制到剪贴板');
                     } catch (clipboardErr) {
@@ -490,16 +455,81 @@ function createNotebookApp() {
                             link.href = e.target.result;
                             link.click();
                         };
-                        reader.readAsDataURL(blob);
+                        reader.readAsDataURL(finalBlob);
                     }
 
                 } catch (err) {
                     console.error('截图失败:', err);
                     alert('截图失败: ' + err.message);
-                } finally {
-                    // 清空截图容器
-                    screenshotContainer.innerHTML = '';
                 }
+            };
+
+            // 图片拼接函数 - 将多个图片 blob 垂直拼接（保留间距、padding和背景）
+            const stitchImages = async (imageBlobs) => {
+                // 加载所有图片
+                const images = await Promise.all(imageBlobs.map(blob => {
+                    return new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = URL.createObjectURL(blob);
+                    });
+                }));
+
+                // 配置间距和 padding（与原 CSS 一致）
+                const MARGIN_TOP = 12;       // section margin-top
+                const MARGIN_BOTTOM = 12;    // section margin-bottom
+                const CONTAINER_PADDING = 20; // notebook-container padding
+
+                // 计算总尺寸（包含间距和 container padding）
+                const maxContentWidth = Math.max(...images.map(img => img.width));
+                const maxWidth = maxContentWidth + CONTAINER_PADDING * 2; // 左右 padding
+                const contentHeight = images.reduce((sum, img) => sum + img.height, 0);
+                const spacingHeight = (images.length - 1) * (MARGIN_TOP + MARGIN_BOTTOM);
+                const totalHeight = contentHeight + spacingHeight + CONTAINER_PADDING * 2; // 上下 padding
+
+                // 创建 Canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = maxWidth;
+                canvas.height = totalHeight;
+                const ctx = canvas.getContext('2d');
+
+                // 填充背景色（#f5f5f5 页面背景）
+                ctx.fillStyle = '#f5f5f5';
+                ctx.fillRect(0, 0, maxWidth, totalHeight);
+
+                // 按顺序绘制图片（添加间距和 padding）
+                let currentY = CONTAINER_PADDING; // 顶部 padding
+                images.forEach((img, index) => {
+                    // 水平居中（包含左右 padding）
+                    const x = Math.floor((maxWidth - img.width) / 2);
+                    
+                    // 为第一个元素之后的每个元素添加上边距背景
+                    if (index > 0) {
+                        ctx.fillStyle = '#f5f5f5';
+                        ctx.fillRect(0, currentY, maxWidth, MARGIN_TOP);
+                        currentY += MARGIN_TOP;
+                    }
+                    
+                    // 绘制图片
+                    ctx.drawImage(img, x, currentY);
+                    currentY += img.height;
+                    
+                    // 添加下边距背景
+                    if (index < images.length - 1) {
+                        ctx.fillStyle = '#f5f5f5';
+                        ctx.fillRect(0, currentY, maxWidth, MARGIN_BOTTOM);
+                        currentY += MARGIN_BOTTOM;
+                    }
+                    
+                    // 释放 blob URL
+                    URL.revokeObjectURL(img.src);
+                });
+
+                // 转为 Blob
+                return new Promise((resolve) => {
+                    canvas.toBlob(resolve, 'image/png');
+                });
             };
 
             // 全页截图

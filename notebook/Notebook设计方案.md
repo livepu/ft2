@@ -1,4 +1,4 @@
-# Notebook 可视化设计方案 V4.2
+# Notebook 可视化设计方案 V4.4
 
 > 制定时间：2025-02-27
 > 修订时间：2026-03-04
@@ -1088,133 +1088,350 @@ nb.table(df)
 | **Canvas 克隆** | `cloneNode()` 无法克隆 Canvas 内容，ECharts 图表会丢失 |
 | **布局变化** | 使用 `display: none` 隐藏元素会触发重排，影响图表尺寸 |
 
-### 6.3 最终方案：独立截图容器 + Canvas 手动复制
+### 6.3 最终方案：逐个截图 + Canvas 拼接（V2.0）
+
+#### 架构演进
+
+**V1.0（已弃用）**: DOM 克隆 → 独立容器 → 手动 Canvas 复制 → snapdom 截图
+- 问题：`cloneNode()` 不保留折叠状态、表格滚动位置
+
+**V2.0（当前）**: 逐个元素直接截图 → Canvas 拼接 → 输出 PNG
+- 优势：所见即所得，无需 DOM 克隆
 
 #### 架构设计
 
 ```
-┌─────────────────────────────────────┐
-│  主体容器 (.notebook-container)      │  ← 用户交互，完全不动
-│  ├── Header                         │
-│  └── Section[]                      │
-└─────────────────────────────────────┘
-                    ↓ cloneNode(true)
-┌─────────────────────────────────────┐
-│  截图容器 (#screenshot-container)    │  ← 隐藏在视口外
-│  position: absolute;                │
-│  left: -99999px;                    │
-│  width: 900px;                      │
-└─────────────────────────────────────┘
-                    ↓ ctx.drawImage()
-                 Canvas 内容复制
-                    ↓ snapdom()
-                 截图输出
+┌──────────────────────────────────────────────┐
+│  主体容器 (.notebook-container)               │
+│  ├── Header ──────────────────────────────┐  │
+│  │  ↓ snapdom(element)                     │  │
+│  │  → Blob 1                              │  │
+│  ├─────────────────────────────────────────┤  │
+│  ├── Section 0 (已折叠) ─────────────────┐ │  │
+│  │  ↓ snapdom(element)                     │ │  │
+│  │  → Blob 2                              │ │  │
+│  ├─────────────────────────────────────────┤  │
+│  ├── Section 1 (展开，表格已滚动) ───────┐│  │
+│  │  ↓ snapdom(element)                    ││  │
+│  │  → Blob 3                             ││  │
+│  └─────────────────────────────────────────┘  │
+└──────────────────────────────────────────────┘
+                    ↓
+         Canvas 拼接（保留间距和 padding）
+                    ↓
+              输出 PNG
 ```
 
 #### 核心代码
 
 ```javascript
-// 截图功能 - 克隆DOM到专用容器，手动处理Canvas
+// 截图功能 - 逐个元素截图后 Canvas 拼接
 const captureScreenshot = async () => {
-    const mainContainer = document.querySelector('.notebook-container');
-    const screenshotContainer = document.getElementById('screenshot-container');
-
-    // 1. 清空截图容器
-    screenshotContainer.innerHTML = '';
-
-    // 2. 收集原始canvas和克隆canvas的对应关系
-    const canvasPairs = [];
-
-    // 辅助函数：克隆元素并记录canvas
-    const cloneWithCanvas = (original) => {
-        const cloned = original.cloneNode(true);
-        const originalCanvases = original.querySelectorAll('canvas');
-        const clonedCanvases = cloned.querySelectorAll('canvas');
-
-        originalCanvases.forEach((origCanvas, i) => {
-            const clonedCanvas = clonedCanvases[i];
-            if (clonedCanvas && origCanvas.width > 0) {
-                canvasPairs.push({ original: origCanvas, cloned: clonedCanvas });
-            }
-        });
-        return cloned;
-    };
-
-    // 3. 克隆选中的内容（头部 + sections）
-    if (selectedIndices.has(-1)) {
-        screenshotContainer.appendChild(cloneWithCanvas(header));
+    // 1. 收集需要截图的元素
+    const elementsToCapture = [];
+    
+    if (selectedIndices.value.has(-1)) {
+        elementsToCapture.push(header);
     }
-    selectedIndices.forEach(index => {
+    
+    sortedIndices.forEach(index => {
         const section = document.getElementById('section-' + index);
-        if (section) {
-            screenshotContainer.appendChild(cloneWithCanvas(section));
+        if (section) elementsToCapture.push(section);
+    });
+
+    // 2. 逐个截图（每个元素独立 snapdom）
+    const imageBlobs = [];
+    for (const el of elementsToCapture) {
+        const result = await snapdom(el, {
+            scale: 2,
+            backgroundColor: '#f5f5f5',
+            cache: 'auto'
+        });
+        imageBlobs.push(await result.toBlob({ type: 'png' }));
+    }
+
+    // 3. Canvas 拼接（保留间距和 padding）
+    const finalBlob = await stitchImages(imageBlobs);
+    
+    // 4. 复制到剪贴板
+    await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': finalBlob })
+    ]);
+};
+
+// 图片拼接函数
+const stitchImages = async (imageBlobs) => {
+    const images = await Promise.all(imageBlobs.map(blob => 
+        new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.src = URL.createObjectURL(blob);
+        })
+    ));
+
+    // 配置（与原 CSS 一致）
+    const CONTAINER_PADDING = 20;  // notebook-container padding
+    const MARGIN_TOP = 12;         // section margin-top
+    const MARGIN_BOTTOM = 12;      // section margin-bottom
+
+    // 计算总尺寸
+    const maxContentWidth = Math.max(...images.map(img => img.width));
+    const maxWidth = maxContentWidth + CONTAINER_PADDING * 2;
+    const contentHeight = images.reduce((sum, img) => sum + img.height, 0);
+    const spacingHeight = (images.length - 1) * (MARGIN_TOP + MARGIN_BOTTOM);
+    const totalHeight = contentHeight + spacingHeight + CONTAINER_PADDING * 2;
+
+    // 创建 Canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = maxWidth;
+    canvas.height = totalHeight;
+    const ctx = canvas.getContext('2d');
+
+    // 填充背景
+    ctx.fillStyle = '#f5f5f5';
+    ctx.fillRect(0, 0, maxWidth, totalHeight);
+
+    // 绘制图片（添加间距）
+    let currentY = CONTAINER_PADDING;
+    images.forEach((img, index) => {
+        const x = Math.floor((maxWidth - img.width) / 2);
+        
+        // 添加上边距背景（除第一个）
+        if (index > 0) {
+            ctx.fillRect(0, currentY, maxWidth, MARGIN_TOP);
+            currentY += MARGIN_TOP;
         }
+        
+        // 绘制图片
+        ctx.drawImage(img, x, currentY);
+        currentY += img.height;
+        
+        // 添加下边距背景
+        if (index < images.length - 1) {
+            ctx.fillRect(0, currentY, maxWidth, MARGIN_BOTTOM);
+            currentY += MARGIN_BOTTOM;
+        }
+        
+        URL.revokeObjectURL(img.src);
     });
 
-    // 4. 复制Canvas内容（关键步骤！）
-    canvasPairs.forEach(({ original, cloned }) => {
-        const ctx = cloned.getContext('2d');
-        cloned.width = original.width;
-        cloned.height = original.height;
-        ctx.drawImage(original, 0, 0);  // 核心：复制位图数据
-    });
-
-    // 5. 截图
-    const result = await snapdom(screenshotContainer, {
-        scale: 2,
-        backgroundColor: '#f5f5f5',
-        cache: 'auto'
-    });
-
-    // 6. 复制到剪贴板
-    const blob = await result.toBlob({ type: 'png' });
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-
-    // 7. 清空截图容器
-    screenshotContainer.innerHTML = '';
+    return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 };
 ```
 
-#### HTML 结构
+### 6.4 方案演进对比
 
-```html
-<!-- 主体容器 -->
-<div class="notebook-container">
-    <div class="notebook-header">...</div>
-    <cell-renderer v-for="..." />
-</div>
+#### 各方案对比
 
-<!-- 截图专用容器（隐藏在视口外） -->
-<div id="screenshot-container"
-     class="notebook-container"
-     style="position: absolute; left: -99999px; top: 0; width: 900px;">
-</div>
-```
+| 方案 | 原理 | 问题 | 状态 |
+|------|------|------|------|
+| ❌ CSS `display: none` | 隐藏未选中元素 | 触发重排，图表尺寸变化 | 废弃 |
+| ❌ CSS `visibility: hidden` | 隐藏但保留空间 | 占用空白，截图有空白 | 废弃 |
+| ❌ Vue `:class` 绑定 | 响应式更新 class | Vue 虚拟 DOM 更新可能影响图表 | 废弃 |
+| ⚠️ DOM 克隆 + 独立容器 | 克隆内容到新容器手动复制 Canvas | `cloneNode()` 不保留折叠状态、表格滚动位置 | V1.0 |
+| ✅ **逐个截图 + Canvas 拼接** | 直接截图原元素后拼接 | 所见即所得，无需 DOM 克隆 | **V2.0** |
 
-### 6.4 方案对比
+#### V1.0 vs V2.0 对比
 
-| 方案 | 原理 | 问题 |
-|------|------|------|
-| ❌ CSS `display: none` | 隐藏未选中元素 | 触发重排，图表尺寸变化 |
-| ❌ CSS `visibility: hidden` | 隐藏但保留空间 | 占用空白，截图有空白 |
-| ❌ Vue `:class` 绑定 | 响应式更新 class | Vue 虚拟 DOM 更新可能影响图表 |
-| ✅ **独立截图容器** | 克隆选中内容到新容器 | 主体不动，图表完整，无空白 |
+| 特性 | V1.0 (DOM 克隆) | V2.0 (Canvas 拼接) |
+|------|-----------------|-------------------|
+| DOM 克隆 | ✅ 需要 | ❌ 不需要 |
+| Canvas 手动复制 | ✅ 需要 | ❌ 不需要 |
+| 折叠状态 | ❌ 需同步 | ✅ 所见即所得 |
+| 表格滚动 | ❌ 需处理 | ✅ 所见即所得 |
+| 间距/背景 | ⚠️ 需处理 | ✅ 拼接时添加 |
+| 代码复杂度 | ⭐⭐⭐ | ⭐⭐ |
 
 ### 6.5 关键技术点
 
-1. **Canvas 克隆问题**
-   - `cloneNode(true)` 只克隆 DOM 结构
-   - Canvas 的绑定数据（如 ECharts 实例）不会复制
-   - 必须用 `ctx.drawImage()` 手动复制位图
+1. **为何选择逐个截图**
+   - 直接对原 DOM 元素截图，保留所有交互状态
+   - 无需处理 `cloneNode()` 的各种边界情况
+   - 避免 Vue 响应式系统的干扰
 
-2. **截图容器定位**
-   - `position: absolute; left: -99999px` 移出视口
-   - 必须设置固定宽度 `width: 900px` 保证样式正确
+2. **Canvas 拼接逻辑**
+   - 计算所有图片的最大宽度和总高度
+   - 添加与原 CSS 一致的间距（margin: 12px）
+   - 添加与原 CSS 一致的容器内边距（padding: 20px）
+   - 填充背景色保持视觉一致性
 
-3. **主体零干扰**
-   - 主体 DOM 完全不受影响
+3. **内存管理**
+   - 使用 `URL.createObjectURL()` 加载图片
+   - 拼接完成后 `URL.revokeObjectURL()` 释放资源
+
+### 6.6 技术讨论：为什么用 ctx.drawImage() 而非 SVG 方案
+
+#### snapdom 的工作原理
+
+snapdom 内部处理流程：
+```
+DOM → SVG (foreignObject) → Canvas 绘制 → PNG 输出
+```
+
+使用 SVG `foreignObject` 将 HTML 嵌入 SVG，再绘制到 Canvas 导出图片。
+
+#### 为什么不用 SVG 方案处理 Canvas？
+
+**方案对比：**
+
+| 方案 | 实现方式 | 复杂度 |
+|------|---------|--------|
+| **ctx.drawImage()** | 3行原生 Canvas API | ⭐ 简洁 |
+| SVG `<image>` | 创建命名空间、设置属性、`toDataURL()` 中转 | ⭐⭐⭐ 复杂 |
+
+**SVG 方案代码示例：**
+```javascript
+// SVG 方案（更复杂，效果相同）
+const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+image.setAttribute('href', canvas.toDataURL('image/png'));  // 还是需要 toDataURL
+svg.appendChild(image);
+canvas.parentNode.replaceChild(svg, canvas);
+```
+
+**当前方案代码示例：**
+```javascript
+// ctx.drawImage() 方案（简洁高效）
+const ctx = clonedCanvas.getContext('2d');
+ctx.drawImage(originalCanvas, 0, 0);  // 直接复制位图
+```
+
+#### 结论
+
+- **Canvas 像素复制**：原生 API `ctx.drawImage()` 最直接
+- **HTML/CSS 处理**：交给 snapdom 的 SVG 流程
+- **各司其职**：不强行统一，让每个工具做最擅长的事
+
+最终技术路径：
+```
+克隆DOM → ctx.drawImage() 复制 Canvas → snapdom(SVG 捕获 HTML) → PNG
+```
    - Vue 组件状态不变
    - 图表实例保持活跃
+
+---
+
+## 附录A：技术探索路径记录（方法论）
+
+> 本附录记录选择性截图功能的完整技术探索过程，作为后续解决类似问题的参考模式。
+
+### A.1 问题定义
+
+**需求**：Vue3 环境下实现选择性截图（勾选部分内容后截图到剪贴板）
+
+**约束**：
+- ECharts 图表必须完整显示
+- 折叠/展开状态需同步
+- 表格滚动位置需保留
+- 不能影响原页面交互
+
+### A.2 探索历程
+
+#### 尝试 1：CSS 隐藏方案 ❌
+
+```css
+/* 隐藏未选中元素 */
+.unselected { display: none; }
+```
+
+**失败原因**：触发重排(reflow)，ECharts 图表尺寸变化，截图时显示不完整。
+
+---
+
+#### 尝试 2：CSS visibility 方案 ❌
+
+```css
+/* 隐藏但保留空间 */
+.unselected { visibility: hidden; }
+```
+
+**失败原因**：未选中元素占用空白空间，截图包含大片空白区域。
+
+---
+
+#### 尝试 3：Vue `:class` 响应式绑定 ❌
+
+```javascript
+// 通过 Vue 响应式控制显示
+:class="{ 'screenshot-hidden': !isSelected }"
+```
+
+**失败原因**：Vue3 虚拟 DOM diff/patch 可能触发组件重新初始化，ECharts 实例被销毁。
+
+---
+
+#### 尝试 4：绝对定位移出视口 ❌
+
+```css
+/* 将未选中元素移出视口 */
+.unselected { position: absolute; left: -99999px; }
+```
+
+**失败原因**：仍然需要操作 Vue 管理的 DOM，响应式系统可能触发更新。
+
+---
+
+#### 尝试 5：独立截图容器 + DOM 克隆 ⚠️
+
+```javascript
+// 创建独立的截图容器
+const screenshotContainer = document.getElementById('screenshot-container');
+screenshotContainer.innerHTML = '';
+
+// 克隆选中元素
+selectedElements.forEach(el => {
+    screenshotContainer.appendChild(el.cloneNode(true));
+});
+```
+
+**部分成功**：
+- ✅ 主体 DOM 不受干扰
+- ✅ ECharts 图表可以捕获（配合 Canvas 手动复制）
+- ❌ `cloneNode()` 不保留折叠状态（`v-show` 的 `display: none` 丢失）
+- ❌ 表格滚动位置丢失
+
+---
+
+#### 尝试 6（最终方案）：逐个截图 + Canvas 拼接 ✅
+
+```javascript
+// 直接对原元素截图
+const blobs = await Promise.all(elements.map(el => 
+    snapdom(el).then(r => r.toBlob())
+));
+
+// Canvas 拼接（添加间距和背景）
+const finalBlob = await stitchImages(blobs);
+```
+
+**成功原因**：
+- ✅ 不操作 DOM，直接捕获视觉状态
+- ✅ 折叠/展开状态自然保留
+- ✅ 表格滚动位置自然保留
+- ✅ 无需处理 Canvas 克隆问题
+- ✅ 代码更简洁
+
+### A.3 关键洞察
+
+| 洞察 | 说明 |
+|------|------|
+| **避免 Vue 响应式干扰** | 不要通过 `:class` 或数据绑定来控制截图相关样式 |
+| **DOM 克隆有局限** | `cloneNode()` 只克隆 DOM 结构，不克隆组件状态 |
+| **直接截图最可靠** | 对最终渲染结果截图，而非试图重建渲染状态 |
+| **工具各司其职** | snapdom 处理 HTML→PNG，手动 Canvas 处理拼接和间距 |
+
+### A.4 可复用的方法论
+
+**面对"截图特定内容"类问题时的决策树：**
+
+```
+是否需要保留交互状态（折叠、滚动）？
+├── 是 → 逐个元素截图 + Canvas 拼接
+└── 否 → DOM 克隆方案可接受
+    └── 是否包含 Canvas/ECharts？
+        ├── 是 → 需要手动 ctx.drawImage() 复制
+        └── 否 → 纯 DOM 克隆即可
+```
 
 ---
 
@@ -1228,4 +1445,6 @@ const captureScreenshot = async () => {
 | V3.5 | 2026-03-02 | Alpine 声明式模板 |
 | V4.0 | 2026-03-03 | 重构文档结构：效果 → Python → Vue3 |
 | V4.1 | 2026-03-03 | **JSON 规范优化**：`content`/`children` 分离，`collapsed` 作为 section 可选参数 |
-| V4.2 | 2026-03-04 | **选择性截图**：独立截图容器 + Canvas 手动复制技术方案 |
+| V4.2 | 2026-03-04 | **选择性截图 V1.0**：独立截图容器 + Canvas 手动复制技术方案 |
+| V4.3 | 2026-03-04 | **技术讨论**：ctx.drawImage() vs SVG 方案对比分析 |
+| V4.4 | 2026-03-04 | **选择性截图 V2.0**：逐个截图 + Canvas 拼接，实现真正的所见即所得 |
