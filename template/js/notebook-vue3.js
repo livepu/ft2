@@ -103,11 +103,14 @@ const CellRenderer = {
             }
         };
 
+        // 暖冷渐变系4 配色方案
+        const chartColors = ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4'];
+
         // 构建图表配置
         const buildChartOption = (type, chartType, data, options = {}) => {
             const baseOption = {
                 tooltip: { trigger: 'axis' },
-                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true }
+                grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true }
             };
 
             if (type === 'chart') {
@@ -119,79 +122,181 @@ const CellRenderer = {
                 // 饼图特殊处理
                 if (isPie) {
                     return {
-                        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-                        legend: { top: '5%', left: 'center' },
+                        color: chartColors,
+                        tooltip: { 
+                            trigger: 'item', 
+                            formatter: '{b}: {c} ({d}%)' 
+                        },
+                        legend: { 
+                            top: 10,
+                            left: 'center',
+                            orient: 'horizontal'
+                        },
                         series: [{
                             type: 'pie',
                             data: data,
                             radius: ['40%', '70%'],
-                            label: { show: true, formatter: '{b}: {c} ({d}%)' },
+                            center: ['50%', '55%'],
+                            label: { 
+                                show: true, 
+                                formatter: '{b}\n{c} ({d}%)' 
+                            },
+                            labelLine: {
+                                show: true,
+                                length: 15,
+                                length2: 10
+                            },
                             emphasis: {
-                                itemStyle: {
-                                    shadowBlur: 10,
-                                    shadowOffsetX: 0,
-                                    shadowColor: 'rgba(0, 0, 0, 0.5)'
+                                label: {
+                                    show: true,
+                                    fontSize: 14,
+                                    fontWeight: 'bold'
                                 }
                             }
                         }]
                     };
                 }
 
+                // 柱状图特殊处理：正负颜色区分
+                if (isBar) {
+                    return {
+                        tooltip: { trigger: 'axis' },
+                        legend: { 
+                            data: (data.series || []).map(s => ({
+                                name: s.name,
+                                icon: 'rect'
+                            })),
+                            top: 5,
+                            itemStyle: {
+                                color: '#e74c3c'
+                            }
+                        },
+                        grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
+                        xAxis: {
+                            type: 'category',
+                            data: data.xAxis || data.dates || data.categories || []
+                        },
+                        yAxis: { 
+                            type: 'value',
+                            scale: true,
+                            boundaryGap: ['10%', '10%']
+                        },
+                        series: (data.series || []).map(s => ({
+                            name: s.name,
+                            type: 'bar',
+                            data: s.data,
+                            itemStyle: { 
+                                color: function(params) {
+                                    const value = params.value;
+                                    if (value >= 0) {
+                                        return '#e74c3c';
+                                    } else {
+                                        return '#5499c7';
+                                    }
+                                },
+                                borderRadius: [4, 4, 0, 0]
+                            }
+                        }))
+                    };
+                }
+
+                // 折线图和面积图
                 return {
+                    color: chartColors,
                     ...baseOption,
+                    legend: { 
+                        data: (data.series || []).map(s => s.name), 
+                        top: 5 
+                    },
                     xAxis: {
                         type: 'category',
-                        data: data.xAxis || data.dates || data.categories || [],
-                        boundaryGap: isBar
+                        boundaryGap: false,
+                        data: data.xAxis || data.dates || data.categories || []
                     },
-                    yAxis: { type: 'value' },
-                    series: (data.series || []).map(s => ({
+                    yAxis: { 
+                        type: 'value',
+                        scale: true,
+                        boundaryGap: ['10%', '10%']
+                    },
+                    series: (data.series || []).map((s, i) => ({
                         name: s.name,
                         type: isArea ? 'line' : chartType,
                         data: s.data,
-                        areaStyle: isArea ? { opacity: 0.3 } : undefined,
-                        smooth: isLine || isArea
+                        smooth: true,
+                        areaStyle: isArea ? { 
+                            color: {
+                                type: 'linear',
+                                x: 0, y: 0, x2: 0, y2: 1,
+                                colorStops: [
+                                    { offset: 0, color: chartColors[i % chartColors.length] + '60' },
+                                    { offset: 1, color: chartColors[i % chartColors.length] + '10' }
+                                ]
+                            }
+                        } : undefined,
+                        itemStyle: { color: chartColors[i % chartColors.length] }
                     }))
                 };
             } else if (type === 'heatmap') {
                 const years = Object.keys(data);
                 const months = Object.keys(data[years[0]]);
                 const heatmapData = [];
+                let minValue = Infinity;
+                let maxValue = -Infinity;
+                
                 years.forEach((year, yIndex) => {
                     months.forEach((month, mIndex) => {
                         const value = data[year][month];
                         if (value !== undefined) {
-                            heatmapData.push([mIndex, yIndex, value]);
+                            const numValue = parseFloat(value);
+                            heatmapData.push([mIndex, yIndex, numValue]);
+                            minValue = Math.min(minValue, numValue);
+                            maxValue = Math.max(maxValue, numValue);
                         }
                     });
                 });
 
+                // 数据转为百分比显示
+                const displayData = heatmapData.map(d => [d[0], d[1], (d[2] * 100).toFixed(2)]);
+                
+                // 根据百分比范围设置 visualMap（对称）
+                const percentValues = displayData.map(d => parseFloat(d[2]));
+                const maxPercent = Math.max(...percentValues.map(Math.abs));
+                const visualMax = Math.ceil(maxPercent / 5) * 5 || 5;
+
                 return {
                     tooltip: { 
-                        position: 'top',
                         formatter: function(params) {
-                            return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + (params.value[2] * 100).toFixed(2) + '%';
+                            return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2] + '%';
                         }
                     },
-                    grid: { height: '50%', top: '10%' },
-                    xAxis: { type: 'category', data: months },
-                    yAxis: { type: 'category', data: years },
+                    grid: { left: '10%', right: '18%', top: '10%', bottom: '12%' },
+                    xAxis: { 
+                        type: 'category', 
+                        data: months, 
+                        splitArea: { show: true } 
+                    },
+                    yAxis: { 
+                        type: 'category', 
+                        data: years, 
+                        splitArea: { show: true } 
+                    },
                     visualMap: {
-                        min: -0.1,
-                        max: 0.1,
+                        min: -visualMax,
+                        max: visualMax,
                         calculable: true,
-                        orient: 'horizontal',
-                        left: 'center',
-                        bottom: '15%',
-                        formatter: '{value}'
+                        orient: 'vertical',
+                        right: '2%',
+                        top: 'center',
+                        inRange: {
+                            color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8',
+                                    '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']
+                        }
                     },
                     series: [{
                         name: '收益',
                         type: 'heatmap',
-                        data: heatmapData,
-                        label: { show: true, formatter: function(params) {
-                            return (params.value[2] * 100).toFixed(0) + '%';
-                        }},
+                        data: displayData,
+                        label: { show: true, formatter: '{@[2]}%' },
                         emphasis: { itemStyle: { shadowBlur: 10 } }
                     }]
                 };

@@ -113,9 +113,6 @@ body {
 }
 
 /* 内容区域 */
-.notebook-content {
-    /* 确保内容区域和 header 对齐 */
-}
 
 /* Section 样式 */
 .section {
@@ -169,7 +166,6 @@ body {
     padding: 12px 14px;
     margin: 8px 0;
     box-shadow: none;
-    border: none;
     border: none;
 }
 
