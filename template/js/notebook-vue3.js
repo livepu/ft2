@@ -105,27 +105,11 @@ const CellRenderer = {
                 console.log('Initializing chart with type:', chartType, 'data:', content.data);
                 chartInstance = echarts.init(chartRef.value);
                 
-                // 热力图特殊处理：保存原始数据并设置默认放大倍数
+                // 热力图特殊处理：保存原始数据，默认使用原始数据（×1）
                 if (cell.type === 'heatmap') {
                     heatmapRawData.value = content.data || content;
-                    // 根据原始数据自动计算合适的默认放大倍数
-                    const data = heatmapRawData.value;
-                    const years = Object.keys(data);
-                    let absMax = 0;
-                    years.forEach(year => {
-                        const months = Object.keys(data[year]);
-                        months.forEach(month => {
-                            const val = Math.abs(parseFloat(data[year][month]) || 0);
-                            absMax = Math.max(absMax, val);
-                        });
-                    });
-                    
-                    // 设置默认放大倍数，使数据显示在 1-100 范围内
-                    if (absMax > 0 && absMax < 0.01) heatmapMultiplier.value = 10000;
-                    else if (absMax >= 0.01 && absMax < 0.1) heatmapMultiplier.value = 1000;
-                    else if (absMax >= 0.1 && absMax < 1) heatmapMultiplier.value = 100;
-                    else if (absMax >= 1 && absMax < 10) heatmapMultiplier.value = 10;
-                    else heatmapMultiplier.value = 1;
+                    // 默认选中原始数据（×1），不自动放大
+                    heatmapMultiplier.value = 1;
                 }
                 
                 // 饼图特殊处理：保存原始数据
