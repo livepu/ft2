@@ -610,3 +610,119 @@ body {
 .vue-table-freeze .freeze-right {
     position: sticky;
 }
+
+/* ========== 热力图放大倍数控制器 ========== */
+.heatmap-with-control {
+    position: relative;
+}
+
+.heatmap-wrapper {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+}
+
+.heatmap-wrapper .chart-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.heatmap-control {
+    width: 70px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 8px;
+    background: #fafafa;
+    border-radius: 6px;
+    border: 1px solid #e5e5e5;
+}
+
+.control-label {
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+
+.current-multiplier {
+    font-size: 13px;
+    font-weight: 600;
+    color: #6b21a8;
+    background: #f3e8ff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    min-width: 54px;
+    text-align: center;
+}
+
+.multiplier-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    justify-content: center;
+    width: 100%;
+}
+
+.multiplier-buttons button {
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    background: #fff;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.multiplier-buttons button:hover {
+    background: #f0f0f0;
+    border-color: #ccc;
+}
+
+.multiplier-buttons button.active {
+    background: #9b51e0;
+    color: #fff;
+    border-color: #9b51e0;
+    font-weight: 500;
+}
+
+
+
+/* 响应式：小屏幕时控制器移到下方 */
+@media (max-width: 768px) {
+    .heatmap-wrapper {
+        flex-direction: column;
+    }
+    
+    .heatmap-control {
+        width: 100%;
+        flex-direction: row;
+        padding: 10px;
+        align-items: center;
+    }
+    
+    .control-label {
+        margin: 0 8px 0 0;
+        white-space: nowrap;
+    }
+    
+    .current-multiplier {
+        margin: 0 10px 0 0;
+    }
+    
+    .multiplier-buttons {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .multiplier-buttons button {
+        flex: 1;
+        min-width: 50px;
+        max-width: 70px;
+    }
+}

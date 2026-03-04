@@ -20,6 +20,10 @@ const CellRenderer = {
     setup(props) {
         const chartRef = ref(null);
         let chartInstance = null;
+        
+        // 热力图放大倍数控制
+        const heatmapMultiplier = ref(1);
+        const heatmapRawData = ref(null);
 
         // 渲染 Markdown
         const renderMarkdown = (content) => {
@@ -95,19 +99,50 @@ const CellRenderer = {
                 const chartType = content.chart_type || content.type;
                 console.log('Initializing chart with type:', chartType, 'data:', content.data);
                 chartInstance = echarts.init(chartRef.value);
-                const option = buildChartOption(cell.type, chartType, content.data || content, cell.options);
+                
+                // 热力图特殊处理：保存原始数据并设置默认放大倍数
+                if (cell.type === 'heatmap') {
+                    heatmapRawData.value = content.data || content;
+                    // 根据原始数据自动计算合适的默认放大倍数
+                    const data = heatmapRawData.value;
+                    const years = Object.keys(data);
+                    let absMax = 0;
+                    years.forEach(year => {
+                        const months = Object.keys(data[year]);
+                        months.forEach(month => {
+                            const val = Math.abs(parseFloat(data[year][month]) || 0);
+                            absMax = Math.max(absMax, val);
+                        });
+                    });
+                    
+                    // 设置默认放大倍数，使数据显示在 1-100 范围内
+                    if (absMax > 0 && absMax < 0.01) heatmapMultiplier.value = 10000;
+                    else if (absMax >= 0.01 && absMax < 0.1) heatmapMultiplier.value = 1000;
+                    else if (absMax >= 0.1 && absMax < 1) heatmapMultiplier.value = 100;
+                    else if (absMax >= 1 && absMax < 10) heatmapMultiplier.value = 10;
+                    else heatmapMultiplier.value = 1;
+                }
+                
+                const option = buildChartOption(cell.type, chartType, content.data || content, cell.options, heatmapMultiplier.value);
                 chartInstance.setOption(option);
             } else if (cell.type === 'pyecharts') {
                 chartInstance = echarts.init(chartRef.value);
                 chartInstance.setOption(content);
             }
         };
+        
+        // 更新热力图（当放大倍数改变时）
+        const updateHeatmap = () => {
+            if (!chartInstance || !heatmapRawData.value) return;
+            const option = buildChartOption('heatmap', 'heatmap', heatmapRawData.value, props.cell.options, heatmapMultiplier.value);
+            chartInstance.setOption(option);
+        };
 
         // 暖冷渐变系4 配色方案
         const chartColors = ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4'];
 
         // 构建图表配置
-        const buildChartOption = (type, chartType, data, options = {}) => {
+        const buildChartOption = (type, chartType, data, options = {}, multiplier = 1) => {
             const baseOption = {
                 tooltip: { trigger: 'axis' },
                 grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true }
@@ -255,18 +290,18 @@ const CellRenderer = {
                     });
                 });
 
-                // 数据转为百分比显示
-                const displayData = heatmapData.map(d => [d[0], d[1], (d[2] * 100).toFixed(2)]);
+                // 应用传入的放大倍数
+                const displayData = heatmapData.map(d => [d[0], d[1], (d[2] * multiplier).toFixed(2)]);
                 
-                // 根据百分比范围设置 visualMap（对称）
-                const percentValues = displayData.map(d => parseFloat(d[2]));
-                const maxPercent = Math.max(...percentValues.map(Math.abs));
-                const visualMax = Math.ceil(maxPercent / 5) * 5 || 5;
+                // 根据放大后的数据范围设置 visualMap（对称）
+                const displayValues = displayData.map(d => parseFloat(d[2]));
+                const displayMax = Math.max(...displayValues.map(Math.abs));
+                const visualMax = Math.ceil(displayMax / 5) * 5 || 5;
 
                 return {
                     tooltip: { 
                         formatter: function(params) {
-                            return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2] + '%';
+                            return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2];
                         }
                     },
                     grid: { left: '10%', right: '18%', top: '10%', bottom: '12%' },
@@ -287,6 +322,7 @@ const CellRenderer = {
                         orient: 'vertical',
                         right: '2%',
                         top: 'center',
+                        text: [visualMax + ' (×' + multiplier + ')', -visualMax + ' (×' + multiplier + ')'],
                         inRange: {
                             color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8',
                                     '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']
@@ -296,7 +332,7 @@ const CellRenderer = {
                         name: '收益',
                         type: 'heatmap',
                         data: displayData,
-                        label: { show: true, formatter: '{@[2]}%' },
+                        label: { show: true, formatter: '{@[2]}' },
                         emphasis: { itemStyle: { shadowBlur: 10 } }
                     }]
                 };
@@ -313,6 +349,8 @@ const CellRenderer = {
 
         return {
             chartRef,
+            heatmapMultiplier,
+            updateHeatmap,
             renderMarkdown,
             getMetricClass,
             getTableCols,
@@ -408,12 +446,49 @@ const CellRenderer = {
             </div>
             
             <!-- 图表 -->
-            <div v-else-if="['chart', 'heatmap', 'pyecharts'].includes(cell.type)" 
+            <div v-else-if="cell.type === 'chart' || cell.type === 'pyecharts'" 
                  class="cell-chart">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
                 <div ref="chartRef" 
                      class="chart-container"
                      :style="{'--height': (cell.options?.height || 400) + 'px'}">
+                </div>
+            </div>
+            
+            <!-- 热力图（带放大倍数控制） -->
+            <div v-else-if="cell.type === 'heatmap'" 
+                 class="cell-chart heatmap-with-control">
+                <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div class="heatmap-wrapper">
+                    <div ref="chartRef" 
+                         class="chart-container"
+                         :style="{'--height': (cell.options?.height || 400) + 'px'}">
+                    </div>
+                    <div class="heatmap-control">
+                        <div class="control-label">数据缩放</div>
+                        <div class="current-multiplier">×{{ heatmapMultiplier }}</div>
+                        <div class="multiplier-buttons">
+                            <button 
+                                v-for="m in [1000, 100, 10]" 
+                                :key="m"
+                                :class="{ active: heatmapMultiplier === m }"
+                                @click="heatmapMultiplier = m; updateHeatmap()">
+                                ×{{ m }}
+                            </button>
+                            <button 
+                                :class="{ active: heatmapMultiplier === 1 }"
+                                @click="heatmapMultiplier = 1; updateHeatmap()">
+                                原始
+                            </button>
+                            <button 
+                                v-for="m in [0.1, 0.01]" 
+                                :key="m"
+                                :class="{ active: heatmapMultiplier === m }"
+                                @click="heatmapMultiplier = m; updateHeatmap()">
+                                1/{{ m === 0.1 ? 10 : 100 }}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
             
