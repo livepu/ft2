@@ -19,25 +19,72 @@ body {
     --container-max-width: 900px;
 }
 
-/* 主容器 */
-.notebook-container {
-    max-width: var(--container-max-width);
-    margin: 0 auto;
+/* 整体 wrapper - flexbox 布局，整体居中 */
+.notebook-wrapper {
+    display: flex;
+    justify-content: center;
+    gap: var(--toc-gap);
     padding: 20px;
+    max-width: calc(var(--container-max-width) + var(--toc-width) + var(--toc-gap));
+    margin: 0 auto;
 }
 
-/* 当空间不够时，给 TOC 留出空间 */
-@media (max-width: calc(900px + 200px + 20px + 40px)) {
-    .notebook-container {
-        margin-right: calc(var(--toc-width) + var(--toc-gap));
+.notebook-container {
+    flex: 1;
+    min-width: 0;  /* 允许收缩 */
+    max-width: var(--container-max-width);
+}
+
+/* TOC 面板 - sticky 定位，保持固定宽度 */
+.toc-panel {
+    position: sticky;
+    top: 20px;
+    width: var(--toc-width);
+    max-height: calc(100vh - 40px);
+    height: fit-content;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    z-index: 1000;
+    overflow: hidden;
+    flex-shrink: 0;  /* 不收缩 */
+}
+
+/* 空间不够时，切换成上下布局 */
+@media (max-width: calc(var(--container-max-width) + var(--toc-width) + var(--toc-gap) * 2)) {
+    .notebook-wrapper {
+        flex-direction: column;
+        max-width: var(--container-max-width);
+    }
+    .toc-panel {
+        position: relative;
+        top: auto;
+        width: 100%;
+        max-height: none;
+        height: auto;
+        margin-top: 20px;
     }
 }
 
 /* 小屏幕 */
 @media (max-width: 768px) {
+    .notebook-wrapper {
+        padding: 10px;
+    }
     .notebook-container {
         margin: 0 10px;
         padding: 10px;
+    }
+    .toc-panel {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        right: 0;
+        width: 100%;
+        max-height: 300px;
+        margin: 0;
+        border-radius: 8px 8px 0 0;
     }
 }
 
@@ -327,32 +374,6 @@ body {
     border-radius: 5px;
 }
 
-/* TOC 面板 */
-.toc-panel {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    width: var(--toc-width);
-    max-height: calc(100vh - 40px);
-    background: #fff;
-    border: 1px solid #e5e5e5;
-    border-radius: 8px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-    z-index: 1000;
-    overflow: hidden;
-}
-
-/* 小屏幕：调整 TOC 面板 */
-@media (max-width: 768px) {
-    .toc-panel {
-        position: relative;
-        top: auto;
-        right: auto;
-        width: auto;
-        max-height: none;
-        margin: 10px;
-    }
-}
 
 .toc-header {
     padding: 12px 16px;
