@@ -89,6 +89,29 @@ body {
     color: #37352f;
 }
 
+/* 可折叠 Section */
+.section-title.collapsible-header {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.section-title.collapsible-header:hover {
+    background: linear-gradient(90deg, #f5f5f5 0%, #fafafa 100%);
+}
+
+.collapse-icon {
+    font-size: 12px;
+    color: #888;
+    margin-left: 8px;
+}
+
+.collapsible-section .section-content {
+    transition: all 0.3s ease;
+}
+
 .section-content {
     padding: 14px 16px;
 }
@@ -396,6 +419,27 @@ body {
 .toc-actions button:hover {
     background: #f5f5f5;
     color: #6b21a8;
+}
+
+.toc-footer {
+    padding: 8px 16px;
+    border-top: 1px solid #e5e5e5;
+}
+
+.toc-footer .full-btn {
+    width: 100%;
+    padding: 8px 12px;
+    background: linear-gradient(135deg, #9333ea 0%, #6b21a8 100%);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.toc-footer .full-btn:hover {
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
 }
 
 /* 截图模式 */

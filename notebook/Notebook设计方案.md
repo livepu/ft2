@@ -215,6 +215,48 @@ with nb.section("详细数据", collapsed=True):
     nb.table(data)
 ```
 
+#### Jupyter 风格书写习惯
+
+Notebook 采用类似 Jupyter 的增量构建模式，代码执行顺序即报告生成顺序：
+
+**核心思想：**
+- `nb` 是增量构建的容器，所有 API 调用都在往 `children` 追加内容
+- `with` 语句表达代码模块的层次结构，缩进直观对应报告层级
+- 最后统一 `export_html()` 生成完整报告
+
+```python
+nb = Notebook("策略分析")
+
+# 数据处理模块
+with nb.section("数据概览"):
+    nb.metrics([{'name': '样本数', 'value': 1000}])
+    nb.table(df)
+
+# 模型训练模块
+with nb.section("模型训练"):
+    nb.metrics([{'name': '准确率', 'value': '85%'}])
+    
+    with nb.section("交叉检验"):  # 嵌套层级
+        nb.heatmap(cv_results)
+
+# 回测结果模块
+with nb.section("回测结果"):
+    nb.chart('line', {...})
+    nb.table(trades, title="交易明细")
+
+# 最后统一输出
+nb.export_html("report.html")
+```
+
+**优势：**
+
+| 特性 | 说明 |
+|------|------|
+| 代码即文档 | Python 代码结构 = 报告结构 |
+| 层次清晰 | `with` 缩进直观表达嵌套关系 |
+| 模块化 | 每个 `with` 块对应一个报告章节 |
+| 简洁输出 | 仅需最后调用一次 `export_html()` |
+
 ### 2.4 设计决策
 
 #### 决策1: options 字段松散是合理的
@@ -239,6 +281,27 @@ with nb.section("详细数据", collapsed=True):
 
 ### 2.5 JSON 输出格式
 
+#### 结构概览
+
+```
+顶层结构
+├── title: 报告标题
+├── createdAt: 创建时间
+└── children: Cell[] 列表
+
+原子类型 Cell（有 content，无 children）
+├── type: 类型标识
+├── content: 核心数据
+├── title?: 可选标题
+└── options?: 可选配置
+
+容器类型 Section（有 children，无 content）
+├── type: "section"
+├── children: 子节点列表
+├── title?: 可选标题
+└── options?: {level, collapsed}
+```
+
 #### 格式规范
 
 ```json
@@ -250,6 +313,14 @@ with nb.section("详细数据", collapsed=True):
   "options": {<可选配置>}
 }
 ```
+
+#### 设计原则
+
+| 原则 | 说明 |
+|------|------|
+| **语义分离** | `content` = 数据，`children` = 子节点，职责分明 |
+| **类型区分** | Vue3 通过 `type` 判断原子/容器，递归渲染简单直观 |
+| **字段省略** | `title`/`options` 为空时省略，减少 JSON 体积 |
 
 #### 完整示例
 
@@ -763,6 +834,141 @@ nb.chart('pie', [
 ---
 
 ### A.3 热力图
+
+#### 输入参数格式
+
+```python
+def heatmap(data, title=None, **options) -> Notebook:
+    """
+    创建热力图
+    
+    Args:
+        data: 数据源，支持格式：
+            - dict: 嵌套字典 {y: {x: value, ...}, ...}
+            - DataFrame: 第一列作为Y轴，其余列作为X轴
+        title: 标题
+        **options: 其他配置（如 height）
+    
+    Returns:
+        Notebook: 支持链式调用
+    """
+```
+
+#### 数据格式说明
+
+嵌套字典与 DataFrame 宽格式结构等价，可互转：
+
+**例1：年月收益**
+```python
+# dict 嵌套格式（外层 key = Y轴，内层 key = X轴）
+{
+    '2023': {'1月': 0.02, '2月': -0.01, '3月': 0.03},
+    '2024': {'1月': 0.05, '2月': -0.02, '3月': 0.08}
+}
+
+# DataFrame 格式（第一列 = Y轴，其余列 = X轴）
+#     年    1月    2月    3月
+# 0  2023  0.02  -0.01  0.03
+# 1  2024  0.05  -0.02  0.08
+```
+
+**例2：相关性矩阵**
+```python
+# dict 嵌套格式
+{
+    '茅台': {'茅台': 1.00, '平安': 0.35, '万科': 0.28},
+    '平安': {'茅台': 0.35, '平安': 1.00, '万科': 0.52},
+    '万科': {'茅台': 0.28, '平安': 0.52, '万科': 1.00}
+}
+
+# DataFrame 格式（索引已设置）
+#        茅台   平安   万科
+# 茅台  1.00  0.35  0.28
+# 平安  0.35  1.00  0.52
+# 万科  0.28  0.52  1.00
+```
+
+**例3：交叉检验（模型对比）**
+```python
+# dict 嵌套格式：不同模型在各折上的准确率
+{
+    'RandomForest': {'Fold1': 0.85, 'Fold2': 0.87, 'Fold3': 0.84, 'Fold4': 0.86, 'Fold5': 0.88},
+    'XGBoost':      {'Fold1': 0.88, 'Fold2': 0.86, 'Fold3': 0.89, 'Fold4': 0.87, 'Fold5': 0.90},
+    'LightGBM':     {'Fold1': 0.87, 'Fold2': 0.89, 'Fold3': 0.86, 'Fold4': 0.88, 'Fold5': 0.91},
+    'NeuralNet':    {'Fold1': 0.82, 'Fold2': 0.84, 'Fold3': 0.83, 'Fold4': 0.85, 'Fold5': 0.86}
+}
+
+# DataFrame 格式
+#          Model   Fold1  Fold2  Fold3  Fold4  Fold5
+# 0  RandomForest   0.85   0.87   0.84   0.86   0.88
+# 1       XGBoost   0.88   0.86   0.89   0.87   0.90
+# 2      LightGBM   0.87   0.89   0.86   0.88   0.91
+# 3     NeuralNet   0.82   0.84   0.83   0.85   0.86
+
+# 调用示例
+cv_results = pd.DataFrame({
+    'Model': ['RandomForest', 'XGBoost', 'LightGBM', 'NeuralNet'],
+    'Fold1': [0.85, 0.88, 0.87, 0.82],
+    'Fold2': [0.87, 0.86, 0.89, 0.84],
+    'Fold3': [0.84, 0.89, 0.86, 0.83],
+    'Fold4': [0.86, 0.87, 0.88, 0.85],
+    'Fold5': [0.88, 0.90, 0.91, 0.86]
+})
+nb.heatmap(cv_results, title='5折交叉检验准确率对比')
+```
+
+#### DataFrame 转换规则
+
+| DataFrame 索引类型 | 处理方式 |
+|-------------------|----------|
+| `RangeIndex`（默认 0,1,2...） | 自动 `set_index(第一列)` → Y轴 |
+| 已命名索引（如年/股票名） | 直接使用 → Y轴 |
+
+```python
+# 情况1：默认索引 → 自动转换
+df = pd.DataFrame({'年': ['2023', '2024'], '1月': [0.02, 0.05]})
+# RangeIndex(0, 2) → set_index('年') → {'2023': {'1月': 0.02}, ...}
+
+# 情况2：已设置索引 → 直接使用
+df = pd.DataFrame({'1月': [0.02, 0.05]}, index=['2023', '2024'])
+# Index(['2023', '2024']) → {'2023': {'1月': 0.02}, ...}
+```
+
+#### 格式互转
+
+```python
+# dict → DataFrame
+pd.DataFrame.from_dict(data, orient='index')
+
+# DataFrame → dict
+df.to_dict(orient='index')
+```
+
+#### 调用示例
+
+```python
+# 方式1：嵌套字典
+nb.heatmap({
+    '2023': {'1月': 0.02, '2月': -0.01, '3月': 0.03},
+    '2024': {'1月': 0.05, '2月': -0.02, '3月': 0.08}
+}, title='月度收益热力图')
+
+# 方式2：DataFrame
+df = pd.DataFrame({
+    '年': ['2023', '2024'],
+    '1月': [0.02, 0.05],
+    '2月': [-0.01, -0.02],
+    '3月': [0.03, 0.08]
+})
+nb.heatmap(df, title='月度收益热力图')
+
+# 方式3：通过 chart 方法
+nb.chart('heatmap', data, title='热力图', height=500)
+```
+
+---
+
+#### 与其他方案对比
 
 **pyecharts:** (与 ECharts 相同，需手动计算坐标索引)
 ```python

@@ -60,7 +60,7 @@ const CellRenderer = {
         const getTableOptions = (cell) => {
             const opts = {};
             if (cell.options?.freeze) opts.freeze = cell.options.freeze;
-            if (cell.options?.page) opts.page = cell.options.page;
+            if (cell.options?.page) opts.pagination = cell.options.page;
             return opts;
         };
 
@@ -101,12 +101,34 @@ const CellRenderer = {
                 const isLine = chartType === 'line';
                 const isBar = chartType === 'bar';
                 const isArea = chartType === 'area';
+                const isPie = chartType === 'pie';
+
+                // 饼图特殊处理
+                if (isPie) {
+                    return {
+                        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+                        legend: { top: '5%', left: 'center' },
+                        series: [{
+                            type: 'pie',
+                            data: data,
+                            radius: ['40%', '70%'],
+                            label: { show: true, formatter: '{b}: {c} ({d}%)' },
+                            emphasis: {
+                                itemStyle: {
+                                    shadowBlur: 10,
+                                    shadowOffsetX: 0,
+                                    shadowColor: 'rgba(0, 0, 0, 0.5)'
+                                }
+                            }
+                        }]
+                    };
+                }
 
                 return {
                     ...baseOption,
                     xAxis: {
                         type: 'category',
-                        data: data.dates || data.categories || [],
+                        data: data.xAxis || data.dates || data.categories || [],
                         boundaryGap: isBar
                     },
                     yAxis: { type: 'value' },
@@ -119,17 +141,25 @@ const CellRenderer = {
                     }))
                 };
             } else if (type === 'heatmap') {
-                const years = Object.keys(content);
-                const months = Object.keys(content[years[0]]);
-                const data = [];
+                const years = Object.keys(data);
+                const months = Object.keys(data[years[0]]);
+                const heatmapData = [];
                 years.forEach((year, yIndex) => {
                     months.forEach((month, mIndex) => {
-                        data.push([mIndex, yIndex, content[year][month]]);
+                        const value = data[year][month];
+                        if (value !== undefined) {
+                            heatmapData.push([mIndex, yIndex, value]);
+                        }
                     });
                 });
 
                 return {
-                    tooltip: { position: 'top' },
+                    tooltip: { 
+                        position: 'top',
+                        formatter: function(params) {
+                            return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + (params.value[2] * 100).toFixed(2) + '%';
+                        }
+                    },
                     grid: { height: '50%', top: '10%' },
                     xAxis: { type: 'category', data: months },
                     yAxis: { type: 'category', data: years },
@@ -139,13 +169,17 @@ const CellRenderer = {
                         calculable: true,
                         orient: 'horizontal',
                         left: 'center',
-                        bottom: '15%'
+                        bottom: '15%',
+                        formatter: '{value}'
                     },
                     series: [{
                         name: '收益',
                         type: 'heatmap',
-                        data: data,
-                        label: { show: true }
+                        data: heatmapData,
+                        label: { show: true, formatter: function(params) {
+                            return (params.value[2] * 100).toFixed(0) + '%';
+                        }},
+                        emphasis: { itemStyle: { shadowBlur: 10 } }
                     }]
                 };
             }
@@ -171,12 +205,20 @@ const CellRenderer = {
         <!-- Section - 直接渲染，不包裹 .cell -->
         <div v-if="cell.type === 'section'" 
              class="section"
-             :class="{ 'nested-section': level > 0 }"
+             :class="{ 'nested-section': level > 0, 'collapsible-section': cell.options?.collapsed !== undefined }"
              :id="'section-' + cellId">
-            <div v-if="cell.title" class="section-title">{{ cell.title }}</div>
-            <div class="section-content">
+            <div v-if="cell.title" 
+                 class="section-title"
+                 :class="{ 'collapsible-header': cell.options?.collapsed !== undefined }"
+                 @click="cell.options?.collapsed !== undefined && (cell.options.collapsed = !cell.options.collapsed)">
+                <span>{{ cell.title }}</span>
+                <span v-if="cell.options?.collapsed !== undefined" class="collapse-icon">
+                    {{ cell.options?.collapsed ? '▶' : '▼' }}
+                </span>
+            </div>
+            <div class="section-content" v-show="cell.options?.collapsed !== true">
                 <cell-renderer 
-                    v-for="(subCell, idx) in cell.content" 
+                    v-for="(subCell, idx) in cell.children" 
                     :key="idx"
                     :cell="subCell"
                     :cell-id="cellId + '-' + idx"
@@ -219,8 +261,8 @@ const CellRenderer = {
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
                 <vue-table 
                     :id="'table-' + cellId"
-                    :data="cell.content"
-                    :cols="getTableCols(cell)"
+                    :data-source="cell.content"
+                    :columns="getTableCols(cell)"
                     v-bind="getTableOptions(cell)">
                 </vue-table>
             </div>
@@ -258,7 +300,7 @@ const CellRenderer = {
             <!-- 分隔线 -->
             <div v-else-if="cell.type === 'divider'" class="cell-divider"></div>
             
-            <!-- 可折叠 -->
+            <!-- 可折叠（遗留类型，保持兼容） -->
             <div v-else-if="cell.type === 'collapsible'" class="cell-collapsible">
                 <button class="collapse-toggle" @click="cell.options.collapsed = !cell.options.collapsed">
                     <span>{{ cell.title }}</span>
@@ -266,7 +308,7 @@ const CellRenderer = {
                 </button>
                 <div v-show="!cell.options?.collapsed" class="collapse-content">
                     <cell-renderer 
-                        v-for="(subCell, idx) in cell.content" 
+                        v-for="(subCell, idx) in cell.children" 
                         :key="idx"
                         :cell="subCell"
                         :cell-id="cellId + '-' + idx"
@@ -291,12 +333,13 @@ function createNotebookApp() {
             const config = window.notebookConfig || {
                 title: '未命名 Notebook',
                 createdAt: new Date().toLocaleString(),
-                cells: []
+                children: []
             };
 
             const title = ref(config.title);
             const createdAt = ref(config.createdAt);
-            const cells = ref(config.cells);
+            // 兼容 cells 和 children 两种字段名
+            const cells = ref(config.children || config.cells || []);
             const selectedIndices = ref(new Set());
             const isScreenshotMode = ref(false);
 
@@ -378,6 +421,30 @@ function createNotebookApp() {
                 }
             };
 
+            // 全页截图
+            const captureAll = async () => {
+                isScreenshotMode.value = true;
+                await nextTick();
+
+                try {
+                    const element = document.querySelector('.notebook-container');
+                    const canvas = await snapdom(element, {
+                        scale: 2,
+                        backgroundColor: '#f5f5f5'
+                    });
+
+                    const link = document.createElement('a');
+                    link.download = `${title.value || 'notebook'}-全页.png`;
+                    link.href = canvas.toDataURL();
+                    link.click();
+                } catch (err) {
+                    console.error('截图失败:', err);
+                    alert('截图失败: ' + err.message);
+                } finally {
+                    isScreenshotMode.value = false;
+                }
+            };
+
             onMounted(() => {
                 console.log('Notebook Vue3 应用已加载');
             });
@@ -394,7 +461,8 @@ function createNotebookApp() {
                 selectAll,
                 clearSelection,
                 scrollToSection,
-                captureScreenshot
+                captureScreenshot,
+                captureAll
             };
         }
     });

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
-    <link rel="stylesheet" href="https://gitee.com/liveup_admin/ft2/raw/master/template/js/notebook.css">
+    <link rel="stylesheet" href="template/js/notebook.css">
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/vue.global.prod.js"></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/vue3-table.js"></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/echarts.min.js"></script>
@@ -52,7 +52,10 @@
             <div class="toc-actions">
                 <button @click="selectAll">全选</button>
                 <button @click="clearSelection">清空</button>
-                <button @click="captureScreenshot" :disabled="selectedCount === 0">截图</button>
+                <button @click="captureScreenshot" :disabled="selectedCount === 0">截图选中</button>
+            </div>
+            <div class="toc-footer">
+                <button @click="captureAll" class="full-btn">🖼️ 全页截图</button>
             </div>
         </aside>
     </div>
@@ -62,7 +65,7 @@
     <script id="notebook-data" type="application/json">{{ data_json | safe }}</script>
     
     <!-- Notebook Vue3 JS -->
-    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/notebook-vue3.js"></script>
+    <script src="template/js/notebook-vue3.js"></script>
     <script>
         // 从 Jinja2 注入的数据创建配置
         const dataElement = document.getElementById('notebook-data');
