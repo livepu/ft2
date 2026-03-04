@@ -692,6 +692,75 @@ body {
 
 
 
+/* ========== 饼图显示选项控制器 ========== */
+.pie-with-control {
+    position: relative;
+}
+
+.pie-wrapper {
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+}
+
+.pie-wrapper .chart-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.pie-control {
+    width: 90px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 8px;
+    background: #fafafa;
+    border-radius: 6px;
+    border: 1px solid #e5e5e5;
+    align-self: flex-start;
+}
+
+.pie-control .control-label {
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: #666;
+    cursor: pointer;
+    padding: 3px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.checkbox-item:hover {
+    background: #f0f0f0;
+}
+
+.checkbox-item input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    accent-color: #9b51e0;
+}
+
+.checkbox-item span {
+    white-space: nowrap;
+}
+
 /* 响应式：小屏幕时控制器移到下方 */
 @media (max-width: 768px) {
     .heatmap-wrapper {
@@ -724,5 +793,25 @@ body {
         flex: 1;
         min-width: 50px;
         max-width: 70px;
+    }
+    
+    .pie-wrapper {
+        flex-direction: column;
+    }
+    
+    .pie-control {
+        width: 100%;
+        flex-direction: row;
+        padding: 10px;
+        align-items: center;
+    }
+    
+    .pie-control .control-label {
+        margin: 0 10px 0 0;
+    }
+    
+    .checkbox-group {
+        flex-direction: row;
+        justify-content: center;
     }
 }

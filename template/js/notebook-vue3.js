@@ -3,7 +3,7 @@
  * 从 notebook.html 分离出来的 JavaScript
  */
 
-const { createApp, ref, computed, onMounted, nextTick } = Vue;
+const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
 
 // ========== Cell 渲染组件（组合式 API）==========
 const CellRenderer = {
@@ -371,8 +371,28 @@ const CellRenderer = {
         onMounted(() => {
             if (['chart', 'heatmap', 'pyecharts'].includes(props.cell.type)) {
                 nextTick(() => initChart());
+                
+                // 监听窗口大小变化，自动调整图表尺寸
+                window.addEventListener('resize', handleResize);
             }
         });
+        
+        onUnmounted(() => {
+            // 移除resize监听，避免内存泄漏
+            window.removeEventListener('resize', handleResize);
+            // 销毁图表实例
+            if (chartInstance) {
+                chartInstance.dispose();
+                chartInstance = null;
+            }
+        });
+        
+        // 处理窗口resize
+        const handleResize = () => {
+            if (chartInstance) {
+                chartInstance.resize();
+            }
+        };
 
         return {
             chartRef,
