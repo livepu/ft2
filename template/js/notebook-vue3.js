@@ -205,7 +205,10 @@ const CellRenderer = {
         <!-- Section - 直接渲染，不包裹 .cell -->
         <div v-if="cell.type === 'section'" 
              class="section"
-             :class="{ 'nested-section': level > 0, 'collapsible-section': cell.options?.collapsed !== undefined }"
+             :class="{ 
+                 'nested-section': level > 0,
+                 'collapsible-section': cell.options?.collapsed !== undefined
+             }"
              :id="'section-' + cellId">
             <div v-if="cell.title" 
                  class="section-title"
@@ -395,29 +398,107 @@ function createNotebookApp() {
                 }
             };
 
-            // 截图功能
+            // 截图功能 - 克隆DOM到专用容器，手动处理Canvas
             const captureScreenshot = async () => {
                 if (selectedIndices.value.size === 0) return;
 
-                isScreenshotMode.value = true;
-                await nextTick();
+                const mainContainer = document.querySelector('.notebook-container');
+                const screenshotContainer = document.getElementById('screenshot-container');
 
                 try {
-                    const element = document.querySelector('.notebook-container');
-                    const canvas = await snapdom(element, {
-                        scale: 2,
-                        backgroundColor: '#f5f5f5'
+                    // 清空截图容器
+                    screenshotContainer.innerHTML = '';
+
+                    // 收集原始canvas和克隆canvas的对应关系
+                    const canvasPairs = [];
+
+                    // 辅助函数：克隆元素并处理canvas
+                    const cloneWithCanvas = (original) => {
+                        const cloned = original.cloneNode(true);
+
+                        // 找到所有canvas元素
+                        const originalCanvases = original.querySelectorAll('canvas');
+                        const clonedCanvases = cloned.querySelectorAll('canvas');
+
+                        originalCanvases.forEach((origCanvas, i) => {
+                            const clonedCanvas = clonedCanvases[i];
+                            if (clonedCanvas && origCanvas.width > 0 && origCanvas.height > 0) {
+                                canvasPairs.push({ original: origCanvas, cloned: clonedCanvas });
+                            }
+                        });
+
+                        return cloned;
+                    };
+
+                    // 1. 克隆头部（如果选中）
+                    if (selectedIndices.value.has(-1)) {
+                        const header = mainContainer.querySelector('.notebook-header');
+                        if (header) {
+                            screenshotContainer.appendChild(cloneWithCanvas(header));
+                        }
+                    }
+
+                    // 2. 按原始顺序克隆选中的 section（先排序）
+                    const sortedIndices = [...selectedIndices.value]
+                        .filter(index => index !== -1)
+                        .sort((a, b) => a - b);
+
+                    sortedIndices.forEach(index => {
+                        const section = document.getElementById('section-' + index);
+                        if (section) {
+                            screenshotContainer.appendChild(cloneWithCanvas(section));
+                        }
                     });
 
-                    const link = document.createElement('a');
-                    link.download = `${title.value || 'notebook'}.png`;
-                    link.href = canvas.toDataURL();
-                    link.click();
+                    // 3. 复制canvas内容
+                    canvasPairs.forEach(({ original, cloned }) => {
+                        try {
+                            const ctx = cloned.getContext('2d');
+                            cloned.width = original.width;
+                            cloned.height = original.height;
+                            ctx.drawImage(original, 0, 0);
+                        } catch (e) {
+                            console.warn('Canvas复制失败:', e);
+                        }
+                    });
+
+                    // 4. 等待 DOM 稳定
+                    await new Promise(resolve => setTimeout(resolve, 50));
+
+                    // 5. 截图
+                    const result = await snapdom(screenshotContainer, {
+                        scale: 2,
+                        backgroundColor: '#f5f5f5',
+                        cache: 'auto'
+                    });
+
+                    const blob = await result.toBlob({ type: 'png' });
+
+                    // 6. 复制到剪贴板
+                    try {
+                        window.focus();
+                        await navigator.clipboard.write([
+                            new ClipboardItem({ 'image/png': blob })
+                        ]);
+                        console.log('截图已复制到剪贴板');
+                    } catch (clipboardErr) {
+                        console.warn('复制到剪贴板失败，尝试下载:', clipboardErr);
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            const link = document.createElement('a');
+                            link.download = `${title.value || 'notebook'}-选中部分.png`;
+                            link.href = e.target.result;
+                            link.click();
+                        };
+                        reader.readAsDataURL(blob);
+                    }
+
                 } catch (err) {
                     console.error('截图失败:', err);
                     alert('截图失败: ' + err.message);
                 } finally {
-                    isScreenshotMode.value = false;
+                    // 清空截图容器
+                    screenshotContainer.innerHTML = '';
                 }
             };
 

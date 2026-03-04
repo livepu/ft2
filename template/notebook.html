@@ -13,7 +13,8 @@
 <body>
     {% raw %}
     <div id="app">
-        <div class="notebook-container" :class="{ 'screenshot-mode': isScreenshotMode }">
+        <!-- 主体容器 -->
+        <div class="notebook-container">
             <!-- 头部 -->
             <div class="notebook-header">
                 <h1>{{ title }}</h1>
@@ -31,6 +32,9 @@
                 :level="0">
             </cell-renderer>
         </div>
+        
+        <!-- 截图专用容器（隐藏） -->
+        <div id="screenshot-container" class="notebook-container" style="position: absolute; left: -99999px; top: 0; width: 900px;"></div>
         
         <!-- TOC 目录面板 -->
         <aside class="toc-panel" v-if="tocItems.length > 0">

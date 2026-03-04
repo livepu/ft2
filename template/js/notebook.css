@@ -442,15 +442,6 @@ body {
     background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
 }
 
-/* 截图模式 */
-.screenshot-mode .section:not(.selected) {
-    display: none;
-}
-
-.screenshot-mode .notebook-header {
-    display: none;
-}
-
 /* 空状态 */
 .empty-state {
     text-align: center;

@@ -132,7 +132,7 @@ def test_chart():
     with nb.section("折线图"):
         nb.text("净值曲线展示：")
         nb.chart('line', {
-            'dates': dates,
+            'xAxis': dates,
             'series': [
                 {"name": "策略净值", "data": [1.0, 1.05, 1.12, 1.08, 1.15]},
                 {"name": "基准净值", "data": [1.0, 1.02, 1.04, 1.06, 1.08]}
@@ -142,7 +142,7 @@ def test_chart():
     with nb.section("柱状图"):
         nb.text("月度收益对比：")
         nb.chart('bar', {
-            'categories': ["1月", "2月", "3月", "4月", "5月"],
+            'xAxis': ["1月", "2月", "3月", "4月", "5月"],
             'series': [
                 {"name": "策略收益%", "data": [5.2, -2.1, 8.5, 3.2, 6.1]},
                 {"name": "基准收益%", "data": [2.0, 1.5, 2.2, 1.8, 2.5]}
@@ -152,7 +152,7 @@ def test_chart():
     with nb.section("面积图"):
         nb.text("回撤曲线展示：")
         nb.chart('area', {
-            'dates': dates,
+            'xAxis': dates,
             'series': [{"name": "回撤%", "data": [0, -2, -5, -3, -1]}]
         }, title="回撤曲线", height=250)
     
@@ -177,13 +177,13 @@ def test_chart():
         nb.text("以下是策略表现的综合展示：")
         
         nb.chart('line', {
-            'dates': dates,
+            'xAxis': dates,
             'series': [{"name": "净值", "data": [1.0, 1.05, 1.12, 1.08, 1.15]}]
         }, title="净值走势")
         
         nb.text("从上图可以看出策略整体表现良好。")
         nb.chart('bar', {
-            'categories': ["1月", "2月", "3月", "4月", "5月"],
+            'xAxis': ["1月", "2月", "3月", "4月", "5月"],
             'series': [{"name": "收益%", "data": [5, -2, 8, 3, 6]}]
         }, title="月度收益")
         nb.markdown("**结论**: 策略收益稳定，回撤可控。")
@@ -211,14 +211,14 @@ def test_nested_section():
             with nb.section("三级Section"):
                 nb.text("三级Section内容")
                 nb.chart('line', {
-                    'dates': ["1", "2", "3"],
+                    'xAxis': ["1", "2", "3"],
                     'series': [{"name": "净值", "data": [1.0, 1.1, 1.2]}]
                 }, title="净值曲线")
         
         with nb.section("二级Section-B"):
             nb.text("二级Section-B内容")
             nb.chart('bar', {
-                'categories': ["A", "B", "C"],
+                'xAxis': ["A", "B", "C"],
                 'series': [{"name": "收益", "data": [10, 20, 15]}]
             }, title="分类收益")
     
@@ -226,41 +226,166 @@ def test_nested_section():
     print("输出: test_nested.html")
 
 
+def test_deep_nesting():
+    """测试多层嵌套：title/文本最多三层嵌套"""
+    print("\n[4.5] 多层嵌套测试...")
+    
+    nb = Notebook("多层嵌套测试")
+    
+    # ========== 第一层 ==========
+    nb.title("第一章：整体概览", level=1)
+    nb.text("这是第一层级的介绍文本，描述整体情况。")
+    nb.markdown("**重点**: 本章节包含多个子模块的详细分析。")
+    
+    with nb.section("1.1 模块A分析"):
+        nb.title("模块A详细说明", level=2)
+        nb.text("模块A的核心逻辑和实现细节。")
+        
+        # ========== 第二层 ==========
+        with nb.section("1.1.1 子模块A1"):
+            nb.title("子模块A1", level=3)
+            nb.text("A1的详细内容，包含数据表格：")
+            nb.table([
+                {"指标": "速度", "数值": "100ms", "状态": "✓"},
+                {"指标": "准确率", "数值": "95.5%", "状态": "✓"},
+                {"指标": "覆盖率", "数值": "87.3%", "状态": "△"},
+            ])
+            
+            # ========== 第三层 ==========
+            with nb.section("1.1.1.1 细节目点"):
+                nb.title("最深层细节", level=3)
+                nb.text("这是第三层嵌套的内容，可以包含：")
+                nb.markdown("""
+- 详细说明1
+- 详细说明2  
+- 详细说明3
+                """)
+                nb.chart('bar', {
+                    'xAxis': ['指标1', '指标2', '指标3'],
+                    'series': [{"name": "数值", "data": [85, 92, 78]}]
+                }, title="三级嵌套图表", height=200)
+        
+        with nb.section("1.1.2 子模块A2"):
+            nb.title("子模块A2", level=3)
+            nb.text("A2的独立分析，与A1形成对比。")
+            nb.metrics([
+                {"name": "Q1", "value": "120"},
+                {"name": "Q2", "value": "150"},
+                {"name": "Q3", "value": "180"},
+                {"name": "Q4", "value": "200"},
+            ])
+    
+    # ========== 另一个一级分支 ==========
+    with nb.section("1.2 模块B分析"):
+        nb.title("模块B概述", level=2)
+        nb.text("模块B采用不同的策略方向。")
+        
+        with nb.section("1.2.1 子模块B1（折叠）", collapsed=True):
+            nb.text("这是一个可折叠的三级节点，默认收起。")
+            nb.code(
+                code="# B1模块代码\ndef calculate(x, y):\n    return x * y + 10",
+                language="python",
+                output="测试通过"
+            )
+        
+        with nb.section("1.2.2 子模块B2"):
+            nb.title("B2详情", level=3)
+            nb.text("B2的补充说明，使用HTML样式：")
+            nb.html("""
+            <div style="background: #e3f2fd; padding: 10px; border-left: 4px solid #2196f3;">
+                <strong>提示：</strong> 这是三层嵌套中的HTML内容
+            </div>
+            """)
+    
+    # ========== 自由内容穿插 ==========
+    nb.divider()
+    nb.text("【自由内容】第三章之前的过渡说明...")
+    nb.markdown("---")
+    
+    with nb.section("1.3 模块C综合"):
+        nb.title("综合分析", level=2)
+        nb.text("汇总A、B模块的结论，形成最终报告。")
+        
+        # 最深嵌套：4层（测试极限）
+        with nb.section("1.3.1 深层节点"):
+            with nb.section("1.3.1.1 更深层"):
+                nb.text("这是第四层，验证嵌套深度限制。")
+                nb.chart('line', {
+                    'xAxis': ['1月', '2月', '3月'],
+                    'series': [{"name": "趋势", "data": [1.0, 1.2, 1.5]}]
+                }, title="深度嵌套图表", height=180)
+    
+    nb.export_html("d:/01-Doc/程序化/ft2/test_deep_nesting.html")
+    print("输出: test_deep_nesting.html")
+
+
+def test_collapsible_section():
+    """测试可折叠Section"""
+    print("\n[5] 可折叠Section测试...")
+    
+    nb = Notebook("可折叠Section测试")
+    
+    with nb.section("普通Section"):
+        nb.text("这是普通Section，不可折叠")
+    
+    with nb.section("默认折叠", collapsed=True):
+        nb.text("这个Section默认是折叠的")
+        nb.table([
+            {"name": "数据1", "value": 100},
+            {"name": "数据2", "value": 200}
+        ])
+    
+    with nb.section("默认展开", collapsed=False):
+        nb.text("这个Section可折叠，但默认展开")
+        nb.chart('line', {
+            'xAxis': ["A", "B", "C"],
+            'series': [{"name": "数据", "data": [1, 2, 3]}]
+        })
+    
+    nb.export_html("d:/01-Doc/程序化/ft2/test_collapsible.html")
+    print("输出: test_collapsible.html")
+
+
 def test_comprehensive():
-    """综合测试：合并所有功能"""
+    """综合测试：混合自由内容与模块嵌套"""
     print("\n[综合测试]...")
     
     nb = Notebook("综合测试报告")
     
-    # ==================== 报告概述 ====================
-    with nb.section("报告概述"):
-        nb.title("策略回测报告", level=1)
-        nb.markdown("""
+    # ========== 【自由内容】报告头部 ==========
+    nb.title("策略回测报告", level=1)
+    nb.divider()
+    nb.markdown("""
 **策略类型**: 趋势跟踪 | **回测区间**: 2024-01 至 2024-05 | **初始资金**: 1,000,000
-        """)
-        nb.metrics([
-            {"name": "总收益", "value": "45.6%", "desc": "累计收益"},
-            {"name": "夏普", "value": "1.85", "desc": "风险调整"},
-            {"name": "最大回撤", "value": "-12.3%", "desc": "2024-03"},
-            {"name": "胜率", "value": "58%", "desc": "盈利占比"},
-        ], title="核心指标")
+    """)
     
-    # ==================== 收益分析（图表） ====================
+    # 【自由内容】核心指标（全局可见，不在section中）
+    nb.metrics([
+        {"name": "总收益", "value": "45.6%", "desc": "累计收益"},
+        {"name": "夏普", "value": "1.85", "desc": "风险调整"},
+        {"name": "最大回撤", "value": "-12.3%", "desc": "2024-03"},
+        {"name": "胜率", "value": "58%", "desc": "盈利占比"},
+    ])
+    
+    nb.divider()
+    
+    # ========== 【Section嵌套】收益分析 ==========
     dates = ["2024-01", "2024-02", "2024-03", "2024-04", "2024-05"]
     
     with nb.section("收益分析"):
         nb.text("净值曲线与基准对比：")
         nb.chart('line', {
-            'dates': dates,
+            'xAxis': dates,
             'series': [
                 {"name": "策略", "data": [1.0, 1.05, 1.12, 1.08, 1.15]},
                 {"name": "基准", "data": [1.0, 1.02, 1.04, 1.06, 1.08]}
             ]
         }, title="净值曲线", height=300)
         
+        # 嵌套：月度分析
         with nb.section("月度分析"):
             nb.chart('bar', {
-                'categories': ["1月", "2月", "3月", "4月", "5月"],
+                'xAxis': ["1月", "2月", "3月", "4月", "5月"],
                 'series': [{"name": "月收益%", "data": [5, -2, 8, 3, 6]}]
             }, title="月度收益")
             
@@ -270,10 +395,13 @@ def test_comprehensive():
                 {"name": "现金", "value": 15}
             ], title="资产配置", height=250)
     
-    # ==================== 风险分析 ====================
+    # ========== 【自由内容】简短说明 ==========
+    nb.text("【自由内容】以下是风险分析部分，可直接阅读或点击目录跳转。")
+    
+    # ========== 【Section嵌套】风险分析 ==========
     with nb.section("风险分析"):
         nb.chart('area', {
-            'dates': dates,
+            'xAxis': dates,
             'series': [{"name": "回撤%", "data": [0, -2, -5, -3, -1]}]
         }, title="回撤曲线", height=250)
         
@@ -282,10 +410,24 @@ def test_comprehensive():
             "2024": {"01": 0.05, "02": -0.02, "03": 0.08, "04": 0.03, "05": 0.06, "06": -0.01}
         }
         nb.chart('heatmap', heatmap_data, title="月度收益热力图")
+        
+        # 嵌套：风险评估
+        with nb.section("风险评估", collapsed=True):
+            nb.markdown("""
+**VaR(95%)**: 2.5%  
+**CVaR(95%)**: 3.8%  
+**下行波动率**: 8.2%
+            """)
     
-    # ==================== 持仓明细（表格） ====================
+    # ========== 【自由内容】持仓概览 ==========
+    nb.html("""
+    <div style="background: linear-gradient(90deg, #f3f4f6 0%, #fff 100%); padding: 12px 16px; border-radius: 6px; margin: 12px 0;">
+        <strong>💡 【自由内容提示】</strong> 持仓明细如下，详细数据可点击 Section 查看。
+    </div>
+    """)
+    
+    # ========== 【Section嵌套】持仓明细 ==========
     with nb.section("持仓明细"):
-        nb.text("当前持仓情况：")
         df = pd.DataFrame({
             "代码": ["600000", "000001", "000002"],
             "名称": ["浦发银行", "平安银行", "万科A"],
@@ -296,7 +438,7 @@ def test_comprehensive():
         })
         nb.table(df, title="持仓列表")
     
-    # ==================== 行情数据（冻结列表格） ====================
+    # ========== 【Section嵌套】股票行情 ==========
     with nb.section("股票行情"):
         nb.text("多列表格，冻结左侧2列：")
         wide_data = []
@@ -322,8 +464,11 @@ def test_comprehensive():
             freeze={"left": 2, "right": 0}
         )
     
-    # ==================== 历史记录（折叠表格） ====================
-    with nb.section("历史记录"):
+    # ========== 【自由内容】分隔线 ==========
+    nb.divider()
+    
+    # ========== 【Section嵌套】历史记录（折叠） ==========
+    with nb.section("历史记录", collapsed=True):
         nb.table(
             [
                 {"日期": "2024-01-05", "方向": "买入", "代码": "600000", "价格": 10.5, "数量": 1000},
@@ -331,11 +476,10 @@ def test_comprehensive():
                 {"日期": "2024-02-15", "方向": "买入", "代码": "000001", "价格": 15.0, "数量": 500},
                 {"日期": "2024-03-20", "方向": "卖出", "代码": "000001", "价格": 16.8, "数量": 500},
             ],
-            title="历史交易（点击展开）",
-            collapsed=True
+            title="历史交易"
         )
     
-    # ==================== 策略代码 ====================
+    # ========== 【Section嵌套】策略代码 ==========
     with nb.section("策略代码"):
         nb.code(
             code="""# 策略核心逻辑
@@ -349,16 +493,15 @@ def on_bar(bar):
             output="策略初始化完成\n回测结束"
         )
     
-    # ==================== 风险提示（HTML） ====================
-    with nb.section("风险提示"):
-        nb.html("""
-<div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 6px;">
-    <strong>⚠️ 风险提示</strong>
+    # ========== 【自由内容】风险提示（HTML） ==========
+    nb.html("""
+<div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 6px; margin-top: 20px;">
+    <strong>⚠️ 【自由内容】风险提示</strong>
     <p style="margin: 8px 0 0 0; color: #856404;">
         本报告仅供参考，不构成投资建议。历史业绩不代表未来表现。
     </p>
 </div>
-        """)
+    """)
     
     nb.export_html("d:/01-Doc/程序化/ft2/test_comprehensive.html")
     print("输出: test_comprehensive.html")
@@ -373,14 +516,18 @@ if __name__ == '__main__':
     test_table()
     test_chart()
     test_nested_section()
+    test_deep_nesting()
+    test_collapsible_section()
     test_comprehensive()
     
     print("\n" + "=" * 60)
     print("所有测试完成！")
     print("=" * 60)
     print("\n输出文件:")
-    print("  - test_basic.html      基础内容测试")
-    print("  - test_table.html      表格测试")
-    print("  - test_chart.html      图表测试")
-    print("  - test_nested.html     嵌套Section测试")
+    print("  - test_basic.html          基础内容测试")
+    print("  - test_table.html          表格测试")
+    print("  - test_chart.html          图表测试")
+    print("  - test_nested.html         嵌套Section测试")
+    print("  - test_deep_nesting.html   多层嵌套测试（3层+）")
+    print("  - test_collapsible.html    可折叠Section测试")
     print("  - test_comprehensive.html  综合测试")

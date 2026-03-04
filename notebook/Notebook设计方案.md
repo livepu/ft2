@@ -1,9 +1,9 @@
-# Notebook 可视化设计方案 V4.1
+# Notebook 可视化设计方案 V4.2
 
-> 制定时间：2025-02-27  
-> 修订时间：2026-03-03  
-> 目标：构建统一、规范、简洁的可视化系统  
-> 技术方案：Section 模块化布局 + pyecharts 图表 + Notion 风格样式  
+> 制定时间：2025-02-27
+> 修订时间：2026-03-04
+> 目标：构建统一、规范、简洁的可视化系统
+> 技术方案：Section 模块化布局 + pyecharts 图表 + Notion 风格样式
 > **渲染架构：Vue3 组合式 API + Jinja2 模板**
 > **JSON 规范：content/children 分离，语义清晰**
 
@@ -1074,6 +1074,150 @@ nb.table(df)
 
 ---
 
+## 6. 选择性截图功能
+
+### 6.1 功能需求
+
+用户可以在 TOC 面板中勾选需要截图的内容（支持多选），点击"截图选中"按钮后，将选中内容截图并复制到剪贴板。
+
+### 6.2 技术挑战
+
+| 挑战 | 说明 |
+|------|------|
+| **Vue3 响应式** | `:class` 绑定变化触发虚拟 DOM 更新，可能导致图表重新渲染 |
+| **Canvas 克隆** | `cloneNode()` 无法克隆 Canvas 内容，ECharts 图表会丢失 |
+| **布局变化** | 使用 `display: none` 隐藏元素会触发重排，影响图表尺寸 |
+
+### 6.3 最终方案：独立截图容器 + Canvas 手动复制
+
+#### 架构设计
+
+```
+┌─────────────────────────────────────┐
+│  主体容器 (.notebook-container)      │  ← 用户交互，完全不动
+│  ├── Header                         │
+│  └── Section[]                      │
+└─────────────────────────────────────┘
+                    ↓ cloneNode(true)
+┌─────────────────────────────────────┐
+│  截图容器 (#screenshot-container)    │  ← 隐藏在视口外
+│  position: absolute;                │
+│  left: -99999px;                    │
+│  width: 900px;                      │
+└─────────────────────────────────────┘
+                    ↓ ctx.drawImage()
+                 Canvas 内容复制
+                    ↓ snapdom()
+                 截图输出
+```
+
+#### 核心代码
+
+```javascript
+// 截图功能 - 克隆DOM到专用容器，手动处理Canvas
+const captureScreenshot = async () => {
+    const mainContainer = document.querySelector('.notebook-container');
+    const screenshotContainer = document.getElementById('screenshot-container');
+
+    // 1. 清空截图容器
+    screenshotContainer.innerHTML = '';
+
+    // 2. 收集原始canvas和克隆canvas的对应关系
+    const canvasPairs = [];
+
+    // 辅助函数：克隆元素并记录canvas
+    const cloneWithCanvas = (original) => {
+        const cloned = original.cloneNode(true);
+        const originalCanvases = original.querySelectorAll('canvas');
+        const clonedCanvases = cloned.querySelectorAll('canvas');
+
+        originalCanvases.forEach((origCanvas, i) => {
+            const clonedCanvas = clonedCanvases[i];
+            if (clonedCanvas && origCanvas.width > 0) {
+                canvasPairs.push({ original: origCanvas, cloned: clonedCanvas });
+            }
+        });
+        return cloned;
+    };
+
+    // 3. 克隆选中的内容（头部 + sections）
+    if (selectedIndices.has(-1)) {
+        screenshotContainer.appendChild(cloneWithCanvas(header));
+    }
+    selectedIndices.forEach(index => {
+        const section = document.getElementById('section-' + index);
+        if (section) {
+            screenshotContainer.appendChild(cloneWithCanvas(section));
+        }
+    });
+
+    // 4. 复制Canvas内容（关键步骤！）
+    canvasPairs.forEach(({ original, cloned }) => {
+        const ctx = cloned.getContext('2d');
+        cloned.width = original.width;
+        cloned.height = original.height;
+        ctx.drawImage(original, 0, 0);  // 核心：复制位图数据
+    });
+
+    // 5. 截图
+    const result = await snapdom(screenshotContainer, {
+        scale: 2,
+        backgroundColor: '#f5f5f5',
+        cache: 'auto'
+    });
+
+    // 6. 复制到剪贴板
+    const blob = await result.toBlob({ type: 'png' });
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+
+    // 7. 清空截图容器
+    screenshotContainer.innerHTML = '';
+};
+```
+
+#### HTML 结构
+
+```html
+<!-- 主体容器 -->
+<div class="notebook-container">
+    <div class="notebook-header">...</div>
+    <cell-renderer v-for="..." />
+</div>
+
+<!-- 截图专用容器（隐藏在视口外） -->
+<div id="screenshot-container"
+     class="notebook-container"
+     style="position: absolute; left: -99999px; top: 0; width: 900px;">
+</div>
+```
+
+### 6.4 方案对比
+
+| 方案 | 原理 | 问题 |
+|------|------|------|
+| ❌ CSS `display: none` | 隐藏未选中元素 | 触发重排，图表尺寸变化 |
+| ❌ CSS `visibility: hidden` | 隐藏但保留空间 | 占用空白，截图有空白 |
+| ❌ Vue `:class` 绑定 | 响应式更新 class | Vue 虚拟 DOM 更新可能影响图表 |
+| ✅ **独立截图容器** | 克隆选中内容到新容器 | 主体不动，图表完整，无空白 |
+
+### 6.5 关键技术点
+
+1. **Canvas 克隆问题**
+   - `cloneNode(true)` 只克隆 DOM 结构
+   - Canvas 的绑定数据（如 ECharts 实例）不会复制
+   - 必须用 `ctx.drawImage()` 手动复制位图
+
+2. **截图容器定位**
+   - `position: absolute; left: -99999px` 移出视口
+   - 必须设置固定宽度 `width: 900px` 保证样式正确
+
+3. **主体零干扰**
+   - 主体 DOM 完全不受影响
+   - Vue 组件状态不变
+   - 图表实例保持活跃
+
+---
+
 ## 附录B：版本记录
 
 | 版本 | 日期 | 说明 |
@@ -1084,3 +1228,4 @@ nb.table(df)
 | V3.5 | 2026-03-02 | Alpine 声明式模板 |
 | V4.0 | 2026-03-03 | 重构文档结构：效果 → Python → Vue3 |
 | V4.1 | 2026-03-03 | **JSON 规范优化**：`content`/`children` 分离，`collapsed` 作为 section 可选参数 |
+| V4.2 | 2026-03-04 | **选择性截图**：独立截图容器 + Canvas 手动复制技术方案 |
