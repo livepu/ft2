@@ -737,7 +737,9 @@ function createNotebookApp() {
                         ]);
                         showToast(`已复制 ${selectedIndices.value.size} 个选中区域到剪贴板`, 'success');
                     } catch (clipboardErr) {
-                        console.warn('复制到剪贴板失败，尝试下载:', clipboardErr);
+                        console.error('复制到剪贴板失败:', clipboardErr);
+                        // 自动下载图片
+                        showToast('复制到剪贴板失败，正在下载图片...', 'info');
                         const reader = new FileReader();
                         reader.onload = function(e) {
                             const link = document.createElement('a');
@@ -746,7 +748,6 @@ function createNotebookApp() {
                             link.click();
                         };
                         reader.readAsDataURL(finalBlob);
-                        showToast('已下载截图（剪贴板需要页面焦点）', 'info');
                     }
 
                 } catch (err) {
@@ -832,6 +833,10 @@ function createNotebookApp() {
                 }
 
                 try {
+                    // 截图前确保页面有焦点
+                    window.focus();
+                    document.body.focus();
+                    
                     const result = await snapdom(element, {
                         backgroundColor: '#f5f5f5',
                         scale: 1,
@@ -840,22 +845,24 @@ function createNotebookApp() {
                     
                     const blob = await result.toBlob({ type: 'png' });
                     
+                    // 再次确保焦点
+                    window.focus();
+                    
                     try {
-                        window.focus();
                         await navigator.clipboard.write([
                             new ClipboardItem({ 'image/png': blob })
                         ]);
                         showToast('全页截图已复制到剪贴板', 'success');
                     } catch (err) {
                         console.error('复制到剪贴板失败:', err);
-                        // 降级：下载图片
+                        // 自动下载图片
+                        showToast('复制到剪贴板失败，正在下载图片...', 'info');
                         const url = URL.createObjectURL(blob);
                         const link = document.createElement('a');
                         link.download = `截图_${new Date().toLocaleString().replace(/[/:]/g, '-')}.png`;
                         link.href = url;
                         link.click();
                         URL.revokeObjectURL(url);
-                        showToast('已自动下载截图（剪贴板需要页面焦点）');
                     }
                 } catch (err) {
                     console.error('截图失败:', err);
