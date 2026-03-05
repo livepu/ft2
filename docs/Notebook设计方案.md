@@ -803,11 +803,13 @@ class Cell:
 
 | 场景 | 代码 | 效果 |
 |------|------|------|
-| with 内 | `with nb.section("分析"): nb.table(data, title="明细")` | 添加到 Section，title 保留为小标题 |
+| with 内有 title | `with nb.section("分析"): nb.table(data, title="明细")` | Cell.title = "明细"（小标题） |
 | with 外有 title | `nb.table(data, title="基金列表")` | **自动创建 Section** |
 | with 外无 title | `nb.text("说明文字")` | 普通 Cell，不包装 |
 
 **核心思想**：用户不用显式创建 Section，给 `title` 参数就自动分组。
+
+**架构设计**：详见附录I - CellBuilder/Notebook 职责分离
 
 ---
 
@@ -922,6 +924,7 @@ class Cell:
 | V4.4 | 2026-03-04 | **选择性截图 V2.0**：逐个截图 + Canvas 拼接 |
 | V5.0 | 2026-03-05 | **文档重构**：三段式主体 + 六大附录 |
 | V5.1 | 2026-03-05 | **Chart 参数设计**：参数分层 + PyEcharts 规范 + 输出统一 |
+| V5.2 | 2026-03-05 | **架构重构**：CellBuilder/Notebook 职责分离 + title 统一处理 |
 
 ---
 
@@ -1066,7 +1069,44 @@ def chart(self, chart_type, data, title, height='400px', **kwargs):
 | **渐进式** | 入门简单，深入有路 |
 | **文档复用** | 用户可直接查阅 pyecharts 文档 |
 
-### H.6 数据格式（简化）
+### H.6 容器参数设计
+
+#### pyecharts 输出分层
+
+| 方法 | 输出内容 | 用途 |
+|------|----------|------|
+| `dump_options()` | ECharts 配置 JSON | 数据层，不含容器参数 |
+| `render_embed()` | 完整 HTML | 包含 `<div style="width; height">` 容器 |
+
+#### Notebook 设计
+
+```python
+# Python 输出
+{
+    "charts": {...},      # pyecharts dump_options() → ECharts 配置
+    "width": "100%",      # 我们包装的容器参数
+    "height": "400px"     # 我们包装的容器参数
+}
+```
+
+```javascript
+// 前端使用
+<div :style="{width: content.width, height: content.height}">
+    <!-- ECharts 容器 -->
+</div>
+```
+
+#### 参数分工
+
+| 参数 | 来源 | 管理方 |
+|------|------|--------|
+| `charts` | pyecharts `dump_options()` | pyecharts |
+| `width` | Notebook 参数 | 我们 |
+| `height` | Notebook 参数 | 我们 |
+
+**设计原因**：我们的场景是 Vue3 动态渲染，不是 pyecharts 的独立 HTML 输出，所以容器参数需要我们自己管理。
+
+### H.7 数据格式（简化）
 
 #### line/bar/area
 
@@ -1486,3 +1526,130 @@ nb.pyecharts(line, title='净值曲线', height='600px')
 | **输出标准** | 完全符合 ECharts 规范 |
 | **格式统一** | chart/pyecharts 输出一致，前端处理简单 |
 | **维护简单** | pyecharts 更新时自动兼容 |
+
+---
+
+## 附录I：架构设计 - CellBuilder/Notebook 职责分离
+
+### I.1 设计原则
+
+**核心思想**：Cell 只负责数据，Notebook 负责布局
+
+```
+┌─────────────────────────────────────────────────────┐
+│  CellBuilder                                        │
+│  ├── 只负责构建 Cell 数据                            │
+│  ├── 不涉及 title                                   │
+│  └── 输出：Cell(content, options)                   │
+├─────────────────────────────────────────────────────┤
+│  Notebook._add_cell                                 │
+│  ├── 统一处理 title 逻辑                            │
+│  ├── with 内 → Cell.title = title（小标题）         │
+│  ├── with 外有 title → 自动创建 Section             │
+│  └── with 外无 title → 直接添加 Cell                │
+└─────────────────────────────────────────────────────┘
+```
+
+### I.2 数据流
+
+```python
+# 用户调用
+nb.table(data, title='基金列表')
+    ↓
+# CellBuilder 构建纯数据（无 title）
+cell = CellBuilder.table(data, columns, options)
+    ↓
+# Notebook 处理布局
+_add_cell(cell, title)  # title 只传一次
+```
+
+### I.3 _add_cell 逻辑
+
+| 场景 | 代码 | 效果 |
+|------|------|------|
+| with 内有 title | `with nb.section("分析"): nb.table(data, title="明细")` | Cell.title = "明细"（小标题） |
+| with 外有 title | `nb.table(data, title="基金列表")` | 自动创建 Section |
+| with 外无 title | `nb.text("说明文字")` | 普通 Cell |
+
+### I.4 CellBuilder 方法签名
+
+```python
+class CellBuilder:
+    # 文本类
+    def title(text: str, level: int = 1) -> Cell
+    def text(text: str, style: str = 'normal') -> Cell
+    def markdown(text: str) -> Cell
+    
+    # 代码类
+    def code(code: str, language: str = 'python', output: str = None) -> Cell
+    
+    # 数据类
+    def table(data: List[Dict], columns: List[str] = None, options: dict = None) -> Cell
+    def metrics(data: List[Dict], columns: int = 4) -> Cell
+    
+    # 图表类
+    def chart(chart_type: str, data, height: str = '400px', **kwargs) -> Cell
+    def pyecharts(chart, height: str = '400px', width: str = '100%') -> Cell
+    
+    # 布局类
+    def divider() -> Cell
+    def html(html_content: str) -> Cell
+    def section(title: str, children: List[CellLike] = None, level: int = 1, collapsed: bool = None) -> Section
+```
+
+**关键点**：所有方法都不包含 `title` 参数
+
+### I.5 Notebook 方法签名
+
+```python
+class Notebook:
+    # 文本类
+    def title(self, text: str, level: int = 1) -> Notebook
+    def text(self, text: str, style: str = 'normal') -> Notebook
+    def markdown(self, text: str) -> Notebook
+    
+    # 代码类
+    def code(self, code: str, language: str = 'python', output: str = None) -> Notebook
+    
+    # 数据类
+    def table(self, data, columns=None, title=None, **options) -> Notebook
+    def metrics(self, data, title=None, columns: int = 4) -> Notebook
+    
+    # 图表类
+    def chart(self, chart_type, data, title=None, height='400px', **kwargs) -> Notebook
+    def pyecharts(self, chart, title=None, height='400px', width='100%') -> Notebook
+    
+    # 布局类
+    def divider() -> Notebook
+    def html(html_content: str) -> Notebook
+    def section(self, title: str, collapsed: bool = None) -> SectionContext
+```
+
+**关键点**：数据类和图表类方法包含 `title` 参数，传给 `_add_cell` 统一处理
+
+### I.6 设计优势
+
+| 优势 | 说明 |
+|------|------|
+| **单一职责** | CellBuilder 只管数据，Notebook 只管布局 |
+| **参数简洁** | title 只传一次，不冗余 |
+| **逻辑集中** | title 处理集中在 `_add_cell` 一处 |
+| **易于维护** | 新增 Cell 类型只需关注数据构建 |
+
+### I.7 使用示例
+
+```python
+# 自动创建 Section
+nb.table(data, title='基金列表')
+nb.chart('line', data, title='净值曲线')
+
+# Section 内作为小标题
+with nb.section("分析"):
+    nb.table(data, title='明细')
+    nb.chart('line', data, title='走势')
+
+# 可折叠 Section
+with nb.section("详细数据", collapsed=True):
+    nb.table(data)
+    nb.chart('bar', data)
+```
