@@ -1,3 +1,4 @@
+import os
 from typing import List, Optional, Union
 from pathlib import Path
 from datetime import datetime
@@ -52,11 +53,24 @@ class Notebook:
     """
     
     def __init__(self, title: str = "Notebook Report"):
+        import inspect
+        
         self.nb_title = title
         self.children: List[CellLike] = []
         self.created_at = datetime.now()
         self._cell_counter = 0
         self._section_stack: List[SectionContext] = []
+        
+        caller_frame = None
+        for frame_info in inspect.stack():
+            if frame_info.filename != __file__:
+                caller_frame = frame_info
+                break
+        
+        if caller_frame:
+            self.base_dir = os.path.dirname(os.path.abspath(caller_frame.filename))
+        else:
+            self.base_dir = os.path.dirname(os.path.abspath(__file__))
     
     def _push_section(self, section: SectionContext):
         """进入 Section"""
@@ -282,14 +296,17 @@ class Notebook:
         """导出为JSON"""
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
     
-    def export_html(self, output_path: str, template_path: str = None) -> str:
+    def export_html(self, output_path: str = None, template_path: str = None) -> str:
         """
         导出为HTML文件
         
-        :param output_path: 输出文件路径
+        :param output_path: 输出文件路径，默认输出到 base_dir/{title}.html
         :param template_path: 自定义模板路径
         :return: 输出文件路径
         """
+        if output_path is None:
+            safe_title = self.nb_title.replace('/', '_').replace('\\', '_')
+            output_path = os.path.join(self.base_dir, f"{safe_title}.html")
         if template_path is None:
             template_dir = Path(__file__).parent.parent / 'template'
             template_path = str(template_dir / 'notebook.html')
