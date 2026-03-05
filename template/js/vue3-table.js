@@ -135,8 +135,7 @@ const VueTable = {
       if (multiIndex >= 0) {
         const sort = multiSort.value[multiIndex];
         const icon = sort.order === 'asc' ? '▲' : '▼';
-        const priority = `<span class="sort-priority">${sort.priority}</span>`;
-        return `${icon}${priority}`;
+        return `<span class="sort-stack"><span class="sort-icon">${icon}</span><span class="sort-priority">${sort.priority}</span></span>`;
       }
       
       return '';
@@ -310,46 +309,53 @@ const VueTable = {
       const style = document.createElement('style');
       style.id = styleId;
       style.textContent = `
-        /* 冻结容器 */
+        /* 
+         * 核心功能性样式注入
+         * 设计原则：只注入功能必需样式（position/z-index/shadow），不注入视觉样式（background/color）
+         * 优先级说明：使用双类选择器（权重20）确保功能稳定，同时不影响外部CSS设置颜色字体
+         */
+        
+        /* 冻结容器 - 权重10 */
         .vue-table-freeze {
           overflow-x: auto;
           position: relative;
         }
-        /* 冻结列单元格 */
+        /* 冻结列单元格 - 权重20 */
         .vue-table-freeze .freeze-col {
           position: sticky;
         }
-        /* 表头整体冻结在顶部 */
+        /* 表头整体冻结在顶部 - 权重20 */
         .vue-table-freeze thead th {
           position: sticky;
           top: 0;
           z-index: 10;
         }
-        /* 表头中的冻结列 */
+        /* 表头中的冻结列 - 权重30 */
         .vue-table-freeze thead .freeze-col {
           z-index: 100;
         }
+        /* 表格体中的冻结列 - 权重30 */
         .vue-table-freeze tbody .freeze-col {
           z-index: 50;
         }
-        /* 表格边框 */
+        /* 表格边框 - 权重20 */
         .vue-table-freeze .vue-table {
           border-collapse: separate;
           border-spacing: 0;
         }
-        /* 左侧冻结列阴影 */
+        /* 左侧冻结列阴影 - 权重20 */
         .vue-table-freeze .freeze-left {
           box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
         }
-        /* 右侧冻结列阴影 */
+        /* 右侧冻结列阴影 - 权重20 */
         .vue-table-freeze .freeze-right {
           box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
         }
-        /* 排序指示器基础字体 */
-        .vue-table .sort-indicator {
+        /* 排序指示器基础字体 - 适度优先级 */
+        span.sort-icon {
           font-size: 0.8em;
         }
-        .vue-table .sort-priority {
+        span.sort-priority {
           font-size: 0.7em;
         }
       `;
