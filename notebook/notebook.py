@@ -219,71 +219,98 @@ class Notebook:
     
     # ========== 图表 ==========
     
-    def chart(self, chart_type, data=None, title=None, **options):
+    def chart(self, chart_type, data, title=None, height='400px', **kwargs):
         """
-        添加图表（统一入口）
+        添加图表（pyecharts 简化封装）
         
-        Args:
+        基础参数:
             chart_type: 图表类型
                 - 'line': 折线图
                 - 'area': 面积图
                 - 'bar': 柱状图
                 - 'pie': 饼图
                 - 'heatmap': 热力图
-                - pyecharts 对象: 直接传入，自动识别
-            data: 图表数据（格式因类型而异，参考 ECharts 命名）
-                - line/area/bar: {'xAxis': [...], 'series': [{'name': '', 'data': []}, ...]}
+                - 'kline': K线图
+            data: 图表数据（格式因类型而异）
+                - line/area/bar/kline: {'xAxis': [...], 'series': [{'name': '', 'data': []}, ...]}
                 - pie: [{'name': '', 'value': 0}, ...]
-                - heatmap: {'2024': {'01': 0.05, ...}, ...}
-            title: 标题
-            **options: 可选参数
-                - height: 高度，字符串格式（如 "400px"、"100%"）
-                - width: 宽度，字符串格式（如 "100%"、"900px"）
-                - 其他配置
+                - heatmap: {'2024': {'01': 0.05, ...}, ...} 或 DataFrame
+            title: Cell 标题（推荐填写）
+        
+        容器参数（有默认值）:
+            height: 容器高度，默认 '400px'
+            width: 容器宽度，默认 '100%'
+        
+        全局参数（可选，遵循 pyecharts 规范）:
+            title_opts: 标题配置
+            legend_opts: 图例配置
+            tooltip_opts: 提示框配置
+            xaxis_opts: X轴配置
+            yaxis_opts: Y轴配置
+            datazoom_opts: 数据缩放
+            visualmap_opts: 视觉映射
+            grid_opts: 网格配置
+        
+        系列参数（可选，统一应用到所有系列）:
+            series_opts: 系列配置
         
         Examples:
             # 折线图
-            nb.chart('line', {'xAxis': dates, 'series': series})
+            nb.chart('line', {'xAxis': dates, 'series': series}, title='净值曲线')
             
             # 柱状图
-            nb.chart('bar', {'xAxis': categories, 'series': series})
+            nb.chart('bar', {'xAxis': categories, 'series': series}, title='收益分布')
             
             # 饼图
-            nb.chart('pie', [{'name': '股票', 'value': 60}, ...])
+            nb.chart('pie', [{'name': '股票', 'value': 60}, ...], title='资产配置')
             
             # 热力图
-            nb.chart('heatmap', monthly_returns)
+            nb.chart('heatmap', monthly_returns, title='月度收益')
             
-            # pyecharts 对象（自动识别，尊重原版参数类型）
-            # 方式一：通过 pyecharts 对象设置尺寸
-            kline = Candlestick(init_opts=opts.InitOpts(width="100%", height="600px"))
-            nb.chart(kline)
+            # K线图
+            nb.chart('kline', {'xAxis': dates, 'series': [kline_data]}, title='K线')
             
-            # 方式二：通过外部参数覆盖
-            nb.chart(kline, height="500px", width="100%")
+            # 带可选参数
+            nb.chart('line', data, title='净值曲线',
+                yaxis_opts={'min_': 0.9},
+                series_opts={'is_smooth': True}
+            )
+            
+            # 高级需求 → 使用 pyecharts() 方法
+            # from pyecharts.charts import Line
+            # line = Line()
+            # line.add_xaxis([...])
+            # line.add_yaxis(...)
+            # nb.pyecharts(line, title='净值曲线')
         """
-        if hasattr(chart_type, 'dump_options'):
-            return self._add_cell(CellBuilder.pyecharts(chart_type, title, **options), title)
-        
-        if chart_type == 'heatmap':
-            return self._add_cell(CellBuilder.heatmap(data, title, **options), title)
-        
-        return self._add_cell(CellBuilder.chart(chart_type, data, title, **options), title)
+        return self._add_cell(CellBuilder.chart(chart_type, data, title, height, **kwargs), title)
     
-    # ========== 热力图 ==========
-    
-    def heatmap(self, data, title=None, **options) -> 'Notebook':
+    def pyecharts(self, chart, title=None, height='400px', width='100%'):
         """
-        添加热力图
+        添加 pyecharts 对象（高级需求）
         
         Args:
-            data: 数据源，支持格式：
-                - dict: 嵌套字典 {y: {x: value, ...}, ...}
-                - DataFrame: 第一列作为Y轴，其余列作为X轴
-            title: 标题
-            **options: 其他配置
+            chart: pyecharts 图表对象（如 Line, Bar, Pie 等）
+            title: Cell 标题（推荐填写）
+            height: 容器高度，默认 '400px'
+            width: 容器宽度，默认 '100%'
+        
+        Returns:
+            Notebook: 支持链式调用
+        
+        Examples:
+            from pyecharts.charts import Line
+            from pyecharts import options as opts
+            
+            line = Line()
+            line.add_xaxis(['1月', '2月', '3月'])
+            line.add_yaxis('策略', [1.0, 1.05, 1.08], is_smooth=True)
+            line.add_yaxis('基准', [1.0, 1.02, 1.04], is_smooth=False)
+            line.set_global_opts(yaxis_opts=opts.AxisOpts(min_=0.9))
+            
+            nb.pyecharts(line, title='净值曲线')
         """
-        return self._add_cell(CellBuilder.heatmap(data, title, **options), title)
+        return self._add_cell(CellBuilder.pyecharts(chart, title, height, width), title)
     
     # ========== HTML ==========
     
