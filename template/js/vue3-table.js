@@ -345,16 +345,12 @@ const VueTable = {
         .vue-table-freeze .freeze-right {
           box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
         }
-        /* 排序指示器 */
+        /* 排序指示器基础字体 */
         .vue-table .sort-indicator {
-          margin-left: 4px;
-          font-size: 12px;
+          font-size: 0.8em;
         }
-        /* 排序优先级数字 */
         .vue-table .sort-priority {
-          font-size: 10px;
-          color: #999;
-          margin-left: 2px;
+          font-size: 0.7em;
         }
       `;
       document.head.appendChild(style);
