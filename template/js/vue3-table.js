@@ -38,8 +38,6 @@ const VueTable = {
     // ========== 响应式数据 ==========
     const currentPage = ref(1);
     const pageSize = ref(props.pagination?.pageSize || 20);
-    const sortField = ref('');
-    const sortOrder = ref('asc');
     const multiSort = ref([]);
     const tableContainer = ref(null);
     const resizeObserver = ref(null);
@@ -48,27 +46,19 @@ const VueTable = {
     
     // 排序后的数据
     const sortedData = computed(() => {
-      if (!sortField.value && multiSort.value.length === 0) {
+      if (multiSort.value.length === 0) {
         return props.dataSource;
       }
       
       return [...props.dataSource].sort((a, b) => {
-        // 优先使用多字段排序
-        if (multiSort.value.length > 0) {
-          for (const sort of multiSort.value) {
-            const v1 = a[sort.field];
-            const v2 = b[sort.field];
-            if (v1 !== v2) {
-              return sort.order === 'asc' ? (v1 > v2 ? 1 : -1) : (v1 < v2 ? 1 : -1);
-            }
+        for (const sort of multiSort.value) {
+          const v1 = a[sort.field];
+          const v2 = b[sort.field];
+          if (v1 !== v2) {
+            return sort.order === 'asc' ? (v1 > v2 ? 1 : -1) : (v1 < v2 ? 1 : -1);
           }
-          return 0;
         }
-        
-        // 单字段排序
-        const v1 = a[sortField.value];
-        const v2 = b[sortField.value];
-        return sortOrder.value === 'asc' ? (v1 > v2 ? 1 : -1) : (v1 < v2 ? 1 : -1);
+        return 0;
       });
     });
 
@@ -115,46 +105,25 @@ const VueTable = {
 
     // ========== 方法 ==========
     
-    // 单字段排序
+    // 排序处理 - 按点击顺序形成优先级
+    // 点击顺序 = 排序优先级
+    // 重复点击：切换方向 → 取消排序
     const handleSort = (col) => {
-      const field = col.field;
-      
-      if (sortField.value === field) {
-        // 切换排序方向
-        if (sortOrder.value === 'asc') {
-          sortOrder.value = 'desc';
-        } else if (sortOrder.value === 'desc') {
-          sortOrder.value = '';
-          sortField.value = '';
-        }
-      } else {
-        sortField.value = field;
-        sortOrder.value = 'asc';
-      }
-      
-      // 重置到第一页
-      currentPage.value = 1;
-    };
-
-    // 多字段排序（Ctrl+点击）
-    const handleMultiSort = (col, event) => {
-      if (!event.ctrlKey && !event.metaKey) {
-        handleSort(col);
-        return;
-      }
-      
       const field = col.field;
       const existingIndex = multiSort.value.findIndex(s => s.field === field);
       
       if (existingIndex >= 0) {
         const existing = multiSort.value[existingIndex];
-        if (existing.order === 'asc') {
-          existing.order = 'desc';
+        if (existing.order === 'desc') {
+          existing.order = 'asc';
         } else {
           multiSort.value.splice(existingIndex, 1);
+          multiSort.value.forEach((item, idx) => {
+            item.priority = idx + 1;
+          });
         }
       } else {
-        multiSort.value.push({ field, order: 'asc', priority: multiSort.value.length + 1 });
+        multiSort.value.push({ field, order: 'desc', priority: multiSort.value.length + 1 });
       }
       
       currentPage.value = 1;
@@ -162,17 +131,12 @@ const VueTable = {
 
     // 获取排序指示器
     const getSortIndicator = (col) => {
-      // 单字段排序
-      if (sortField.value === col.field) {
-        return sortOrder.value === 'asc' ? '▲' : '▼';
-      }
-      
-      // 多字段排序
       const multiIndex = multiSort.value.findIndex(s => s.field === col.field);
       if (multiIndex >= 0) {
         const sort = multiSort.value[multiIndex];
-        const priority = multiSort.value.length > 1 ? `<span class="sort-priority">${sort.priority}</span>` : '';
-        return `${priority}${sort.order === 'asc' ? '▲' : '▼'}`;
+        const icon = sort.order === 'asc' ? '▲' : '▼';
+        const priority = `<span class="sort-priority">${sort.priority}</span>`;
+        return `${icon}${priority}`;
       }
       
       return '';
@@ -381,6 +345,17 @@ const VueTable = {
         .vue-table-freeze .freeze-right {
           box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
         }
+        /* 排序指示器 */
+        .vue-table .sort-indicator {
+          margin-left: 4px;
+          font-size: 12px;
+        }
+        /* 排序优先级数字 */
+        .vue-table .sort-priority {
+          font-size: 10px;
+          color: #999;
+          margin-left: 2px;
+        }
       `;
       document.head.appendChild(style);
     };
@@ -396,7 +371,6 @@ const VueTable = {
       hasFreeze,
       pageSizeOptions,
       handleSort,
-      handleMultiSort,
       getSortIndicator,
       isFreezeCol,
       getFreezeClass,
@@ -421,7 +395,7 @@ const VueTable = {
                 v-for="(col, index) in displayColumns" 
                 :key="col.field"
                 :class="getFreezeClass(index)"
-                @click="handleMultiSort(col, $event)"
+                @click="handleSort(col)"
               >
                 {{ col.title }}
                 <span class="sort-indicator" v-html="getSortIndicator(col)"></span>
