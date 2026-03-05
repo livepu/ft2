@@ -205,12 +205,16 @@ class Notebook:
     
     # ========== 指标卡片 ==========
     
-    def metrics(self, data: List[dict], title: str = None, columns: int = 4) -> 'Notebook':
+    def metrics(self, data, title: str = None, columns: int = 4) -> 'Notebook':
         """
         添加指标卡片
 
-        data格式: [{'name': '指标名', 'value': '指标值', 'desc': '说明'}, ...]
+        data格式:
+            - List[Dict]: [{'name': '指标名', 'value': '指标值'}, ...]  # 本质
+            - Dict: {'指标名': '指标值', ...}  # 便捷输入，自动转换
         """
+        if isinstance(data, dict):
+            data = [{'name': k, 'value': str(v)} for k, v in data.items()]
         return self._add_cell(CellBuilder.metrics(data, title, columns), title)
     
     # ========== 图表 ==========
