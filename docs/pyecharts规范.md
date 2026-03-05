@@ -1439,3 +1439,524 @@ chart.chart_id  # -> 自动生成的 UUID
 - **PyEcharts 版本**: 2.1.0
 - **文档基于**: pyecharts 源码分析
 - **生成时间**: 2026-03-05
+
+---
+
+## 13. 完整实例
+
+### 13.1 折线图 (Line) 完整实例
+
+```python
+from pyecharts.charts import Line
+from pyecharts import options as opts
+from pyecharts.globals import ThemeType
+
+# 创建图表（容器配置）
+line = Line(init_opts=opts.InitOpts(
+    width="100%",
+    height="500px",
+    theme=ThemeType.WHITE,
+    renderer="canvas"
+))
+
+# 添加 X 轴数据
+line.add_xaxis(["1月", "2月", "3月", "4月", "5月", "6月"])
+
+# 添加 Y 轴数据（系列1）
+line.add_yaxis(
+    series_name="策略净值",
+    y_axis=[1.0, 1.05, 1.12, 1.08, 1.15, 1.22],
+    # 系列配置
+    is_smooth=True,                    # 平滑曲线
+    is_symbol_show=True,               # 显示标记点
+    symbol="circle",                   # 标记形状
+    symbol_size=6,                     # 标记大小
+    # 样式配置
+    linestyle_opts=opts.LineStyleOpts(
+        width=2,
+        type_="solid"
+    ),
+    # 标签配置
+    label_opts=opts.LabelOpts(
+        is_show=False
+    ),
+    # 标记点
+    markpoint_opts=opts.MarkPointOpts(
+        data=[
+            opts.MarkPointItem(type_="max", name="最大值"),
+            opts.MarkPointItem(type_="min", name="最小值")
+        ]
+    ),
+    # 标记线
+    markline_opts=opts.MarkLineOpts(
+        data=[
+            opts.MarkLineItem(type_="average", name="平均值")
+        ]
+    ),
+    # 面积填充
+    areastyle_opts=opts.AreaStyleOpts(opacity=0.1)
+)
+
+# 添加 Y 轴数据（系列2）
+line.add_yaxis(
+    series_name="基准净值",
+    y_axis=[1.0, 1.02, 1.04, 1.05, 1.06, 1.08],
+    is_smooth=True,
+    linestyle_opts=opts.LineStyleOpts(
+        width=2,
+        type_="dashed"
+    )
+)
+
+# 全局配置
+line.set_global_opts(
+    # 标题
+    title_opts=opts.TitleOpts(
+        title="净值曲线",
+        subtitle="策略 vs 基准",
+        pos_left="center"
+    ),
+    # 图例
+    legend_opts=opts.LegendOpts(
+        is_show=True,
+        pos_top="bottom",
+        orient="horizontal"
+    ),
+    # 提示框
+    tooltip_opts=opts.TooltipOpts(
+        is_show=True,
+        trigger="axis",
+        axis_pointer_type="cross"
+    ),
+    # X轴
+    xaxis_opts=opts.AxisOpts(
+        name="月份",
+        type_="category",
+        axislabel_opts=opts.LabelOpts(rotate=0)
+    ),
+    # Y轴
+    yaxis_opts=opts.AxisOpts(
+        name="净值",
+        type_="value",
+        min_=0.9,
+        max_=1.3,
+        splitline_opts=opts.SplitLineOpts(is_show=True)
+    ),
+    # 数据缩放
+    datazoom_opts=[
+        opts.DataZoomOpts(
+            is_show=True,
+            type_="slider",
+            pos_bottom="10%",
+            range_start=0,
+            range_end=100
+        ),
+        opts.DataZoomOpts(
+            type_="inside",
+            range_start=0,
+            range_end=100
+        )
+    ],
+    # 网格
+    grid_opts=opts.GridOpts(
+        pos_left="3%",
+        pos_right="4%",
+        pos_bottom="15%",
+        pos_top="15%",
+        contain_label=True
+    )
+)
+
+# 输出
+line.render("line.html")
+# 或获取 JSON
+options_json = line.dump_options()
+```
+
+### 13.2 柱状图 (Bar) 完整实例
+
+```python
+from pyecharts.charts import Bar
+from pyecharts import options as opts
+
+# 创建图表
+bar = Bar(init_opts=opts.InitOpts(
+    width="100%",
+    height="400px"
+))
+
+# 添加 X 轴
+bar.add_xaxis(["1月", "2月", "3月", "4月", "5月", "6月"])
+
+# 添加 Y 轴（系列1）
+bar.add_yaxis(
+    series_name="收益",
+    y_axis=[5.2, -2.1, 8.3, 4.5, -1.2, 6.8],
+    # 柱状图特有参数
+    bar_width="40%",                    # 柱宽
+    category_gap="20%",                 # 类目间距
+    # 样式
+    itemstyle_opts=opts.ItemStyleOpts(
+        color="#5470c6"
+    ),
+    # 标签
+    label_opts=opts.LabelOpts(
+        is_show=True,
+        position="top",
+        formatter="{c}%"
+    ),
+    # 标记线
+    markline_opts=opts.MarkLineOpts(
+        data=[
+            opts.MarkLineItem(type_="average", name="平均")
+        ]
+    )
+)
+
+# 添加 Y 轴（系列2 - 堆叠）
+bar.add_yaxis(
+    series_name="成本",
+    y_axis=[1.2, 1.5, 1.8, 2.0, 1.6, 2.2],
+    stack="total",
+    itemstyle_opts=opts.ItemStyleOpts(color="#91cc75")
+)
+
+# 全局配置
+bar.set_global_opts(
+    title_opts=opts.TitleOpts(title="月度收益"),
+    tooltip_opts=opts.TooltipOpts(trigger="axis"),
+    xaxis_opts=opts.AxisOpts(name="月份"),
+    yaxis_opts=opts.AxisOpts(
+        name="收益率(%)",
+        axislabel_opts=opts.LabelOpts(formatter="{value}%")
+    ),
+    legend_opts=opts.LegendOpts(pos_top="top")
+)
+
+bar.render("bar.html")
+```
+
+### 13.3 饼图 (Pie) 完整实例
+
+```python
+from pyecharts.charts import Pie
+from pyecharts import options as opts
+
+# 创建图表
+pie = Pie(init_opts=opts.InitOpts(
+    width="100%",
+    height="400px"
+))
+
+# 添加数据
+pie.add(
+    series_name="资产配置",
+    data_pair=[
+        ("股票", 60),
+        ("债券", 25),
+        ("现金", 10),
+        ("其他", 5)
+    ],
+    # 布局
+    center=["50%", "50%"],              # 圆心位置
+    radius=["40%", "70%"],              # 内外半径（环形图）
+    # 玫瑰图（可选）
+    # rosetype="radius",
+    # 选中效果
+    selected_mode="single",
+    selected_offset=10,
+    # 标签
+    label_opts=opts.LabelOpts(
+        is_show=True,
+        position="outside",
+        formatter="{b}: {c}万 ({d}%)"
+    ),
+    # 引导线
+    label_line_opts=opts.LabelLineOpts(
+        is_show=True,
+        length=10,
+        length_2=15
+    ),
+    # 样式
+    itemstyle_opts=opts.ItemStyleOpts(
+        border_width=2,
+        border_color="#fff"
+    )
+)
+
+# 全局配置
+pie.set_global_opts(
+    title_opts=opts.TitleOpts(
+        title="资产配置",
+        pos_left="center"
+    ),
+    legend_opts=opts.LegendOpts(
+        is_show=True,
+        orient="vertical",
+        pos_left="left",
+        pos_top="middle"
+    ),
+    tooltip_opts=opts.TooltipOpts(
+        trigger="item",
+        formatter="{b}: {c}万 ({d}%)"
+    )
+)
+
+pie.render("pie.html")
+```
+
+### 13.4 热力图 (HeatMap) 完整实例
+
+```python
+from pyecharts.charts import HeatMap
+from pyecharts import options as opts
+import random
+
+# 创建图表
+heatmap = HeatMap(init_opts=opts.InitOpts(
+    width="100%",
+    height="500px"
+))
+
+# 准备数据
+# 格式: [[x_index, y_index, value], ...]
+years = ["2021", "2022", "2023", "2024"]
+months = ["1月", "2月", "3月", "4月", "5月", "6月", 
+          "7月", "8月", "9月", "10月", "11月", "12月"]
+
+data = []
+for i, year in enumerate(years):
+    for j, month in enumerate(months):
+        value = round(random.uniform(-10, 15), 1)
+        data.append([j, i, value])
+
+# 添加 X 轴
+heatmap.add_xaxis(months)
+
+# 添加数据
+heatmap.add_yaxis(
+    series_name="收益率",
+    yaxis_data=years,
+    value=data,
+    # 样式
+    itemstyle_opts=opts.ItemStyleOpts(
+        opacity=0.9
+    ),
+    label_opts=opts.LabelOpts(
+        is_show=True,
+        formatter="{c}%"
+    )
+)
+
+# 全局配置
+heatmap.set_global_opts(
+    title_opts=opts.TitleOpts(title="月度收益热力图"),
+    tooltip_opts=opts.TooltipOpts(
+        trigger="item",
+        formatter="{b}年 {c}%"
+    ),
+    xaxis_opts=opts.AxisOpts(
+        type_="category",
+        name="月份",
+        split_area_opts=opts.SplitAreaOpts(is_show=True)
+    ),
+    yaxis_opts=opts.AxisOpts(
+        type_="category",
+        name="年份",
+        split_area_opts=opts.SplitAreaOpts(is_show=True)
+    ),
+    # 视觉映射（热力图核心）
+    visualmap_opts=opts.VisualMapOpts(
+        is_show=True,
+        min_=-10,
+        max_=15,
+        is_calculable=True,
+        orient="horizontal",
+        pos_left="center",
+        pos_bottom="5%",
+        # 分段颜色
+        range_color=["#313695", "#4575b4", "#74add1", "#abd9e9", 
+                     "#e0f3f8", "#ffffbf", "#fee090", "#fdae61", 
+                     "#f46d43", "#d73027", "#a50026"]
+    )
+)
+
+heatmap.render("heatmap.html")
+```
+
+### 13.5 K线图 (Candlestick) 完整实例
+
+```python
+from pyecharts.charts import Kline, Line, Grid
+from pyecharts import options as opts
+
+# K线数据: [open, close, low, high]
+kline_data = [
+    [2320.26, 2320.26, 2287.3, 2362.94],
+    [2300, 2291.3, 2288.26, 2308.38],
+    [2295.35, 2346.5, 2295.35, 2346.92],
+    [2347.22, 2358.98, 2337.35, 2363.8],
+    [2360.75, 2382.48, 2347.89, 2383.76],
+]
+
+dates = ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"]
+
+# 创建 K 线图
+kline = Kline(init_opts=opts.InitOpts(
+    width="100%",
+    height="400px"
+))
+
+kline.add_xaxis(dates)
+kline.add_yaxis(
+    series_name="K线",
+    y_axis=kline_data,
+    itemstyle_opts=opts.ItemStyleOpts(
+        color="#ec0000",           # 阳线颜色
+        color0="#00da3c",          # 阴线颜色
+        border_color="#ec0000",
+        border_color0="#00da3c"
+    ),
+    markline_opts=opts.MarkLineOpts(
+        data=[
+            opts.MarkLineItem(type_="max", name="最高"),
+            opts.MarkLineItem(type_="min", name="最低")
+        ]
+    )
+)
+
+kline.set_global_opts(
+    title_opts=opts.TitleOpts(title="K线图"),
+    xaxis_opts=opts.AxisOpts(is_scale=True),
+    yaxis_opts=opts.AxisOpts(
+        is_scale=True,
+        splitarea_opts=opts.SplitAreaOpts(is_show=True)
+    ),
+    datazoom_opts=[
+        opts.DataZoomOpts(type_="inside", xaxis_index=[0]),
+        opts.DataZoomOpts(type_="slider", xaxis_index=[0])
+    ],
+    tooltip_opts=opts.TooltipOpts(
+        trigger="axis",
+        axis_pointer_type="cross"
+    )
+)
+
+kline.render("kline.html")
+```
+
+### 13.6 组合图 (Grid) 完整实例
+
+```python
+from pyecharts.charts import Bar, Line, Grid
+from pyecharts import options as opts
+
+# 创建柱状图
+bar = Bar()
+bar.add_xaxis(["1月", "2月", "3月", "4月", "5月", "6月"])
+bar.add_yaxis("成交量", [200, 180, 250, 300, 280, 320])
+bar.extend_axis(
+    yaxis=opts.AxisOpts(
+        name="价格",
+        type_="value",
+        position="right"
+    )
+)
+bar.set_global_opts(
+    yaxis_opts=opts.AxisOpts(name="成交量"),
+    tooltip_opts=opts.TooltipOpts(trigger="axis")
+)
+
+# 创建折线图
+line = Line()
+line.add_xaxis(["1月", "2月", "3月", "4月", "5月", "6月"])
+line.add_yaxis(
+    "价格",
+    [10.5, 11.2, 12.0, 11.8, 13.2, 14.5],
+    yaxis_index=1,
+    label_opts=opts.LabelOpts(is_show=False)
+)
+
+# 组合
+bar.overlap(line)
+bar.render("combo.html")
+```
+
+---
+
+## 14. Notebook.chart 对应的简化用法
+
+### 14.1 折线图
+
+```python
+# Notebook 简化用法
+nb.chart('line', {
+    'xAxis': ["1月", "2月", "3月", "4月", "5月", "6月"],
+    'series': [
+        {'name': '策略净值', 'data': [1.0, 1.05, 1.12, 1.08, 1.15, 1.22]},
+        {'name': '基准净值', 'data': [1.0, 1.02, 1.04, 1.05, 1.06, 1.08]}
+    ]
+}, 
+    title='净值曲线',
+    height='500px',
+    yaxis_opts={'name': '净值', 'min_': 0.9, 'max_': 1.3},
+    series_opts={'is_smooth': True}
+)
+```
+
+### 14.2 柱状图
+
+```python
+nb.chart('bar', {
+    'xAxis': ["1月", "2月", "3月", "4月", "5月", "6月"],
+    'series': [
+        {'name': '收益', 'data': [5.2, -2.1, 8.3, 4.5, -1.2, 6.8]}
+    ]
+},
+    title='月度收益',
+    yaxis_opts={'name': '收益率(%)'}
+)
+```
+
+### 14.3 饼图
+
+```python
+nb.chart('pie', [
+    {'name': '股票', 'value': 60},
+    {'name': '债券', 'value': 25},
+    {'name': '现金', 'value': 10},
+    {'name': '其他', 'value': 5}
+],
+    title='资产配置',
+    height='400px'
+)
+```
+
+### 14.4 热力图
+
+```python
+# 嵌套字典格式（简化）
+nb.heatmap({
+    '2023': {'1月': 0.02, '2月': -0.01, '3月': 0.03},
+    '2024': {'1月': 0.05, '2月': -0.02, '3月': 0.08}
+}, title='月度收益热力图')
+```
+
+### 14.5 高级需求 → pyecharts
+
+```python
+# 需要独立配置系列时
+from pyecharts.charts import Line
+from pyecharts import options as opts
+
+line = Line()
+line.add_xaxis(["1月", "2月", "3月"])
+line.add_yaxis('策略', [1.0, 1.05, 1.12], is_smooth=True)
+line.add_yaxis('基准', [1.0, 1.02, 1.04], is_smooth=False)
+line.set_global_opts(
+    title_opts=opts.TitleOpts(title='净值曲线'),
+    yaxis_opts=opts.AxisOpts(min_=0.9)
+)
+
+nb.pyecharts(line, height='500px')
+```
