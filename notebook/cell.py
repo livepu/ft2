@@ -33,10 +33,6 @@ class CellType(Enum):
 
 CONTAINER_TYPES = {CellType.SECTION}
 
-CellLike = Union[Cell, 'Section']
-
-
-# ========== 数据类 ==========
 
 @dataclass
 class Cell:
@@ -76,6 +72,9 @@ class Section:
         if self.options:
             result["options"] = self.options
         return result
+
+
+CellLike = Union[Cell, 'Section']
 
 
 # ========== 图表构建辅助函数 ==========
