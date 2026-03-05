@@ -86,12 +86,64 @@ const CellRenderer = {
             return opts;
         };
 
+        // 获取图表类型（从 pyecharts 的 charts 配置中提取）
+        const getChartType = (content) => {
+            return content.charts?.series?.[0]?.type || null;
+        };
+
+        // 从 pyecharts 配置中提取核心数据，转换为 buildChartOption 格式
+        const extractChartData = (charts) => {
+            if (!charts || !charts.series || !charts.series[0]) return null;
+            
+            const series = charts.series;
+            const chartType = series[0].type;
+            
+            if (chartType === 'line' || chartType === 'bar') {
+                const xAxisData = charts.xAxis?.[0]?.data || [];
+                const extractedSeries = series.map(s => {
+                    let data = s.data || [];
+                    if (data.length > 0 && Array.isArray(data[0])) {
+                        data = data.map(d => d[1]);
+                    }
+                    return { name: s.name, data };
+                });
+                return {
+                    chart_type: chartType,
+                    xAxis: xAxisData,
+                    series: extractedSeries
+                };
+            }
+            
+            if (chartType === 'pie') {
+                return {
+                    chart_type: 'pie',
+                    data: series[0].data || []
+                };
+            }
+            
+            if (chartType === 'heatmap') {
+                const xAxisData = charts.xAxis?.[0]?.data || [];
+                const yAxisData = charts.yAxis?.[0]?.data || [];
+                const heatmapRawData = series[0].data || [];
+                const heatmapDict = {};
+                yAxisData.forEach((year, yIdx) => {
+                    heatmapDict[year] = {};
+                    xAxisData.forEach((month, mIdx) => {
+                        const point = heatmapRawData.find(p => p[0] === mIdx && p[1] === yIdx);
+                        heatmapDict[year][month] = point ? point[2] : 0;
+                    });
+                });
+                return {
+                    chart_type: 'heatmap',
+                    data: heatmapDict
+                };
+            }
+            
+            return null;
+        };
+
         // 初始化图表
         const initChart = () => {
-            console.log('initChart called for cell type:', props.cell.type);
-            console.log('chartRef.value:', chartRef.value);
-            console.log('cell.content:', props.cell.content);
-            
             if (!chartRef.value || !props.cell.content) {
                 console.warn('Chart init skipped: no chartRef or content');
                 return;
@@ -99,20 +151,40 @@ const CellRenderer = {
 
             const cell = props.cell;
             const content = cell.content;
-
-            if (cell.type === 'chart' || cell.type === 'pyecharts') {
-                chartInstance = echarts.init(chartRef.value);
-                
-                // Python 端已通过 pyecharts 生成完整配置，直接使用
-                if (content.charts) {
-                    chartInstance.setOption(content.charts);
-                } else {
-                    // 兼容旧格式
-                    const chartType = content.chart_type || content.type;
-                    const option = buildChartOption(cell.type, chartType, content.data || content, cell.options, heatmapMultiplier.value, pieShowValue.value, pieShowPercent.value);
-                    chartInstance.setOption(option);
-                }
+            chartInstance = echarts.init(chartRef.value);
+            
+            if (!content.charts) {
+                console.warn('Chart init skipped: no charts config');
+                return;
             }
+            
+            const extracted = extractChartData(content.charts);
+            if (!extracted) {
+                chartInstance.setOption(content.charts);
+                return;
+            }
+            
+            const chartType = extracted.chart_type;
+            const data = extracted.data || extracted;
+            
+            if (chartType === 'pie') {
+                pieRawData.value = extracted.data;
+            }
+            if (chartType === 'heatmap') {
+                heatmapRawData.value = extracted.data;
+                heatmapMultiplier.value = 1;
+            }
+            
+            const option = buildChartOption(
+                chartType === 'heatmap' ? 'heatmap' : 'chart',
+                chartType,
+                data,
+                cell.options,
+                heatmapMultiplier.value,
+                pieShowValue.value,
+                pieShowPercent.value
+            );
+            chartInstance.setOption(option);
         };
         
         // 更新热力图（当放大倍数改变时）
@@ -378,7 +450,8 @@ const CellRenderer = {
             renderMarkdown,
             getMetricClass,
             getTableCols,
-            getTableOptions
+            getTableOptions,
+            getChartType
         };
     },
     template: `
@@ -470,13 +543,13 @@ const CellRenderer = {
             </div>
             
             <!-- 饼图（带显示控制） -->
-            <div v-else-if="cell.type === 'chart' && cell.content?.chart_type === 'pie'" 
+            <div v-else-if="cell.content?.charts && getChartType(cell.content) === 'pie'" 
                  class="cell-chart pie-with-control">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
                 <div class="pie-wrapper">
                     <div ref="chartRef" 
                          class="chart-container"
-                         :style="{'--height': (cell.options?.height || 400) + 'px'}">
+                         :style="{'--height': (cell.content?.height || cell.options?.height || 400) + 'px'}">
                     </div>
                     <div class="pie-control">
                         <div class="control-label">显示选项</div>
@@ -500,27 +573,14 @@ const CellRenderer = {
                 </div>
             </div>
             
-            <!-- 其他图表 -->
-            <div v-else-if="cell.type === 'chart' || cell.type === 'pyecharts'" 
-                 class="cell-chart">
-                <h3 v-if="cell.title">{{ cell.title }}</h3>
-                <div ref="chartRef" 
-                     class="chart-container"
-                     :style="{
-                         width: cell.content?.width || '100%',
-                         height: cell.content?.height || (cell.options?.height || 400) + 'px'
-                     }">
-                </div>
-            </div>
-            
             <!-- 热力图（带放大倍数控制） -->
-            <div v-else-if="cell.type === 'heatmap'" 
+            <div v-else-if="cell.content?.charts && getChartType(cell.content) === 'heatmap'" 
                  class="cell-chart heatmap-with-control">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
                 <div class="heatmap-wrapper">
                     <div ref="chartRef" 
                          class="chart-container"
-                         :style="{'--height': (cell.options?.height || 400) + 'px'}">
+                         :style="{'--height': (cell.content?.height || cell.options?.height || 400) + 'px'}">
                     </div>
                     <div class="heatmap-control">
                         <div class="control-label">数据缩放</div>
@@ -547,6 +607,19 @@ const CellRenderer = {
                             </button>
                         </div>
                     </div>
+                </div>
+            </div>
+            
+            <!-- 其他图表（折线图、柱状图等） -->
+            <div v-else-if="(cell.type === 'chart' || cell.type === 'pyecharts') && cell.content?.charts" 
+                 class="cell-chart">
+                <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div ref="chartRef" 
+                     class="chart-container"
+                     :style="{
+                         width: cell.content?.width || '100%',
+                         height: cell.content?.height || (cell.options?.height || 400) + 'px'
+                     }">
                 </div>
             </div>
             
