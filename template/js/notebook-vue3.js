@@ -100,29 +100,18 @@ const CellRenderer = {
             const cell = props.cell;
             const content = cell.content;
 
-            if (cell.type === 'chart' || cell.type === 'heatmap') {
-                const chartType = content.chart_type || content.type;
-                console.log('Initializing chart with type:', chartType, 'data:', content.data);
+            if (cell.type === 'chart' || cell.type === 'pyecharts') {
                 chartInstance = echarts.init(chartRef.value);
                 
-                // 热力图特殊处理：保存原始数据，默认使用原始数据（×1）
-                if (cell.type === 'heatmap') {
-                    heatmapRawData.value = content.data || content;
-                    // 默认选中原始数据（×1），不自动放大
-                    heatmapMultiplier.value = 1;
+                // Python 端已通过 pyecharts 生成完整配置，直接使用
+                if (content.charts) {
+                    chartInstance.setOption(content.charts);
+                } else {
+                    // 兼容旧格式
+                    const chartType = content.chart_type || content.type;
+                    const option = buildChartOption(cell.type, chartType, content.data || content, cell.options, heatmapMultiplier.value, pieShowValue.value, pieShowPercent.value);
+                    chartInstance.setOption(option);
                 }
-                
-                // 饼图特殊处理：保存原始数据
-                if (chartType === 'pie') {
-                    pieRawData.value = content.data || content;
-                }
-                
-                const option = buildChartOption(cell.type, chartType, content.data || content, cell.options, heatmapMultiplier.value, pieShowValue.value, pieShowPercent.value);
-                chartInstance.setOption(option);
-            } else if (cell.type === 'pyecharts') {
-                chartInstance = echarts.init(chartRef.value);
-                // 使用 content.option 作为 echarts 配置
-                chartInstance.setOption(content.option || content);
             }
         };
         
