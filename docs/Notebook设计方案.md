@@ -968,10 +968,10 @@ ft2/
 │  option = json.loads(line.dump_options())                        │
 │                         ↓                                        │
 │  封装为 Notebook JSON                                            │
-│  {"type": "chart", "content": {"option": {...}, "height": ...}} │
+│  {"type": "chart", "content": {"charts": {...}, "height": ...}} │
 │                         ↓                                        │
 │  前端 Vue3 渲染                                                  │
-│  echarts.init(dom).setOption(cell.content.option)               │
+│  echarts.init(dom).setOption(cell.content.charts)               │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -985,31 +985,88 @@ ft2/
 | **简化输入** | 数据格式比 pyecharts 更简洁 |
 | **复用 pyecharts** | 内部使用 pyecharts 实例，复用 `dump_options()` |
 | **输出统一** | `chart()` 和 `pyecharts()` 输出格式一致 |
-| **前端简单** | Vue3 直接调用 `setOption(content.option)` |
+| **前端简单** | Vue3 直接调用 `setOption(content.charts)` |
 
 ### H.3 API 设计
 
 ```python
-def chart(self, chart_type, data, title=None, height='400px', **kwargs):
+def chart(self, chart_type, data, title, height='400px', **kwargs):
     """
     创建图表（pyecharts 简化封装）
     
-    核心参数:
-        chart_type: 'line' | 'bar' | 'area' | 'pie' | 'heatmap'
-        data: 图表数据（简化格式）
-        title: Cell 标题
-        height: 容器高度，默认 '400px'
+    基础参数:
+        chart_type: 'line' | 'bar' | 'area' | 'pie' | 'heatmap'（必填）
+        data: 图表数据（必填）
+        title: Cell 标题（必填，图表必须有标题）
         
-    可选参数 (**kwargs):
-        遵循 pyecharts 规范，透传给 pyecharts 实例
-        - title_opts, legend_opts, tooltip_opts
-        - xaxis_opts, yaxis_opts
-        - series_opts, datazoom_opts
-        - visualmap_opts, grid_opts
+    容器参数（有默认值）:
+        height: 容器高度，默认 '400px'
+        width: 容器宽度，默认 '100%'
+        
+    全局参数（可选，遵循 pyecharts 规范）:
+        title_opts: 标题配置
+        legend_opts: 图例配置
+        tooltip_opts: 提示框配置
+        xaxis_opts: X轴配置
+        yaxis_opts: Y轴配置
+        datazoom_opts: 数据缩放
+        visualmap_opts: 视觉映射
+        grid_opts: 网格配置
+        
+    系列参数（可选，统一应用到所有系列）:
+        series_opts: 系列配置
     """
 ```
 
-### H.4 数据格式（简化）
+### H.4 参数分类
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  基础参数                                                        │
+│  ├── chart_type   图表类型（必填）                               │
+│  ├── data         图表数据（必填）                               │
+│  └── title        Cell 标题（必填）                              │
+├─────────────────────────────────────────────────────────────────┤
+│  容器参数（有默认值）                                             │
+│  ├── height       高度，默认 '400px'                             │
+│  └── width        宽度，默认 '100%'                              │
+├─────────────────────────────────────────────────────────────────┤
+│  全局参数（可选，遵循 pyecharts 规范）                            │
+│  ├── title_opts     标题配置                                     │
+│  ├── legend_opts    图例配置                                     │
+│  ├── tooltip_opts   提示框配置                                   │
+│  ├── xaxis_opts     X轴配置                                      │
+│  ├── yaxis_opts     Y轴配置                                      │
+│  ├── datazoom_opts  数据缩放                                     │
+│  ├── visualmap_opts 视觉映射                                     │
+│  └── grid_opts      网格配置                                     │
+├─────────────────────────────────────────────────────────────────┤
+│  系列参数（可选，统一应用）                                       │
+│  └── series_opts    系列配置                                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### H.5 设计理念
+
+```
+简化但不简陋
+    ↓
+基础参数必填，保证图表可读性
+可选参数遵循 pyecharts，保证兼容性
+    ↓
+用户按需使用，无学习成本
+```
+
+**设计优势：**
+
+| 优势 | 说明 |
+|------|------|
+| **兼容性** | 参数命名与 pyecharts 一致，用户无需学习新规范 |
+| **灵活性** | 可选参数满足高级需求，同时不影响简单用法 |
+| **渐进式** | 入门简单，深入有路 |
+| **文档复用** | 用户可直接查阅 pyecharts 文档 |
+
+### H.6 数据格式（简化）
 
 #### line/bar/area
 
@@ -1029,6 +1086,31 @@ line.add_yaxis('策略', [1.0, 1.05, 1.08])
 line.add_yaxis('基准', [1.0, 1.02, 1.04])
 ```
 
+**DataFrame 转换：**
+
+```python
+# DataFrame 输入
+df = pd.DataFrame({
+    'date': ['1月', '2月', '3月'],
+    '策略': [1.0, 1.05, 1.08],
+    '基准': [1.0, 1.02, 1.04]
+})
+
+# 转换逻辑
+def df_to_line_bar(df, x_col=None):
+    """DataFrame → line/bar/area 数据格式"""
+    x_col = x_col or df.columns[0]
+    xaxis = df[x_col].tolist()
+    series = [
+        {'name': col, 'data': df[col].tolist()}
+        for col in df.columns if col != x_col
+    ]
+    return {'xAxis': xaxis, 'series': series}
+
+# 使用
+nb.chart('line', df_to_line_bar(df, x_col='date'))
+```
+
 #### pie
 
 ```python
@@ -1043,7 +1125,243 @@ line.add_yaxis('基准', [1.0, 1.02, 1.04])
 pie.add('', [('股票', 60), ('债券', 25), ('现金', 15)])
 ```
 
-### H.5 参数传递
+**DataFrame 转换：**
+
+```python
+# DataFrame 输入
+df = pd.DataFrame({
+    'name': ['股票', '债券', '现金'],
+    'value': [60, 25, 15]
+})
+
+# 转换逻辑
+def df_to_pie(df, name_col='name', value_col='value'):
+    """DataFrame → pie 数据格式"""
+    return [
+        {'name': row[name_col], 'value': row[value_col]}
+        for _, row in df.iterrows()
+    ]
+
+# 使用
+nb.chart('pie', df_to_pie(df))
+```
+
+#### heatmap
+
+```python
+# Notebook 简化格式（嵌套字典）
+{
+    '2023': {'1月': 0.02, '2月': -0.01, '3月': 0.03},
+    '2024': {'1月': 0.05, '2月': -0.02, '3月': 0.08}
+}
+
+# 对应 pyecharts 调用（需转换为坐标索引）
+# [[x_index, y_index, value], ...]
+```
+
+**DataFrame 转换：**
+
+```python
+# DataFrame 输入
+df = pd.DataFrame({
+    'year': ['2023', '2023', '2023', '2024', '2024', '2024'],
+    'month': ['1月', '2月', '3月', '1月', '2月', '3月'],
+    'value': [0.02, -0.01, 0.03, 0.05, -0.02, 0.08]
+})
+
+# 转换逻辑
+def df_to_heatmap(df, y_col, x_col, value_col):
+    """DataFrame → heatmap 数据格式（嵌套字典）"""
+    result = {}
+    for _, row in df.iterrows():
+        y = row[y_col]
+        x = row[x_col]
+        v = row[value_col]
+        if y not in result:
+            result[y] = {}
+        result[y][x] = v
+    return result
+
+# 使用
+nb.heatmap(df_to_heatmap(df, y_col='year', x_col='month', value_col='value'))
+```
+
+#### 数据格式汇总
+
+| chart_type | Notebook 格式 | DataFrame 转换函数 |
+|------------|--------------|-------------------|
+| `line` | `{'xAxis': [...], 'series': [...]}` | `df_to_line_bar(df, x_col)` |
+| `bar` | `{'xAxis': [...], 'series': [...]}` | `df_to_line_bar(df, x_col)` |
+| `area` | `{'xAxis': [...], 'series': [...]}` | `df_to_line_bar(df, x_col)` |
+| `pie` | `[{'name': ..., 'value': ...}, ...]` | `df_to_pie(df, name_col, value_col)` |
+| `heatmap` | `{y: {x: value, ...}, ...}` | `df_to_heatmap(df, y_col, x_col, value_col)` |
+| `kline` | `{'xAxis': [...], 'series': [{'data': [[o,c,l,h], ...]}]}` | - |
+
+### H.7 数据转换实现
+
+#### 转换流程
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  chart_type    输入格式                    pyecharts 方法        │
+├─────────────────────────────────────────────────────────────────┤
+│  line          {'xAxis': [...],             Line()              │
+│  bar              'series': [...]}          Bar()               │
+│  area                                 add_xaxis() + add_yaxis() │
+├─────────────────────────────────────────────────────────────────┤
+│  pie            [{'name': ..., 'value': Pie()                   │
+│                   ...}]              add()                      │
+├─────────────────────────────────────────────────────────────────┤
+│  heatmap        {y: {x: value}}       HeatMap()                 │
+│                 DataFrame             add_xaxis() + add_yaxis() │
+├─────────────────────────────────────────────────────────────────┤
+│  kline          {'xAxis': [...],      Kline()                   │
+│                   'series': [...]}    add_xaxis() + add_yaxis() │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 核心实现代码
+
+```python
+@staticmethod
+def chart(chart_type: str, data, title: str, height: str = '400px', **kwargs) -> Cell:
+    """创建图表（pyecharts 简化封装）"""
+    from pyecharts.charts import Line, Bar, Pie, HeatMap, Kline
+    from pyecharts import options as opts
+    
+    # 1. 提取容器参数
+    width = kwargs.pop('width', '100%')
+    
+    # 2. 提取全局参数
+    global_opts_keys = ['title_opts', 'legend_opts', 'tooltip_opts',
+                        'xaxis_opts', 'yaxis_opts', 'datazoom_opts',
+                        'visualmap_opts', 'grid_opts']
+    global_opts = {k: kwargs.pop(k) for k in global_opts_keys if k in kwargs}
+    
+    # 3. 提取系列参数
+    series_opts = kwargs.pop('series_opts', {})
+    
+    # 4. 根据 chart_type 构建实例并转换数据
+    if chart_type in ('line', 'bar', 'area'):
+        chart = _build_line_bar_area(chart_type, data, series_opts)
+    elif chart_type == 'pie':
+        chart = _build_pie(data, series_opts)
+    elif chart_type == 'heatmap':
+        chart = _build_heatmap(data, series_opts)
+    elif chart_type == 'kline':
+        chart = _build_kline(data, series_opts)
+    else:
+        raise ValueError(f"不支持的图表类型: {chart_type}")
+    
+    # 5. 应用全局配置
+    if global_opts:
+        chart.set_global_opts(**{
+            k: _create_opts(k, v) for k, v in global_opts.items()
+        })
+    
+    # 6. 获取 ECharts option
+    option_dict = json.loads(chart.dump_options())
+    
+    # 7. 返回 Cell
+    return Cell(
+        CellType.CHART,
+        {"charts": option_dict, "width": width, "height": height},
+        title
+    )
+```
+
+#### 各类型转换函数
+
+```python
+def _build_line_bar_area(chart_type, data, series_opts):
+    """构建 line/bar/area 图表"""
+    from pyecharts.charts import Line, Bar
+    from pyecharts import options as opts
+    
+    ChartClass = Line if chart_type in ('line', 'area') else Bar
+    chart = ChartClass()
+    
+    chart.add_xaxis(data['xAxis'])
+    
+    for s in data['series']:
+        params = {'series_name': s['name'], 'y_axis': s['data'], **series_opts}
+        if chart_type == 'area':
+            params['areastyle_opts'] = opts.AreaStyleOpts(opacity=0.3)
+        chart.add_yaxis(**params)
+    
+    return chart
+
+
+def _build_pie(data, series_opts):
+    """构建饼图"""
+    from pyecharts.charts import Pie
+    
+    chart = Pie()
+    data_pair = [(item['name'], item['value']) for item in data]
+    chart.add(series_name='', data_pair=data_pair, **series_opts)
+    return chart
+
+
+def _build_heatmap(data, series_opts):
+    """构建热力图"""
+    from pyecharts.charts import HeatMap
+    
+    chart = HeatMap()
+    
+    # DataFrame 处理
+    if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        df = data.copy()
+        if isinstance(df.index, pd.RangeIndex) and len(df.columns) > 1:
+            df = df.set_index(df.columns[0])
+        data = df.to_dict(orient='index')
+    
+    # 转换为坐标格式
+    xaxis_data, yaxis_data, values = [], [], []
+    for y_idx, (y_name, x_dict) in enumerate(data.items()):
+        yaxis_data.append(y_name)
+        for x_name, value in x_dict.items():
+            if x_name not in xaxis_data:
+                xaxis_data.append(x_name)
+            values.append([xaxis_data.index(x_name), y_idx, value])
+    
+    chart.add_xaxis(xaxis_data)
+    chart.add_yaxis(series_name='', yaxis_data=yaxis_data, value=values, **series_opts)
+    return chart
+
+
+def _build_kline(data, series_opts):
+    """构建 K 线图"""
+    from pyecharts.charts import Kline
+    
+    chart = Kline()
+    chart.add_xaxis(data['xAxis'])
+    for s in data['series']:
+        chart.add_yaxis(series_name=s.get('name', ''), y_axis=s['data'], **series_opts)
+    return chart
+
+
+def _create_opts(opts_name, opts_dict):
+    """将 dict 转换为 pyecharts opts 对象"""
+    from pyecharts import options as opts
+    
+    opts_map = {
+        'title_opts': opts.TitleOpts,
+        'legend_opts': opts.LegendOpts,
+        'tooltip_opts': opts.TooltipOpts,
+        'xaxis_opts': opts.AxisOpts,
+        'yaxis_opts': opts.AxisOpts,
+        'visualmap_opts': opts.VisualMapOpts,
+        'grid_opts': opts.GridOpts,
+    }
+    
+    if opts_name == 'datazoom_opts':
+        return [opts.DataZoomOpts(**item) for item in opts_dict]
+    
+    OptClass = opts_map.get(opts_name)
+    return OptClass(**opts_dict) if OptClass else opts_dict
+```
+
+### H.8 参数传递
 
 | Notebook 参数 | 传递给 pyecharts |
 |--------------|-----------------|
@@ -1052,7 +1370,7 @@ pie.add('', [('股票', 60), ('债券', 25), ('现金', 15)])
 | `series_opts={...}` | `line.add_yaxis(..., **series_opts)` |
 | `datazoom_opts=[...]` | `line.set_global_opts(datazoom_opts=[opts.DataZoomOpts(**d) for d in datazoom_opts])` |
 
-### H.6 输出格式（统一）
+### H.8 输出格式（统一）
 
 `nb.chart()` 和 `nb.pyecharts()` 输出格式完全一致：
 
@@ -1061,7 +1379,7 @@ pie.add('', [('股票', 60), ('债券', 25), ('现金', 15)])
   "type": "chart",
   "title": "净值曲线",
   "content": {
-    "option": {
+    "charts": {
       "animation": true,
       "title": {"text": "净值走势"},
       "legend": {"data": ["策略", "基准"]},
@@ -1079,13 +1397,13 @@ pie.add('', [('股票', 60), ('债券', 25), ('现金', 15)])
 }
 ```
 
-### H.7 前端渲染
+### H.9 前端渲染
 
 ```javascript
 // Vue3 组件
 onMounted(() => {
     const chartInstance = echarts.init(chartRef.value);
-    chartInstance.setOption(cell.content.option);  // 直接使用 option
+    chartInstance.setOption(cell.content.charts);  // 直接使用 charts
 });
 
 // 窗口 resize
@@ -1094,7 +1412,7 @@ window.addEventListener('resize', () => {
 });
 ```
 
-### H.8 方法定位
+### H.10 方法定位
 
 | 方法 | 定位 | 数据输入 | 输出 |
 |------|------|---------|------|
@@ -1113,31 +1431,40 @@ window.addEventListener('resize', () => {
                     前端 setOption() 渲染
 ```
 
-### H.9 使用示例
+### H.11 使用示例
 
 ```python
-# 1. 最简用法
-nb.chart('line', data)
+# 1. 基础用法（title 必填）
+nb.chart('line', data, title='净值曲线')
 
-# 2. 核心参数
+# 2. 基础 + 容器参数
 nb.chart('line', data, title='净值曲线', height='500px')
 
-# 3. 可选参数（pyecharts 规范）
+# 3. 基础 + 全局参数（pyecharts 规范）
 nb.chart('line', data,
     title='净值曲线',
     height='500px',
     legend_opts={'is_show': False},
     yaxis_opts={'min_': 0.9, 'max_': 1.2},
-    tooltip_opts={'trigger': 'axis'},
+    tooltip_opts={'trigger': 'axis'}
+)
+
+# 4. 基础 + 系列参数
+nb.chart('line', data,
+    title='净值曲线',
     series_opts={'is_smooth': True}
 )
 
-# 4. 数据缩放
+# 5. 完整配置
 nb.chart('line', data,
+    title='净值曲线',
+    height='500px',
+    yaxis_opts={'min_': 0.9},
+    series_opts={'is_smooth': True},
     datazoom_opts=[{'type_': 'slider', 'start': 20, 'end': 80}]
 )
 
-# 5. 高级需求 → 直接用 pyecharts
+# 6. 高级需求 → 直接用 pyecharts
 from pyecharts.charts import Line
 from pyecharts import options as opts
 
@@ -1150,7 +1477,7 @@ line.set_global_opts(yaxis_opts=opts.AxisOpts(min_=0.9))
 nb.pyecharts(line, title='净值曲线', height='600px')
 ```
 
-### H.10 设计优势
+### H.12 设计优势
 
 | 优势 | 说明 |
 |------|------|
