@@ -376,14 +376,16 @@ body {
 /* 图表 */
 .chart-container, .pyecharts-container, .cell-chart {
     width: 100%;
-    min-height: 400px;
+    /* 优先使用内联样式的高度，其次使用 CSS 变量，最后默认 400px */
+    height: 400px;
+    min-height: 300px;
     position: relative;
 }
 
 /* 确保图表容器内的 div 有正确高度 */
 .chart-container > div, .pyecharts-container > div, .cell-chart > div {
     height: 100%;
-    min-height: 400px;
+    min-height: 300px;
 }
 
 /* 可折叠 */

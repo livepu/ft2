@@ -121,7 +121,8 @@ const CellRenderer = {
                 chartInstance.setOption(option);
             } else if (cell.type === 'pyecharts') {
                 chartInstance = echarts.init(chartRef.value);
-                chartInstance.setOption(content);
+                // 使用 content.option 作为 echarts 配置
+                chartInstance.setOption(content.option || content);
             }
         };
         
@@ -516,7 +517,10 @@ const CellRenderer = {
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
                 <div ref="chartRef" 
                      class="chart-container"
-                     :style="{'--height': (cell.options?.height || 400) + 'px'}">
+                     :style="{
+                         width: cell.content?.width || '100%',
+                         height: cell.content?.height || (cell.options?.height || 400) + 'px'
+                     }">
                 </div>
             </div>
             

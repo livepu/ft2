@@ -237,8 +237,8 @@ class Notebook:
                 - heatmap: {'2024': {'01': 0.05, ...}, ...}
             title: 标题
             **options: 可选参数
-                - height: 高度（默认 400）
-                - color: 颜色配置
+                - height: 高度，字符串格式（如 "400px"、"100%"）
+                - width: 宽度，字符串格式（如 "100%"、"900px"）
                 - 其他配置
         
         Examples:
@@ -254,8 +254,13 @@ class Notebook:
             # 热力图
             nb.chart('heatmap', monthly_returns)
             
-            # pyecharts 对象（自动识别）
-            nb.chart(kline_chart)
+            # pyecharts 对象（自动识别，尊重原版参数类型）
+            # 方式一：通过 pyecharts 对象设置尺寸
+            kline = Candlestick(init_opts=opts.InitOpts(width="100%", height="600px"))
+            nb.chart(kline)
+            
+            # 方式二：通过外部参数覆盖
+            nb.chart(kline, height="500px", width="100%")
         """
         if hasattr(chart_type, 'dump_options'):
             return self._add_cell(CellBuilder.pyecharts(chart_type, title, **options), title)

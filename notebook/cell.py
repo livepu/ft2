@@ -164,13 +164,25 @@ class CellBuilder:
     
     @staticmethod
     def pyecharts(chart, title: str = None, **options) -> Cell:
-        height = options.pop('height', 400)
-        width = options.pop('width', '100%')
+        import json
+        
+        # 优先从 pyecharts 对象中读取尺寸
+        # 外部参数可覆盖，参数类型与 pyecharts 一致：字符串（如 "400px"、"100%"）
+        width = options.pop('width', None) or getattr(chart, 'width', '100%')
+        height = options.pop('height', None) or getattr(chart, 'height', '400px')
+        
+        # dump_options() 返回 JSON 字符串，需要解析为 Python 对象
+        option_dict = json.loads(chart.dump_options())
+        
         return Cell(
             CellType.PYECHARTS,
-            {"option": chart.dump_options(), "width": width, "height": f"{height}px"},
+            {
+                "option": option_dict,
+                "width": width,
+                "height": height
+            },
             title,
-            {"height": height, "width": width}
+            options
         )
     
     @staticmethod
