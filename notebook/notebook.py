@@ -85,17 +85,17 @@ class Notebook:
         添加单元格并返回self以支持链式调用
 
         逻辑:
-        1. 如果在 with 内 -> 添加到当前 Section（Cell 保留 title 作为小标题）
-        2. 如果不在 with 内但有 title -> 自动创建 Section（Cell 清空 title，避免重复）
+        1. 如果在 with 内 -> 添加到当前 Section，设置 Cell.title 作为小标题
+        2. 如果不在 with 内但有 title -> 自动创建 Section（Cell 无 title）
         3. 如果不在 with 内且无 title -> 普通 Cell 添加到顶层
         """
         self._cell_counter += 1
 
         if self._section_stack:
+            if isinstance(cell, Cell) and title:
+                cell.title = title
             self._section_stack[-1].children.append(cell)
         elif title:
-            if isinstance(cell, Cell):
-                cell.title = None
             section = CellBuilder.section(title, [cell], level=1)
             self.children.append(section)
         else:
@@ -165,25 +165,18 @@ class Notebook:
                 - ['code', 'name', 'type']  # 只显示这3列，按此顺序
                 - None 时显示数据中的所有列
             title: 标题
-                - '基金列表'
         
         可选参数 (**options):
             freeze: 冻结列配置
                 - int: 冻结左侧 n 列
                 - dict: {'left': n, 'right': m}
             page: 分页配置 {'limit': 20, 'limits': [10, 20, 50]}
-            collapsed: 折叠状态
-                - None: 普通表格（默认）
-                - True: 可折叠表格，默认折叠
-                - False: 可折叠表格，默认展开
         
         Examples:
             nb.table(data)
             nb.table(data, columns=['code', 'name'], title='基金列表')
-            nb.table(df, title='数据表')  # DataFrame 自动识别
+            nb.table(df, title='数据表')
             nb.table(data, freeze=2)
-            nb.table(data, freeze={'left': 2, 'right': 1})
-            nb.table(data, title='详细数据', collapsed=True)
         """
         import pandas as pd
         
@@ -194,14 +187,8 @@ class Notebook:
             df_data = data
             cols = columns
         
-        collapsed = options.pop('collapsed', None)
-        
-        if collapsed is not None:
-            cell = CellBuilder.table(df_data, cols, None, options)
-            section = CellBuilder.section(title, [cell], level=1, collapsed=collapsed)
-            return self._add_cell(section)
-        else:
-            return self._add_cell(CellBuilder.table(df_data, cols, title, options), title)
+        cell = CellBuilder.table(df_data, cols, options)
+        return self._add_cell(cell, title)
     
     # ========== 指标卡片 ==========
     
@@ -215,7 +202,7 @@ class Notebook:
         """
         if isinstance(data, dict):
             data = [{'name': k, 'value': str(v)} for k, v in data.items()]
-        return self._add_cell(CellBuilder.metrics(data, title, columns), title)
+        return self._add_cell(CellBuilder.metrics(data, columns), title)
     
     # ========== 图表 ==========
     
@@ -283,7 +270,7 @@ class Notebook:
             # line.add_yaxis(...)
             # nb.pyecharts(line, title='净值曲线')
         """
-        return self._add_cell(CellBuilder.chart(chart_type, data, title, height, **kwargs), title)
+        return self._add_cell(CellBuilder.chart(chart_type, data, height, **kwargs), title)
     
     def pyecharts(self, chart, title=None, height='400px', width='100%'):
         """
@@ -310,7 +297,7 @@ class Notebook:
             
             nb.pyecharts(line, title='净值曲线')
         """
-        return self._add_cell(CellBuilder.pyecharts(chart, title, height, width), title)
+        return self._add_cell(CellBuilder.pyecharts(chart, height, width), title)
     
     # ========== HTML ==========
     

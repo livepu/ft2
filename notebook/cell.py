@@ -217,8 +217,7 @@ class CellBuilder:
     # 数据类
     
     @staticmethod
-    def table(data: List[Dict], columns: List[str] = None,
-              title: str = None, options: dict = None) -> Cell:
+    def table(data: List[Dict], columns: List[str] = None, options: dict = None) -> Cell:
         opts = {"columns": columns} if columns else {}
         
         if options:
@@ -232,26 +231,16 @@ class CellBuilder:
             if 'page' in options:
                 opts["page"] = options["page"]
         
-        return Cell(CellType.TABLE, data, title, opts)
+        return Cell(CellType.TABLE, data, options=opts)
     
     @staticmethod
-    def metrics(data: List[Dict], title: str = None, columns: int = 4) -> Cell:
-        return Cell(CellType.METRICS, data, title, {"columns": columns})
+    def metrics(data: List[Dict], columns: int = 4) -> Cell:
+        return Cell(CellType.METRICS, data, options={"columns": columns})
     
     # 图表类
     
     @staticmethod
-    def chart(chart_type: str, data, title: str, height: str = '400px', **kwargs) -> Cell:
-        """
-        创建图表（pyecharts 简化封装）
-        
-        Args:
-            chart_type: 'line' | 'bar' | 'area' | 'pie' | 'heatmap' | 'kline'
-            data: 图表数据（简化格式）
-            title: Cell 标题（必填）
-            height: 容器高度，默认 '400px'
-            **kwargs: pyecharts 可选参数
-        """
+    def chart(chart_type: str, data, height: str = '400px', **kwargs) -> Cell:
         width = kwargs.pop('width', '100%')
         
         global_opts_keys = ['title_opts', 'legend_opts', 'tooltip_opts',
@@ -281,12 +270,11 @@ class CellBuilder:
         
         return Cell(
             CellType.CHART,
-            {"charts": option_dict, "width": width, "height": height},
-            title
+            {"charts": option_dict, "width": width, "height": height}
         )
     
     @staticmethod
-    def pyecharts(chart, title: str = None, height: str = '400px', width: str = '100%') -> Cell:
+    def pyecharts(chart, height: str = '400px', width: str = '100%') -> Cell:
         option_dict = json.loads(chart.dump_options())
         
         return Cell(
@@ -295,8 +283,7 @@ class CellBuilder:
                 "charts": option_dict,
                 "width": width,
                 "height": height
-            },
-            title
+            }
         )
     
     # 布局类
