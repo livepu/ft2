@@ -10,23 +10,33 @@ except ImportError:
     HAS_PANDAS = False
 
 
+# ========== 类型定义 ==========
+
 class CellType(Enum):
+    # 文本类
     TITLE = "title"
     TEXT = "text"
     MARKDOWN = "markdown"
+    # 代码类
     CODE = "code"
+    # 数据类
     TABLE = "table"
     METRICS = "metrics"
+    # 图表类
     CHART = "chart"
-    HEATMAP = "heatmap"
+    PYECHARTS = "pyecharts"
+    # 布局类
     DIVIDER = "divider"
     HTML = "html"
-    PYECHARTS = "pyecharts"
     SECTION = "section"
 
 
 CONTAINER_TYPES = {CellType.SECTION}
 
+CellLike = Union[Cell, 'Section']
+
+
+# ========== 数据类 ==========
 
 @dataclass
 class Cell:
@@ -68,8 +78,7 @@ class Section:
         return result
 
 
-CellLike = Union[Cell, Section]
-
+# ========== 图表构建辅助函数 ==========
 
 def _create_opts(opts_name: str, opts_dict: dict):
     """将 dict 转换为 pyecharts opts 对象"""
@@ -177,8 +186,12 @@ def _build_kline(data: dict, series_opts: dict):
     return chart
 
 
+# ========== Cell 构建器 ==========
+
 class CellBuilder:
     """单元格构建器"""
+    
+    # 文本类
     
     @staticmethod
     def title(text: str, level: int = 1) -> Cell:
@@ -192,12 +205,16 @@ class CellBuilder:
     def markdown(text: str) -> Cell:
         return Cell(CellType.MARKDOWN, text)
     
+    # 代码类
+    
     @staticmethod
     def code(code: str, language: str = 'python', output: str = None) -> Cell:
         return Cell(
             CellType.CODE,
             {"code": code, "language": language, "output": output}
         )
+    
+    # 数据类
     
     @staticmethod
     def table(data: List[Dict], columns: List[str] = None,
@@ -220,6 +237,8 @@ class CellBuilder:
     @staticmethod
     def metrics(data: List[Dict], title: str = None, columns: int = 4) -> Cell:
         return Cell(CellType.METRICS, data, title, {"columns": columns})
+    
+    # 图表类
     
     @staticmethod
     def chart(chart_type: str, data, title: str, height: str = '400px', **kwargs) -> Cell:
@@ -267,38 +286,6 @@ class CellBuilder:
         )
     
     @staticmethod
-    def line_chart(xaxis: List, series: List[Dict], title: str, height: str = '400px', **kwargs) -> Cell:
-        return CellBuilder.chart('line', {"xAxis": xaxis, "series": series}, title, height, **kwargs)
-    
-    @staticmethod
-    def area_chart(xaxis: List, series: List[Dict], title: str, height: str = '400px', **kwargs) -> Cell:
-        return CellBuilder.chart('area', {"xAxis": xaxis, "series": series}, title, height, **kwargs)
-    
-    @staticmethod
-    def bar_chart(xaxis: List, series: List[Dict], title: str, height: str = '400px', **kwargs) -> Cell:
-        return CellBuilder.chart('bar', {"xAxis": xaxis, "series": series}, title, height, **kwargs)
-    
-    @staticmethod
-    def pie_chart(data: List[Dict], title: str, height: str = '400px', **kwargs) -> Cell:
-        return CellBuilder.chart('pie', data, title, height, **kwargs)
-    
-    @staticmethod
-    def heatmap(data: Union[Dict, Any], title: str, height: str = '400px', **kwargs) -> Cell:
-        return CellBuilder.chart('heatmap', data, title, height, **kwargs)
-    
-    @staticmethod
-    def kline_chart(xaxis: List, series: List[Dict], title: str, height: str = '400px', **kwargs) -> Cell:
-        return CellBuilder.chart('kline', {"xAxis": xaxis, "series": series}, title, height, **kwargs)
-    
-    @staticmethod
-    def divider() -> Cell:
-        return Cell(CellType.DIVIDER, None)
-    
-    @staticmethod
-    def html(html_content: str) -> Cell:
-        return Cell(CellType.HTML, html_content)
-    
-    @staticmethod
     def pyecharts(chart, title: str = None, height: str = '400px', width: str = '100%') -> Cell:
         option_dict = json.loads(chart.dump_options())
         
@@ -311,6 +298,16 @@ class CellBuilder:
             },
             title
         )
+    
+    # 布局类
+    
+    @staticmethod
+    def divider() -> Cell:
+        return Cell(CellType.DIVIDER, None)
+    
+    @staticmethod
+    def html(html_content: str) -> Cell:
+        return Cell(CellType.HTML, html_content)
     
     @staticmethod
     def section(title: str, children: List[CellLike] = None,
