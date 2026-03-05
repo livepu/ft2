@@ -374,9 +374,16 @@ body {
 }
 
 /* 图表 */
-.chart-container {
+.chart-container, .pyecharts-container, .cell-chart {
     width: 100%;
-    height: var(--height, 400px);
+    min-height: 400px;
+    position: relative;
+}
+
+/* 确保图表容器内的 div 有正确高度 */
+.chart-container > div, .pyecharts-container > div, .cell-chart > div {
+    height: 100%;
+    min-height: 400px;
 }
 
 /* 可折叠 */
