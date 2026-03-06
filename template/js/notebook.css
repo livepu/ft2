@@ -12,12 +12,19 @@
  * ================================================
  */
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* 最小化全局重置 - 避免影响 ECharts 等第三方库 */
+html, body {
+    margin: 0;
+    padding: 0;
+}
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     background: #f5f5f5;
     color: #333;
+}
+
+.notebook-wrapper {
     line-height: 1.6;
 }
 
@@ -85,19 +92,22 @@ body {
     gap: var(--toc-gap);
     max-width: calc(var(--container-max-width) + var(--toc-width) + var(--toc-gap));
     margin: 0 auto;
+    position: relative;  /* 作为 fixed 定位的参考 */
 }
 
 .notebook-container {
     flex: 1;
-    min-width: 0;  /* 允许收缩 */
+    min-width: 0;
     max-width: var(--container-max-width);
     padding: 20px;
 }
 
-/* TOC 面板 - sticky 定位，保持固定宽度 */
+/* TOC 面板 - fixed 定位，跟随主体浮动 */
 .toc-panel {
-    position: sticky;
+    position: fixed;
     top: 20px;
+    /* 计算位置：50% + 主体宽度的一半 + 间距 */
+    left: calc(50% + var(--container-max-width) / 2 + var(--toc-gap));
     width: var(--toc-width);
     max-height: calc(100vh - 40px);
     height: fit-content;
@@ -107,8 +117,7 @@ body {
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
     z-index: 1000;
     overflow: hidden;
-    flex-shrink: 0;  /* 不收缩 */
-    margin-top: 20px;
+    flex-shrink: 0;
 }
 
 /* 空间不够时，切换成上下布局 */
@@ -120,6 +129,7 @@ body {
     .toc-panel {
         position: relative;
         top: auto;
+        left: auto;
         width: 100%;
         max-height: none;
         height: auto;
@@ -181,7 +191,6 @@ body {
     background: #fff;
     box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     border: 1px solid #e9e9e9;
-    box-sizing: border-box;
 }
 
 .section-title {
@@ -263,6 +272,10 @@ body {
     color: #c68a00;
 }
 
+.nested-section .nested-section .section-content .cell {
+    background: #fff;
+}
+
 /* Cell 通用样式 */
 .cell {
     background: #f7f6f3;
@@ -291,12 +304,22 @@ body {
 .markdown-content h3 { font-size: 16px; margin: 0 0 6px; color: #37352f; }
 .markdown-content p { margin: 0 0 8px; }
 .markdown-content strong { color: #37352f; }
+.markdown-content em { color: #666; }
+.markdown-content ul, .markdown-content ol { margin: 0 0 8px 20px; }
+.markdown-content li { margin: 4px 0; }
+.markdown-content a { color: #667eea; text-decoration: none; }
+.markdown-content a:hover { text-decoration: underline; }
 .markdown-content blockquote {
     border-left: 3px solid #e9e9e9;
     padding-left: 12px;
     margin: 8px 0;
     color: #666;
     font-style: italic;
+}
+.markdown-content hr {
+    border: none;
+    border-top: 1px solid #e9e9e9;
+    margin: 12px 0;
 }
 
 /* 代码块 */
@@ -376,13 +399,11 @@ body {
 /* 图表 */
 .chart-container, .pyecharts-container, .cell-chart {
     width: 100%;
-    /* 优先使用内联样式的高度，其次使用 CSS 变量，最后默认 400px */
     height: 400px;
     min-height: 300px;
     position: relative;
 }
 
-/* 确保图表容器内的 div 有正确高度 */
 .chart-container > div, .pyecharts-container > div, .cell-chart > div {
     height: 100%;
     min-height: 300px;
@@ -541,16 +562,16 @@ body {
     margin-bottom: 16px;
 }
 
-/* ========== Vue Table 样式（基于 alpine-table 风格） ========== */
+/* ========== FT Table 样式（基于 alpine-table 风格） ========== */
 
 /* 表格容器 */
-.vue-table-container {
+.ft-table-container {
     overflow-x: auto;
     margin: 8px 0;
 }
 
 /* 基础表格样式 */
-.vue-table {
+.ft-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 14px;
@@ -560,7 +581,7 @@ body {
 }
 
 /* 表头样式 */
-.vue-table thead th {
+.ft-table thead th {
     background: #f7f6f3;
     padding: 12px 14px;
     font-weight: 600;
@@ -570,30 +591,23 @@ body {
 }
 
 /* 表体样式 */
-.vue-table tbody td {
+.ft-table tbody td {
     padding: 10px 14px;
     border-bottom: 1px solid #eee;
     color: #333;
 }
 
 /* 行悬停效果 */
-.vue-table tbody tr:hover td {
+.ft-table tbody tr:hover td {
     background: #fafafa;
 }
 
-/* 排序指示器 */
-.vue-table .sort-indicator {
-    margin-left: 5px;
-    font-size: 12px;
-    color: #999;
-}
-
 /* 正负增长颜色 */
-.vue-table .positive { color: #e64340; }
-.vue-table .negative { color: #00b300; }
+.ft-table .positive { color: #e64340; }
+.ft-table .negative { color: #00b300; }
 
 /* 分页样式 */
-.vue-table-pagination {
+.ft-table-pagination {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -602,7 +616,7 @@ body {
     font-size: 13px;
 }
 
-.vue-table-pagination button {
+.ft-table-pagination button {
     padding: 5px 10px;
     border: 1px solid #e9e9e9;
     background-color: #fff;
@@ -612,13 +626,13 @@ body {
     font-size: 13px;
 }
 
-.vue-table-pagination button:disabled {
+.ft-table-pagination button:disabled {
     background-color: #f5f5f5;
     color: #999;
     cursor: not-allowed;
 }
 
-.vue-table-pagination select {
+.ft-table-pagination select {
     padding: 5px;
     border: 1px solid #e0e0e0;
     border-radius: 3px;
@@ -626,31 +640,31 @@ body {
 }
 
 /* 冻结列样式 */
-.vue-table-freeze {
+.ft-table-freeze {
     overflow-x: auto;
     position: relative;
 }
 
-.vue-table-freeze .vue-table {
+.ft-table-freeze .ft-table {
     border-collapse: separate !important;
     border-spacing: 0;
 }
 
-.vue-table-freeze .vue-table th,
-.vue-table-freeze .vue-table td {
+.ft-table-freeze .ft-table th,
+.ft-table-freeze .ft-table td {
     white-space: nowrap;
     min-width: 80px;
     background: white;
 }
 
 /* 冻结列单元格 */
-.vue-table-freeze .freeze-col {
+.ft-table-freeze .freeze-col {
     position: sticky;
     background: inherit;
 }
 
 /* 表头整体冻结在顶部 */
-.vue-table-freeze thead th {
+.ft-table-freeze thead th {
     position: sticky;
     top: 0;
     background: #f7f6f3;
@@ -658,28 +672,37 @@ body {
 }
 
 /* 表头中的冻结列需要更高的 z-index */
-.vue-table-freeze thead .freeze-col {
+.ft-table-freeze thead .freeze-col {
     background: #f7f6f3 !important;
     z-index: 100;
 }
 
-.vue-table-freeze tbody .freeze-col {
+.ft-table-freeze tbody .freeze-col {
     background: white !important;
     z-index: 50;
 }
 
-.vue-table-freeze tbody tr:hover .freeze-col {
+.ft-table-freeze tbody tr:hover .freeze-col {
     background: #fafafa !important;
 }
 
 /* 冻结列定位（left/right 由 JS 直接设置内联样式） */
-.vue-table-freeze .freeze-left {
+.ft-table-freeze .freeze-left {
     position: sticky;
 }
 
-.vue-table-freeze .freeze-right {
+.ft-table-freeze .freeze-right {
     position: sticky;
 }
+
+/* 兼容旧名称（保留一段时间） */
+.vue-table-container,
+.ft-table-container { overflow-x: auto; margin: 8px 0; }
+.vue-table, .ft-table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; background: #fff; border-radius: 6px; }
+.vue-table thead th, .ft-table thead th { background: #f7f6f3; padding: 12px 14px; font-weight: 600; border-bottom: 2px solid #e9e9e9; color: #37352f; white-space: nowrap; }
+.vue-table tbody td, .ft-table tbody td { padding: 10px 14px; border-bottom: 1px solid #eee; color: #333; }
+.vue-table .positive, .ft-table .positive { color: #e64340; }
+.vue-table .negative, .ft-table .negative { color: #00b300; }
 
 /* ========== 热力图放大倍数控制器 ========== */
 .heatmap-with-control {
@@ -830,6 +853,9 @@ body {
 .checkbox-item span {
     white-space: nowrap;
 }
+
+/* ========== ECharts Tooltip 样式保护 ========== */
+/* 已简化：去掉全局 * 选择器 + appendToBody = 不再需要复杂保护 */
 
 /* 响应式：小屏幕时控制器移到下方 */
 @media (max-width: 768px) {

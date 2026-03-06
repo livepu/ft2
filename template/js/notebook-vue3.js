@@ -55,10 +55,14 @@ const CellRenderer = {
         // 获取表格列配置
         const getTableCols = (cell) => {
             if (cell.options?.columns) {
-                return cell.options.columns.map(col => ({
-                    field: col,
-                    title: col
-                }));
+                // 支持两种格式：字符串数组 或 对象数组
+                return cell.options.columns.map(col => {
+                    if (typeof col === 'string') {
+                        return { field: col, title: col };
+                    }
+                    // 已经是对象格式 {field, title}
+                    return { field: col.field, title: col.title || col.field };
+                });
             }
             if (cell.content && cell.content.length > 0) {
                 return Object.keys(cell.content[0]).map(key => ({
@@ -158,12 +162,32 @@ const CellRenderer = {
                 return;
             }
             
-            const extracted = extractChartData(content.charts);
+            // 深拷贝一份配置，避免修改原始数据
+            const chartsConfig = JSON.parse(JSON.stringify(content.charts));
+            
+            // 确保 tooltip 配置存在并强制设置正确的选项
+            if (!chartsConfig.tooltip) {
+                chartsConfig.tooltip = {};
+            }
+            
+            // 统一设置所有图表类型的 tooltip 配置
+            chartsConfig.tooltip.appendToBody = true;
+            chartsConfig.tooltip.enterable = true;
+            chartsConfig.tooltip.padding = [8, 12];
+            chartsConfig.tooltip.textStyle = {
+                fontSize: 13,
+                lineHeight: 20
+            };
+            chartsConfig.tooltip.extraCssText = 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px; max-width: 400px;';
+            
+            const extracted = extractChartData(chartsConfig);
             if (!extracted) {
-                chartInstance.setOption(content.charts);
+                // 直接使用原始配置，但已修改了 tooltip
+                chartInstance.setOption(chartsConfig);
                 return;
             }
             
+            // 使用 buildChartOption 处理
             const chartType = extracted.chart_type;
             const data = extracted.data || extracted;
             
@@ -207,7 +231,21 @@ const CellRenderer = {
         // 构建图表配置
         const buildChartOption = (type, chartType, data, options = {}, multiplier = 1, showValue = true, showPercent = true) => {
             const baseOption = {
-                tooltip: { trigger: 'axis' },
+                tooltip: { 
+                    trigger: 'axis',
+                    padding: [8, 12],
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                    borderColor: '#e0e0e0',
+                    borderWidth: 1,
+                    textStyle: {
+                        color: '#333',
+                        fontSize: 13,
+                        lineHeight: 20
+                    },
+                    extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;',
+                    appendToBody: true,
+                    enterable: true
+                },
                 grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true }
             };
 
@@ -233,7 +271,19 @@ const CellRenderer = {
                         color: chartColors,
                         tooltip: { 
                             trigger: 'item', 
-                            formatter: '{b}: {c} ({d}%)' 
+                            formatter: '{b}: {c} ({d}%)',
+                            appendToBody: true,
+                            enterable: true,
+                            padding: [8, 12],
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            borderColor: '#e0e0e0',
+                            borderWidth: 1,
+                            textStyle: {
+                                color: '#333',
+                                fontSize: 13,
+                                lineHeight: 20
+                            },
+                            extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;'
                         },
                         legend: { 
                             top: 10,
@@ -268,7 +318,21 @@ const CellRenderer = {
                 // 柱状图特殊处理：正负颜色区分
                 if (isBar) {
                     return {
-                        tooltip: { trigger: 'axis' },
+                        tooltip: { 
+                            trigger: 'axis',
+                            appendToBody: true,
+                            enterable: true,
+                            padding: [8, 12],
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            borderColor: '#e0e0e0',
+                            borderWidth: 1,
+                            textStyle: {
+                                color: '#333',
+                                fontSize: 13,
+                                lineHeight: 20
+                            },
+                            extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;'
+                        },
                         legend: { 
                             data: (data.series || []).map(s => ({
                                 name: s.name,
@@ -375,7 +439,19 @@ const CellRenderer = {
                     tooltip: { 
                         formatter: function(params) {
                             return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2];
-                        }
+                        },
+                        appendToBody: true,
+                        enterable: true,
+                        padding: [8, 12],
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        borderColor: '#e0e0e0',
+                        borderWidth: 1,
+                        textStyle: {
+                            color: '#333',
+                            fontSize: 13,
+                            lineHeight: 20
+                        },
+                        extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;'
                     },
                     grid: { left: '10%', right: '18%', top: '10%', bottom: '12%' },
                     xAxis: { 
@@ -518,13 +594,13 @@ const CellRenderer = {
                 <div v-if="!cell.content || cell.content.length === 0" class="table-empty">
                     暂无数据
                 </div>
-                <vue-table 
+                <ft-table 
                     v-else
                     :id="'table-' + cellId"
-                    :data-source="cell.content"
-                    :columns="getTableCols(cell)"
+                    :data="cell.content"
+                    :cols="getTableCols(cell)"
                     v-bind="getTableOptions(cell)">
-                </vue-table>
+                </ft-table>
             </div>
             
             <!-- 指标 -->

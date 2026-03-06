@@ -1,24 +1,86 @@
 /**
- * Vue 3 Table Component
+ * FT Table Component (原 VueTable)
  * 基于 alpine-table.js 重构，适配 Vue 3 组合式 API
  * 
- * 使用方式（Ant Design 风格）：
- * <vue-table :id="'table-1'" :data-source="tableData" :columns="columns" :freeze="{left: 2}" :pagination="{pageSize: 20}"></vue-table>
+ * ============================================
+ * 参数说明
+ * ============================================
+ * id           String           表格标识（暂未使用）
+ * data         Array            表格数据源（原 dataSource）
+ * cols         Array            列配置（原 columns）
+ * pagination   Object|Boolean   分页配置，false 禁用
+ * freeze       Object           冻结列配置 { left: 0, right: 0 }
+ * 
+ * ============================================
+ * 使用示例
+ * ============================================
+ * 
+ * // 1. 定义数据
+ * const tableData = [
+ *   { code: "001", name: "苹果", price: 5.80 },
+ *   { code: "002", name: "香蕉", price: 3.20 }
+ * ];
+ * 
+ * // 2. 定义列（支持两种格式）
+ * // 格式A：字符串数组
+ * const cols1 = ["代码", "名称", "价格"];
+ * 
+ * // 格式B：对象数组
+ * const cols2 = [
+ *   { field: "code", title: "代码" },
+ *   { field: "name", title: "名称" },
+ *   { field: "price", title: "价格" }
+ * ];
+ * 
+ * // 3. 模板使用
+ * <ft-table 
+ *   :data="tableData" 
+ *   :cols="cols"
+ *   :pagination="{ pageSize: 20 }"
+ *   :freeze="{ left: 2 }"
+ * ></ft-table>
+ * 
+ * ============================================
+ * 参数详解
+ * ============================================
+ * 
+ * pagination 配置:
+ *   { pageSize: 20 }                    // 启用分页，每页20条
+ *   { pageSize: 20, pageSizeOptions: [10, 20, 50, 100] }  // 自定义每页条数选项
+ *   false                               // 禁用分页
+ * 
+ * freeze 配置:
+ *   { left: 2 }                         // 冻结左侧2列
+ *   { right: 1 }                        // 冻结右侧1列
+ *   { left: 2, right: 1 }               // 同时冻结左右
+ * 
+ * ============================================
+ * 模板结构
+ * ============================================
+ * <div class="ft-table-wrapper">
+ *   <div class="ft-table-container">
+ *     <table class="ft-table">
+ *       <thead><tr><th>列标题</th></tr></thead>
+ *       <tbody><tr><td>单元格</td></tr></tbody>
+ *     </table>
+ *   </div>
+ *   <div class="ft-table-pagination">分页器</div>
+ * </div>
  */
 
-const VueTable = {
-  name: 'VueTable',
+const FtTable = {
+  name: 'FtTable',
   
   props: {
     id: {
       type: String,
       required: true
     },
-    dataSource: {
+    data: {
       type: Array,
       default: () => []
     },
-    columns: {
+    cols: {
       type: Array,
       default: () => []
     },
@@ -47,10 +109,10 @@ const VueTable = {
     // 排序后的数据
     const sortedData = computed(() => {
       if (multiSort.value.length === 0) {
-        return props.dataSource;
+        return props.data;
       }
       
-      return [...props.dataSource].sort((a, b) => {
+      return [...props.data].sort((a, b) => {
         for (const sort of multiSort.value) {
           const v1 = a[sort.field];
           const v2 = b[sort.field];
@@ -72,20 +134,26 @@ const VueTable = {
     // 总页数
     const totalPages = computed(() => {
       if (!props.pagination) return 1;
-      return Math.ceil(props.dataSource.length / pageSize.value) || 1;
+      return Math.ceil(props.data.length / pageSize.value) || 1;
     });
 
     // 总记录数
-    const totalRecords = computed(() => props.dataSource.length);
+    const totalRecords = computed(() => props.data.length);
 
-    // 显示的列（处理 columns 格式）
-    const displayColumns = computed(() => {
-      if (props.columns && props.columns.length > 0) {
-        return props.columns;
+    // 显示的列（处理 cols 格式）
+    const displayCols = computed(() => {
+      if (props.cols && props.cols.length > 0) {
+        // 处理字符串数组格式 ["代码", "名称"] → [{field: "代码", title: "代码"}]
+        return props.cols.map(col => {
+          if (typeof col === 'string') {
+            return { field: col, title: col };
+          }
+          return col;
+        });
       }
       // 从数据自动推断列
-      if (props.dataSource.length > 0) {
-        return Object.keys(props.dataSource[0]).map(key => ({
+      if (props.data.length > 0) {
+        return Object.keys(props.data[0]).map(key => ({
           field: key,
           title: key
         }));
@@ -106,8 +174,6 @@ const VueTable = {
     // ========== 方法 ==========
     
     // 排序处理 - 按点击顺序形成优先级
-    // 点击顺序 = 排序优先级
-    // 重复点击：切换方向 → 取消排序
     const handleSort = (col) => {
       const field = col.field;
       const existingIndex = multiSort.value.findIndex(s => s.field === field);
@@ -146,12 +212,12 @@ const VueTable = {
       if (!hasFreeze.value) return false;
       const left = props.freeze.left || 0;
       const right = props.freeze.right || 0;
-      const total = displayColumns.value.length;
+      const total = displayCols.value.length;
       
       return index < left || index >= total - right;
     };
 
-    // 获取冻结列的 CSS 类（必须包含 freeze-col 基础类）
+    // 获取冻结列的 CSS 类
     const getFreezeClass = (index) => {
       if (!isFreezeCol(index)) return '';
       const left = props.freeze.left || 0;
@@ -159,8 +225,6 @@ const VueTable = {
     };
 
     // 应用冻结列样式
-    // 原理：JS 获取列宽 → 计算偏移量 → 直接设置 style.left/right
-    // 优势：无需 CSS 变量，无需预设变量名，列数任意，代码更简洁
     const applyFreezeStyles = () => {
       if (!hasFreeze.value || !tableContainer.value) return;
       
@@ -173,7 +237,7 @@ const VueTable = {
       // 获取实际列宽
       const colWidths = Array.from(headerCells).map(th => th.offsetWidth);
       
-      // 左侧冻结：直接设置 style.left
+      // 左侧冻结
       let leftOffset = 0;
       const leftCount = props.freeze.left || 0;
       
@@ -185,7 +249,7 @@ const VueTable = {
         leftOffset += colWidths[i];
       }
 
-      // 右侧冻结：直接设置 style.right
+      // 右侧冻结
       let rightOffset = 0;
       const rightCount = props.freeze.right || 0;
       const totalCols = colWidths.length;
@@ -216,7 +280,6 @@ const VueTable = {
     const formatValue = (value) => {
       if (value === null || value === undefined) return '';
       if (typeof value === 'number') {
-        // 保留两位小数
         return Number.isInteger(value) ? value : value.toFixed(2);
       }
       return value;
@@ -233,15 +296,12 @@ const VueTable = {
     // ========== 生命周期 ==========
     
     onMounted(() => {
-      // 注入表格样式（如果还没有）
       injectTableStyles();
       
-      // 应用冻结样式（如果有冻结列）
       if (hasFreeze.value) {
         nextTick(() => {
           applyFreezeStyles();
           
-          // 监听表格大小变化
           resizeObserver.value = new ResizeObserver(() => {
             applyFreezeStyles();
           });
@@ -259,8 +319,8 @@ const VueTable = {
       }
     });
 
-    // 监听数据变化，重新应用冻结样式
-    watch(() => props.dataSource, () => {
+    // 监听数据变化
+    watch(() => props.data, () => {
       if (hasFreeze.value) {
         nextTick(() => {
           applyFreezeStyles();
@@ -269,7 +329,7 @@ const VueTable = {
     }, { deep: true });
 
     // 监听列变化
-    watch(() => displayColumns.value, () => {
+    watch(() => displayCols.value, () => {
       if (hasFreeze.value) {
         nextTick(() => {
           applyFreezeStyles();
@@ -277,7 +337,7 @@ const VueTable = {
       }
     });
 
-    // 监听分页变化（分页后 tbody 行变化，需要重新设置）
+    // 监听分页变化
     watch(currentPage, () => {
       if (hasFreeze.value) {
         nextTick(() => {
@@ -296,62 +356,41 @@ const VueTable = {
     }, { deep: true });
 
     // ========== 注入 CSS ==========
-    // 设计原则：最小化注入，只包含功能性样式 + 微量视觉增强
-    // - 功能性样式（注入）：position: sticky, z-index, overflow
-    // - 视觉增强（注入）：冻结列阴影（微量 CSS，提升用户体验）
-    // - 装饰性样式（外部CSS）：背景色、边框颜色
-    // - 动态偏移量（JS）：style.left/right 直接设置，不用 CSS 变量
-    
     const injectTableStyles = () => {
-      const styleId = 'vue-table-freeze-core';
+      const styleId = 'ft-table-freeze-core';
       if (document.getElementById(styleId)) return;
       
       const style = document.createElement('style');
       style.id = styleId;
       style.textContent = `
-        /* 
-         * 核心功能性样式注入
-         * 设计原则：只注入功能必需样式（position/z-index/shadow），不注入视觉样式（background/color）
-         * 优先级说明：使用双类选择器（权重20）确保功能稳定，同时不影响外部CSS设置颜色字体
-         */
-        
-        /* 冻结容器 - 权重10 */
-        .vue-table-freeze {
+        .ft-table-freeze {
           overflow-x: auto;
           position: relative;
         }
-        /* 冻结列单元格 - 权重20 */
-        .vue-table-freeze .freeze-col {
+        .ft-table-freeze .freeze-col {
           position: sticky;
         }
-        /* 表头整体冻结在顶部 - 权重20 */
-        .vue-table-freeze thead th {
+        .ft-table-freeze thead th {
           position: sticky;
           top: 0;
           z-index: 10;
         }
-        /* 表头中的冻结列 - 权重30 */
-        .vue-table-freeze thead .freeze-col {
+        .ft-table-freeze thead .freeze-col {
           z-index: 100;
         }
-        /* 表格体中的冻结列 - 权重30 */
-        .vue-table-freeze tbody .freeze-col {
+        .ft-table-freeze tbody .freeze-col {
           z-index: 50;
         }
-        /* 表格边框 - 权重20 */
-        .vue-table-freeze .vue-table {
+        .ft-table-freeze .ft-table {
           border-collapse: separate;
           border-spacing: 0;
         }
-        /* 左侧冻结列阴影 - 权重20 */
-        .vue-table-freeze .freeze-left {
+        .ft-table-freeze .freeze-left {
           box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
         }
-        /* 右侧冻结列阴影 - 权重20 */
-        .vue-table-freeze .freeze-right {
+        .ft-table-freeze .freeze-right {
           box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
         }
-        /* 排序指示器基础字体 - 适度优先级 */
         span.sort-icon {
           font-size: 0.8em;
         }
@@ -364,7 +403,7 @@ const VueTable = {
 
     return {
       tableContainer,
-      displayColumns,
+      displayCols,
       paginatedData,
       currentPage,
       totalPages,
@@ -384,17 +423,17 @@ const VueTable = {
   },
 
   template: `
-    <div class="vue-table-wrapper">
+    <div class="ft-table-wrapper">
       <div 
         ref="tableContainer"
-        class="vue-table-container"
-        :class="{ 'vue-table-freeze': hasFreeze }"
+        class="ft-table-container"
+        :class="{ 'ft-table-freeze': hasFreeze }"
       >
-        <table class="vue-table">
+        <table class="ft-table">
           <thead>
             <tr>
               <th 
-                v-for="(col, index) in displayColumns" 
+                v-for="(col, index) in displayCols" 
                 :key="col.field"
                 :class="getFreezeClass(index)"
                 @click="handleSort(col)"
@@ -407,7 +446,7 @@ const VueTable = {
           <tbody>
             <tr v-for="(row, rowIndex) in paginatedData" :key="rowIndex">
               <td 
-                v-for="(col, colIndex) in displayColumns" 
+                v-for="(col, colIndex) in displayCols" 
                 :key="col.field"
                 :class="[getFreezeClass(colIndex), getCellClass(row[col.field])]"
               >
@@ -419,7 +458,7 @@ const VueTable = {
       </div>
       
       <!-- 分页 -->
-      <div v-if="pagination !== false" class="vue-table-pagination">
+      <div v-if="pagination !== false" class="ft-table-pagination">
         <button 
           @click="handlePageChange(currentPage - 1)"
           :disabled="currentPage <= 1"
@@ -450,10 +489,13 @@ const VueTable = {
 
 // 全局暴露（CDN 使用方式）
 if (typeof window !== 'undefined') {
-  window.VueTable = VueTable;
+  window.FtTable = FtTable;
+  // 保留旧名称兼容
+  window.VueTable = FtTable;
 }
 
 // ES Module 导出
 if (typeof exports !== 'undefined') {
-  exports.VueTable = VueTable;
+  exports.FtTable = FtTable;
+  exports.VueTable = FtTable;
 }
