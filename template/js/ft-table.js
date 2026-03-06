@@ -184,6 +184,30 @@ const FtTable = {
       return props.pagination?.pageSizeOptions || [10, 20, 50, 100];
     });
 
+    // 生成显示的页码数组（首页 上一页 1 2 3 4 5 末页）
+    const visiblePages = computed(() => {
+      const total = totalPages.value;
+      const current = currentPage.value;
+      const maxVisible = 5; // 显示5个页码
+      
+      if (total <= maxVisible) {
+        // 总页数少于5个，全部显示
+        return Array.from({ length: total }, (_, i) => i + 1);
+      }
+      
+      // 固定显示5个页码，当前页居中（如果可能）
+      let start = Math.max(1, current - Math.floor(maxVisible / 2));
+      let end = start + maxVisible - 1;
+      
+      // 调整边界
+      if (end > total) {
+        end = total;
+        start = total - maxVisible + 1;
+      }
+      
+      return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+    });
+
     // ========== 方法 ==========
     
     // 排序处理 - 按点击顺序形成优先级
@@ -424,6 +448,7 @@ const FtTable = {
       pageSize,
       hasFreeze,
       pageSizeOptions,
+      visiblePages,
       handleSort,
       getSortIndicator,
       isFreezeCol,
@@ -480,27 +505,61 @@ const FtTable = {
       
       <!-- 分页 -->
       <div v-if="pagination !== false" class="ft-table-pagination">
+        <!-- 首页 -->
+        <button 
+          @click="handlePageChange(1)"
+          :disabled="currentPage <= 1"
+          class="page-btn"
+        >
+          首页
+        </button>
+        
+        <!-- 上一页 -->
         <button 
           @click="handlePageChange(currentPage - 1)"
           :disabled="currentPage <= 1"
+          class="page-btn"
         >
           上一页
         </button>
         
-        <span class="page-info">
-          第 {{ currentPage }} / {{ totalPages }} 页，共 {{ totalRecords }} 条
-        </span>
+        <!-- 页码 -->
+        <button 
+          v-for="page in visiblePages" 
+          :key="page"
+          @click="handlePageChange(page)"
+          :class="['page-btn', { active: page === currentPage }]"
+        >
+          {{ page }}
+        </button>
         
+        <!-- 下一页 -->
         <button 
           @click="handlePageChange(currentPage + 1)"
           :disabled="currentPage >= totalPages"
+          class="page-btn"
         >
           下一页
         </button>
         
+        <!-- 末页 -->
+        <button 
+          @click="handlePageChange(totalPages)"
+          :disabled="currentPage >= totalPages"
+          class="page-btn"
+        >
+          末页
+        </button>
+        
+        <!-- 分隔 -->
+        <span class="page-info">
+          第 {{ currentPage }} / {{ totalPages }} 页
+        </span>
+        
+        <!-- 每页条数 -->
         <select v-model="pageSize" @change="handlePageSizeChange(pageSize)">
           <option v-for="size in pageSizeOptions" :key="size" :value="size">
-            {{ size }} 条/页
+            {{ size }}条/页
           </option>
         </select>
       </div>
