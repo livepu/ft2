@@ -217,6 +217,12 @@ class CellBuilder:
     
     @staticmethod
     def table(data: List[Dict], columns: List[str] = None, options: dict = None) -> Cell:
+        # 将字符串数组转换为对象数组格式
+        # 输入: ["代码", "名称"]
+        # 输出: [{"field": "代码", "title": "代码"}, {"field": "名称", "title": "名称"}]
+        if columns:
+            columns = [{"field": col, "title": col} for col in columns]
+        
         opts = {"columns": columns} if columns else {}
         
         if options:

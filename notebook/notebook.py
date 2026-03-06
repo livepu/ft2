@@ -185,7 +185,11 @@ class Notebook:
             cols = columns or list(data.columns)
         else:
             df_data = data
-            cols = columns
+            # 从数据中提取 columns（取第一个元素的 key）
+            if not columns and df_data and len(df_data) > 0:
+                cols = list(df_data[0].keys())
+            else:
+                cols = columns
         
         cell = CellBuilder.table(df_data, cols, options)
         return self._add_cell(cell, title)
