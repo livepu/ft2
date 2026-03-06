@@ -275,6 +275,120 @@ cols: [
 
 ---
 
+## 热力图（Heatmap）参考方案
+
+### 需求场景
+
+1. **单列独立色阶**：A 列、B 列各自独立的色阶
+2. **多列关联色阶**：关联的几列设置统一色阶
+
+### 现有方案调研
+
+#### 1. Handsontable
+
+- 官网：https://handsontable.com/
+- 特点：功能强大的电子表格组件，支持条件格式化
+- 实现方式：
+  - 使用 `registerRenderer` 自定义渲染器
+  - 通过 `cellProperties` 获取行列信息
+  - 根据数值计算背景色
+
+```javascript
+// Handsontable 自定义热力图渲染器示例
+const heatmapRenderer = function(instance, td, row, col, prop, value, cellProperties) {
+  if (typeof value === 'number') {
+    const color = calculateColor(value, min, max, colorScale);
+    td.style.backgroundColor = color;
+  }
+  Handsontable.renderers.TextRenderer.apply(this, arguments);
+};
+
+Handsontable.registerRenderer('heatmap', heatmapRenderer);
+
+// 列配置使用自定义渲染器
+columns: [
+  { data: 'price', renderer: 'heatmap' },
+  { data: 'change', renderer: 'heatmap' }
+]
+```
+
+#### 2. AG Grid
+
+- 官网：https://www.ag-grid.com/
+- 特点：企业级表格组件，通过 cellStyle 或 cellRenderer 实现
+- 实现方式：
+
+```javascript
+// 方式1：cellStyle 函数
+columnDefs: [
+  {
+    field: 'price',
+    cellStyle: params => {
+      const value = params.value;
+      const color = getHeatmapColor(value, minValue, maxValue);
+      return { backgroundColor: color };
+    }
+  }
+]
+
+// 方式2：自定义 cellRenderer
+const HeatmapCellRenderer = {
+  template: `<div :style="{background: backgroundColor}">{{ value }}</div>`,
+  data() {
+    return { backgroundColor: '' };
+  },
+  mounted() {
+    this.backgroundColor = getHeatmapColor(this.params.value, this.params.min, this.params.max);
+  }
+};
+```
+
+#### 3. Element Plus / Ant Design Vue（DIY 方案）
+
+通过表格组件的 `cell-style` 属性自定义：
+
+```vue
+<!-- Element Plus -->
+<el-table :cell-style="tableCellStyle">
+</el-table>
+
+<script>
+tableCellStyle({ row, column, rowIndex, columnIndex }) {
+  const col = column.property;
+  if (heatmapFields.includes(col)) {
+    const value = row[col];
+    return { backgroundColor: getColor(value, col) };
+  }
+}
+</script>
+```
+
+### FT-Table 实现思路
+
+参考上述方案，在 cols 列配置中增加 `heatmap` 属性：
+
+```javascript
+cols: [
+  // 独立色阶：每列根据自己列的 min/max 计算颜色
+  { field: 'price', title: '价格', heatmap: { mode: 'self' } },
+
+  // 关联色阶：volume 和 amount 使用同一组 min/max
+  { field: 'volume', title: '成交量', heatmap: { group: 'trade' } },
+  { field: 'amount', title: '成交额', heatmap: { group: 'trade' } }
+]
+```
+
+配置参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `mode` | String | `'self'` - 独立色阶 |
+| `group` | String | 分组名称，同组列共享色阶 |
+| `colors` | Array | 色阶颜色数组，默认 `['#f7fbff', '#08519c']` |
+| `reverse` | Boolean | 是否反转颜色（深色表示低值） |
+
+---
+
 ## 设计原则
 
 1. **后端优先**：pandas 数据直接输出，无需列配置

@@ -1637,7 +1637,6 @@ class Notebook:
 | **易于维护** | 新增 Cell 类型只需关注数据构建 |
 
 ### I.7 使用示例
-
 ```python
 # 自动创建 Section
 nb.table(data, title='基金列表')
@@ -1653,3 +1652,409 @@ with nb.section("详细数据", collapsed=True):
     nb.table(data)
     nb.chart('bar', data)
 ```
+
+---
+
+## 附录J：页面布局架构设计
+
+### J.1 问题背景
+
+**需求**：主体内容与目录面板需要作为一个整体居中显示，且目录在滚动时保持固定位置。
+
+**核心挑战**：
+- 主体宽度有限制（900px），需要居中
+- 目录宽度固定（200px），需要跟随主体
+- 滚动时目录需要"粘"在视口顶部
+- 响应式：小屏幕时目录需要适配
+
+---
+
+### J.2 方案对比
+
+#### 方案一：Fixed + Calc（Alpine版）
+
+**架构**：
+```css
+.notebook-container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.toc-panel {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+}
+```
+
+**特点**：
+- 主体独立居中
+- 目录脱离文档流，固定在视口右侧
+- 目录与主体间距随窗口宽度变化
+
+**问题**：
+- 目录位置不稳定，与主体距离不固定
+- 响应式处理复杂
+
+---
+
+#### 方案二：Flex + Sticky（推荐）
+
+**架构**：
+```css
+.notebook-wrapper {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.notebook-container {
+    flex: 1;
+    max-width: 900px;
+}
+
+.toc-panel {
+    width: 200px;
+    position: sticky;
+    top: 20px;
+    align-self: flex-start;
+}
+```
+
+**特点**：
+- 目录在文档流内
+- 滚动时自动"粘"在顶部
+- 间距恒定（gap: 20px）
+
+**优势**：
+- 代码简洁，无需复杂计算
+- 目录与主体相对位置固定
+- 响应式处理简单
+
+---
+
+#### 方案三：Grid + Sticky（最终选择）
+
+**架构**：
+```css
+.notebook-wrapper {
+    display: grid;
+    grid-template-columns: minmax(300px, 900px) 200px;
+    gap: 20px;
+    justify-content: center;
+    padding: 20px;
+}
+
+.toc-panel {
+    position: sticky;
+    top: 20px;
+    align-self: start;
+}
+```
+
+**特点**：
+- Grid 二维布局，适合固定列宽
+- `justify-content: center` 整体居中
+- `minmax(300px, 900px)` 主体自适应
+
+**优势**：
+- 语义清晰：两列布局
+- 列宽控制精确
+- 代码最简洁
+
+---
+
+### J.3 方案对比表
+
+| 方面 | Fixed+Calc | Flex+Sticky | Grid+Sticky |
+|------|-----------|-------------|-------------|
+| 代码复杂度 | 高 | 低 | **最低** |
+| 目录位置稳定性 | ❌ 随窗口变化 | ✅ 恒定 | ✅ 恒定 |
+| 滚动固定 | ✅ | ✅ | ✅ |
+| 响应式处理 | 复杂 | 简单 | **简单** |
+| 语义清晰度 | 低 | 中 | **高** |
+| 浏览器兼容性 | 最佳 | 好 | 好（IE11+） |
+
+---
+
+### J.4 最终选择：Grid + Sticky
+
+**选择理由**：
+
+1. **场景匹配**：主体有上限宽度、目录固定宽度，这是典型的"固定列宽"场景，Grid 更合适
+
+2. **代码简洁**：
+   - `justify-content: center` 一行实现整体居中
+   - `grid-template-columns` 清晰定义列宽
+   - 无需额外的 flex 属性控制
+
+3. **响应式友好**：
+   ```css
+   @media (max-width: 1140px) {
+       .notebook-wrapper {
+           grid-template-columns: 1fr;
+           max-width: 900px;
+       }
+       .toc-panel {
+           position: relative;
+           order: -1;
+       }
+   }
+   ```
+
+4. **目录行为可控**：
+   - `sticky` 实现滚动固定
+   - `align-self: start` 让目录高度自适应
+   - 文档流内，不影响主体布局
+
+---
+
+### J.5 完整实现
+
+```css
+:root {
+    --toc-width: 200px;
+    --toc-gap: 20px;
+    --container-max-width: 900px;
+}
+
+.notebook-wrapper {
+    display: grid;
+    grid-template-columns: minmax(300px, var(--container-max-width)) var(--toc-width);
+    gap: var(--toc-gap);
+    justify-content: center;
+    padding: 20px;
+}
+
+.notebook-container {
+    min-width: 0;
+}
+
+.toc-panel {
+    position: sticky;
+    top: 20px;
+    align-self: start;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+
+/* 响应式：空间不足时目录移到底部 */
+@media (max-width: 1140px) {
+    .notebook-wrapper {
+        grid-template-columns: 1fr;
+        max-width: var(--container-max-width);
+    }
+    .toc-panel {
+        position: relative;
+        top: auto;
+        max-height: none;
+        order: -1;
+    }
+}
+
+/* 小屏幕：目录隐藏或折叠 */
+@media (max-width: 768px) {
+    .toc-panel {
+        display: none;
+    }
+}
+```
+
+---
+
+### J.6 设计决策记录
+
+| 决策点 | 选择 | 理由 |
+|--------|------|------|
+| 目录是否在文档流内 | ✅ 是 | 间距恒定，代码简洁 |
+| 目录定位方式 | `sticky` | 滚动固定，不脱离文档流 |
+| 布局模型 | Grid | 固定列宽场景，语义清晰 |
+| 响应式策略 | 目录移到底部 | 保留功能，体验好 |
+| 主体宽度控制 | `minmax(300px, 900px)` | 最小300px保证可读，最大900px限制宽度 |
+
+---
+
+### J.7 架构图示
+
+```
+┌─────────────────────────────────────────────────────┐
+│                     body                            │
+│  ┌───────────────────────────────────────────────┐  │
+│  │           notebook-wrapper (grid)             │  │
+│  │  ┌─────────────────────┐ ┌────────────────┐   │  │
+│  │  │ notebook-container  │ │   toc-panel    │   │  │
+│  │  │ (minmax 300-900px)  │ │   (200px)      │   │  │
+│  │  │                     │ │   sticky       │   │  │
+│  │  │                     │ │                │   │  │
+│  │  └─────────────────────┘ └────────────────┘   │  │
+│  └───────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+**关键点**：
+- `justify-content: center` 整体居中
+- `sticky` 滚动时目录固定在顶部
+- `gap: 20px` 主体与目录间距恒定
+- 响应式时 `grid-template-columns: 1fr` 单列布局
+
+---
+
+## 附录K：Section 嵌套层级设计规范
+
+### K.1 设计原则
+
+**核心目标**：层级关系清晰，视觉统一，适度紧凑。
+
+**设计哲学**：
+- 用**颜色**区分层级（紫→粉红→橙）
+- 用**左边框**作为视觉引导线
+- 统一的**padding**规范，保持节奏感
+
+---
+
+### K.2 层级定义
+
+| 层级 | 名称 | 颜色 | 用途 |
+|------|------|------|------|
+| Level 1 | 主章节 | 紫色 #9b51e0 | 报告主要章节 |
+| Level 2 | 子章节 | 粉红 #ec4899 | 章节内的分析模块 |
+| Level 3 | 孙子章节 | 橙色 #ff9500 | 详细数据/子分析 |
+
+---
+
+### K.3 间距规范 - 化繁为简
+
+#### 核心原则
+
+**Cell 和嵌套 Section 共用基础样式**，只区分颜色和边框。
+
+| 元素 | Padding | Margin | 说明 |
+|------|---------|--------|------|
+| **Section L1** | 16px 12px | 16px 0 | 主章节，白色卡片 |
+| **Cell / L2 / L3** | 16px 12px | 8px 0 | 统一基础样式 |
+
+---
+
+### K.4 完整 CSS 实现 - 简化版
+
+```css
+/* ========== Section 层级规范 - 化繁为简 ========== */
+
+/* Section L1: 主章节 - 白色卡片 */
+.notion .section {
+    border-radius: 6px;
+    margin: 16px 0;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    border: 1px solid #e9e9e9;
+}
+.notion .section-title {
+    font-size: 15px;
+    font-weight: 600;
+    padding: 16px 12px;
+    background: linear-gradient(90deg, #fafafa 0%, #fff 100%);
+    border-radius: 6px 6px 0 0;
+    color: #37352f;
+}
+.notion .section-content {
+    padding: 16px 12px;
+}
+
+/* 基础容器 - Cell 和嵌套 Section 统一 */
+.notion .cell,
+.notion .nested-section {
+    padding: 16px 12px;
+    margin: 8px 0;
+    border-radius: 6px;
+}
+
+/* Cell - 米色背景 */
+.notion .cell {
+    background: #f7f6f3;
+}
+
+/* Level 2 - 紫色 */
+.notion .nested-section {
+    border-left: 4px solid #9b51e0;
+    background: #faf9f7;
+}
+.notion .nested-section .section-title {
+    background: transparent;
+    font-size: 14px;
+    color: #6b5b95;
+    padding: 0 0 12px 0;
+}
+.notion .nested-section .section-content {
+    padding: 0;
+}
+
+/* Level 3 - 粉红 */
+.notion .nested-section .nested-section {
+    border-left-color: #ec4899;
+    background: #fdf2f8;
+}
+.notion .nested-section .nested-section .section-title {
+    font-size: 14px;
+    color: #be185d;
+    padding: 0 0 8px 0;
+}
+```
+
+**简化要点**：
+- Cell 和 nested-section 共用 `padding: 16px 12px` 和 `margin: 8px 0`
+- 只通过颜色和边框区分类型
+- 大红大紫，简洁明了
+
+---
+
+### K.5 视觉层级示意
+
+```
+┌─────────────────────────────────┐
+│ Level 1: 主章节                  │
+│ margin: 16px 0                   │
+│ padding: 16px 12px               │
+│ 白色卡片 + 阴影                   │
+│ ┌─────────────────────────────┐ │
+│ │ Level 2: 子章节              │ │
+│ │ margin: 8px 0                │ │
+│ │ padding: 16px 12px           │ │
+│ │ 紫色左边框                    │ │
+│ │ ┌─────────────────────────┐ │ │
+│ │ │ Level 3: 孙子章节        │ │ │
+│ │ │ margin: 8px 0            │ │ │
+│ │ │ padding: 16px 12px       │ │ │
+│ │ │ 粉红色左边框              │ │ │
+│ │ └─────────────────────────┘ │ │
+│ └─────────────────────────────┘ │
+└─────────────────────────────────┘
+```
+
+---
+
+### K.6 设计决策记录
+
+| 决策点 | 选择 | 理由 |
+|--------|------|------|
+| 层级区分方式 | 颜色 + 左边框 | 视觉清晰，有品牌特色 |
+| Padding 方向 | 上下 > 左右 | 内容垂直排列，需要更多垂直空间 |
+| 嵌套缩进 | 无缩进，左对齐 | 避免内容区域过窄，保持整洁 |
+| Section 间距 | L1: 16px, L2/L3: 8px | 章节分隔明显，嵌套紧凑 |
+| 背景色 | 灰度渐变 | 不干扰内容，突出边框色 |
+
+---
+
+### K.7 版本记录
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| V5.3 | 2026-03-06 | 添加附录K：Section 嵌套层级设计规范 |
+
+---
+
+### J.8 版本记录
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| V5.2 | 2026-03-05 | 添加附录J：页面布局架构设计 |
+| V5.3 | 2026-03-06 | 添加附录K：Section 嵌套层级设计规范 |

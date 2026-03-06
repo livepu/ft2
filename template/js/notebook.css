@@ -716,6 +716,14 @@ body {
     position: sticky;
 }
 
+/* 空数据提示 */
+.ft-table-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: #999;
+    font-size: 14px;
+}
+
 /* 兼容旧名称（保留一段时间） */
 .vue-table-container,
 .ft-table-container { overflow-x: auto; margin: 8px 0; }
