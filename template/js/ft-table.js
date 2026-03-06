@@ -91,6 +91,10 @@ const FtTable = {
     freeze: {
       type: Object,
       default: () => ({ left: 0, right: 0 })
+    },
+    emptyText: {
+      type: String,
+      default: '暂无数据'
     }
   },
 
@@ -501,6 +505,11 @@ const FtTable = {
             </tr>
           </tbody>
         </table>
+        
+        <!-- 空数据提示 -->
+        <div v-if="paginatedData.length === 0" class="ft-table-empty">
+          {{ emptyText }}
+        </div>
       </div>
       
       <!-- 分页 -->
