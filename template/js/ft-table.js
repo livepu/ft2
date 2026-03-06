@@ -94,7 +94,7 @@ const FtTable = {
     }
   },
 
-  setup(props) {
+  setup(props, { slots }) {
     const { ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
     
     // ========== 响应式数据 ==========
@@ -141,25 +141,38 @@ const FtTable = {
     const totalRecords = computed(() => props.data.length);
 
     // 显示的列（处理 cols 格式）
+    // cols 可选：不传或无效时自动推断所有字段
     const displayCols = computed(() => {
-      if (props.cols && props.cols.length > 0) {
-        // 处理字符串数组格式 ["代码", "名称"] → [{field: "代码", title: "代码"}]
+      // 检查 cols 是否有效数组
+      const isValidCols = Array.isArray(props.cols) && props.cols.length > 0;
+      
+      if (isValidCols) {
+        // 处理字符串数组格式 ["代码", "名称"] → [{field: "代码", title: "代码", slot: "cell-代码"}]
         return props.cols.map(col => {
           if (typeof col === 'string') {
-            return { field: col, title: col };
+            return { field: col, title: col, slot: 'cell-' + col };
           }
-          return col;
+          // 处理对象格式，自动生成 slot 名称
+          const slotName = col.slot || (col.field ? 'cell-' + col.field : null);
+          return { ...col, slot: slotName };
         });
       }
-      // 从数据自动推断列
-      if (props.data.length > 0) {
+      
+      // cols 无效或为空：从数据自动推断所有字段
+      if (props.data && props.data.length > 0) {
         return Object.keys(props.data[0]).map(key => ({
           field: key,
-          title: key
+          title: key,
+          slot: 'cell-' + key
         }));
       }
       return [];
     });
+    
+    // 检查是否有自定义插槽
+    const hasSlot = (slotName) => {
+      return slotName && slots[slotName];
+    };
 
     // 是否有冻结列
     const hasFreeze = computed(() => {
@@ -418,7 +431,8 @@ const FtTable = {
       handlePageChange,
       handlePageSizeChange,
       formatValue,
-      getCellClass
+      getCellClass,
+      hasSlot
     };
   },
 
@@ -450,7 +464,14 @@ const FtTable = {
                 :key="col.field"
                 :class="[getFreezeClass(colIndex), getCellClass(row[col.field])]"
               >
-                {{ formatValue(row[col.field]) }}
+                <!-- 有插槽：调用插槽渲染 -->
+                <template v-if="col.slot && hasSlot(col.slot)">
+                  <component :is="slots[col.slot]" :row="row" :value="row[col.field]" :index="rowIndex" />
+                </template>
+                <!-- 无插槽：默认渲染 -->
+                <template v-else>
+                  {{ formatValue(row[col.field]) }}
+                </template>
               </td>
             </tr>
           </tbody>
