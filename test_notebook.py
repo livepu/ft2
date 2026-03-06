@@ -44,7 +44,7 @@ def test_comprehensive():
                 {"name": "策略", "data": [1.0, 1.05, 1.12, 1.08, 1.15]},
                 {"name": "基准", "data": [1.0, 1.02, 1.04, 1.06, 1.08]}
             ]
-        }, title="净值曲线", height=300)
+        }, title="净值曲线", height='300px')
         
         # 嵌套：月度分析
         with nb.section("月度分析"):
@@ -57,7 +57,7 @@ def test_comprehensive():
                 {"name": "股票", "value": 60},
                 {"name": "债券", "value": 25},
                 {"name": "现金", "value": 15}
-            ], title="资产配置", height=250)
+            ], title="资产配置", height='250px')
     
     # ========== 【自由内容】简短说明 ==========
     nb.text("【自由内容】以下是风险分析部分，可直接阅读或点击目录跳转。")
