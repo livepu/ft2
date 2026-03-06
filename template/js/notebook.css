@@ -85,29 +85,24 @@ body {
     --container-max-width: 900px;
 }
 
-/* 整体 wrapper - flexbox 布局，整体居中 */
+/* ========== 布局架构：Grid + Sticky ========== */
 .notebook-wrapper {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(300px, 900px) 200px;
+    gap: 20px;
     justify-content: center;
-    gap: var(--toc-gap);
-    max-width: calc(var(--container-max-width) + var(--toc-width) + var(--toc-gap));
-    margin: 0 auto;
-    position: relative;  /* 作为 fixed 定位的参考 */
-}
-
-.notebook-container {
-    flex: 1;
-    min-width: 0;
-    max-width: var(--container-max-width);
     padding: 20px;
 }
 
-/* TOC 面板 - fixed 定位，跟随主体浮动 */
+.notebook-container {
+    min-width: 0;
+}
+
+/* TOC 面板 - sticky 定位 */
 .toc-panel {
-    position: fixed;
+    position: sticky;
     top: 20px;
-    /* 计算位置：50% + 主体宽度的一半 + 间距 */
-    left: calc(50% + var(--container-max-width) / 2 + var(--toc-gap));
+    align-self: start;
     width: var(--toc-width);
     max-height: calc(100vh - 40px);
     height: fit-content;
@@ -117,23 +112,22 @@ body {
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
     z-index: 1000;
     overflow: hidden;
-    flex-shrink: 0;
 }
 
 /* 空间不够时，切换成上下布局 */
-@media (max-width: calc(var(--container-max-width) + var(--toc-width) + var(--toc-gap) * 2)) {
+@media (max-width: 1140px) {
     .notebook-wrapper {
-        flex-direction: column;
-        max-width: var(--container-max-width);
+        grid-template-columns: 1fr;
+        max-width: 900px;
+        margin: 0 auto;
     }
     .toc-panel {
         position: relative;
         top: auto;
-        left: auto;
+        order: -1;
         width: 100%;
         max-height: none;
         height: auto;
-        margin-top: 20px;
     }
 }
 
@@ -184,19 +178,29 @@ body {
 
 /* 内容区域 */
 
-/* Section 样式 */
+/* ========== Section 层级规范 - 化繁为简 ========== */
+
+/* Section L1: 主章节 - 白色卡片 */
 .section {
     border-radius: 6px;
-    margin: 12px 0;
+    margin: 16px 0;
     background: #fff;
     box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     border: 1px solid #e9e9e9;
 }
 
+.section:first-child {
+    margin-top: 0;
+}
+
+.section:last-child {
+    margin-bottom: 0;
+}
+
 .section-title {
     font-size: 15px;
     font-weight: 600;
-    padding: 14px 16px;
+    padding: 16px 12px;
     background: linear-gradient(90deg, #fafafa 0%, #fff 100%);
     border-radius: 6px 6px 0 0;
     color: #37352f;
@@ -226,22 +230,24 @@ body {
 }
 
 .section-content {
-    padding: 14px 16px;
+    padding: 16px 12px;
 }
 
-.section-content .cell {
-    background: #f7f6f3;
-    border-radius: 6px;
-    padding: 12px 14px;
-    margin: 8px 0;
-    box-shadow: none;
-    border: none;
-}
-
-/* 嵌套 Section */
+/* 基础容器 - Cell 和嵌套 Section 统一 */
+.cell,
 .nested-section {
+    padding: 16px 12px;
+    margin: 8px 0;
     border-radius: 6px;
-    margin: 10px 0;
+}
+
+/* Cell - 米色背景 */
+.cell {
+    background: #f7f6f3;
+}
+
+/* Level 2 - 紫色 */
+.nested-section {
     border-left: 4px solid #9b51e0;
     background: #faf9f7;
 }
@@ -250,38 +256,23 @@ body {
     background: transparent;
     font-size: 14px;
     color: #6b5b95;
-    padding: 12px 14px;
+    padding: 0 0 12px 0;
 }
 
 .nested-section .section-content {
-    padding: 10px 14px;
+    padding: 0;
 }
 
-.nested-section .section-content .cell {
-    background: #fff;
-    border: 1px solid #eee;
-}
-
-/* 三级嵌套 */
+/* Level 3 - 粉红 */
 .nested-section .nested-section {
-    border-left-color: #ff9500;
-    background: #fffdf7;
+    border-left-color: #ec4899;
+    background: #fdf2f8;
 }
 
 .nested-section .nested-section .section-title {
-    color: #c68a00;
-}
-
-.nested-section .nested-section .section-content .cell {
-    background: #fff;
-}
-
-/* Cell 通用样式 */
-.cell {
-    background: #f7f6f3;
-    border-radius: 6px;
-    margin: 8px 0;
-    padding: 12px 14px;
+    font-size: 14px;
+    color: #be185d;
+    padding: 0 0 8px 0;
 }
 
 /* 标题 */
@@ -733,210 +724,4 @@ body {
 .vue-table .positive, .ft-table .positive { color: #e64340; }
 .vue-table .negative, .ft-table .negative { color: #00b300; }
 
-/* ========== 热力图放大倍数控制器 ========== */
-.heatmap-with-control {
-    position: relative;
-}
-
-.heatmap-wrapper {
-    display: flex;
-    align-items: stretch;
-    gap: 12px;
-}
-
-.heatmap-wrapper .chart-container {
-    flex: 1;
-    min-width: 0;
-}
-
-.heatmap-control {
-    width: 70px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 12px 8px;
-    background: #fafafa;
-    border-radius: 6px;
-    border: 1px solid #e5e5e5;
-}
-
-.control-label {
-    font-size: 12px;
-    color: #666;
-    font-weight: 500;
-    margin-bottom: 6px;
-}
-
-.current-multiplier {
-    font-size: 13px;
-    font-weight: 600;
-    color: #6b21a8;
-    background: #f3e8ff;
-    padding: 6px 10px;
-    border-radius: 4px;
-    margin-bottom: 10px;
-    min-width: 54px;
-    text-align: center;
-}
-
-.multiplier-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 1;
-    justify-content: center;
-    width: 100%;
-}
-
-.multiplier-buttons button {
-    padding: 6px 8px;
-    border: 1px solid #ddd;
-    background: #fff;
-    border-radius: 4px;
-    font-size: 11px;
-    color: #666;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-}
-
-.multiplier-buttons button:hover {
-    background: #f0f0f0;
-    border-color: #ccc;
-}
-
-.multiplier-buttons button.active {
-    background: #9b51e0;
-    color: #fff;
-    border-color: #9b51e0;
-    font-weight: 500;
-}
-
-
-
-/* ========== 饼图显示选项控制器 ========== */
-.pie-with-control {
-    position: relative;
-}
-
-.pie-wrapper {
-    display: flex;
-    align-items: stretch;
-    gap: 12px;
-}
-
-.pie-wrapper .chart-container {
-    flex: 1;
-    min-width: 0;
-}
-
-.pie-control {
-    width: 90px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 10px 8px;
-    background: #fafafa;
-    border-radius: 6px;
-    border: 1px solid #e5e5e5;
-    align-self: flex-start;
-}
-
-.pie-control .control-label {
-    font-size: 12px;
-    color: #666;
-    font-weight: 500;
-    margin-bottom: 8px;
-}
-
-.checkbox-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    width: 100%;
-}
-
-.checkbox-item {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 11px;
-    color: #666;
-    cursor: pointer;
-    padding: 3px;
-    border-radius: 4px;
-    transition: background 0.15s;
-}
-
-.checkbox-item:hover {
-    background: #f0f0f0;
-}
-
-.checkbox-item input[type="checkbox"] {
-    width: 14px;
-    height: 14px;
-    cursor: pointer;
-    accent-color: #9b51e0;
-}
-
-.checkbox-item span {
-    white-space: nowrap;
-}
-
-/* ========== ECharts Tooltip 样式保护 ========== */
-/* 已简化：去掉全局 * 选择器 + appendToBody = 不再需要复杂保护 */
-
-/* 响应式：小屏幕时控制器移到下方 */
-@media (max-width: 768px) {
-    .heatmap-wrapper {
-        flex-direction: column;
-    }
-    
-    .heatmap-control {
-        width: 100%;
-        flex-direction: row;
-        padding: 10px;
-        align-items: center;
-    }
-    
-    .control-label {
-        margin: 0 8px 0 0;
-        white-space: nowrap;
-    }
-    
-    .current-multiplier {
-        margin: 0 10px 0 0;
-    }
-    
-    .multiplier-buttons {
-        flex-direction: row;
-        flex-wrap: wrap;
-        justify-content: center;
-    }
-    
-    .multiplier-buttons button {
-        flex: 1;
-        min-width: 50px;
-        max-width: 70px;
-    }
-    
-    .pie-wrapper {
-        flex-direction: column;
-    }
-    
-    .pie-control {
-        width: 100%;
-        flex-direction: row;
-        padding: 10px;
-        align-items: center;
-    }
-    
-    .pie-control .control-label {
-        margin: 0 10px 0 0;
-    }
-    
-    .checkbox-group {
-        flex-direction: row;
-        justify-content: center;
-    }
-}
+/* ========== ECharts 相关样式已临时删除 ========== */
