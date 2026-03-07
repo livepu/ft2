@@ -225,7 +225,7 @@ nb.chart('pie', [
 
 **前端交互：**
 - 支持显示原始数据、百分比或同时显示
-- 通过右侧控制面板切换
+- 通过右侧控制面板切换（左右浮动布局，图表靠左，控制靠右）
 - 环形图样式，标签引导线
 
 #### 2.3.3 热力图
@@ -288,6 +288,8 @@ nb.chart('heatmap', data, title='热力图', height=500)
 - 支持数据缩放（×1000, ×100, ×10, 原始, 1/10, 1/100）
 - 默认显示原始数据
 - 根据数据范围自动调整颜色映射（蓝红渐变）
+- **visualMap 范围使用实际数据最大最小值（非强制对称）
+- 切换缩放倍数时自动重置 visualMap 选择区间
 
 #### 2.3.4 图表参数总结
 
@@ -925,6 +927,9 @@ class Cell:
 | V5.0 | 2026-03-05 | **文档重构**：三段式主体 + 六大附录 |
 | V5.1 | 2026-03-05 | **Chart 参数设计**：参数分层 + PyEcharts 规范 + 输出统一 |
 | V5.2 | 2026-03-05 | **架构重构**：CellBuilder/Notebook 职责分离 + title 统一处理 |
+| V5.3 | 2026-03-07 | **图表布局优化**：饼图/热力图控制面板右浮动，左右布局清晰 |
+| V5.4 | 2026-03-07 | **热力图功能增强**：visualMap 实际数据范围 + 缩放时自动重置选择区间 |
+| V5.5 | 2026-03-07 | **ft-table 架构优化**：组件注入样式（核心功能）vs 外部 CSS（视觉样式）职责清晰分离 |
 
 ---
 
@@ -2058,3 +2063,141 @@ with nb.section("详细数据", collapsed=True):
 |------|------|------|
 | V5.2 | 2026-03-05 | 添加附录J：页面布局架构设计 |
 | V5.3 | 2026-03-06 | 添加附录K：Section 嵌套层级设计规范 |
+
+---
+
+## 附录L：Ft-Table 组件架构设计规范
+
+### L.1 核心设计原则
+
+**职责清晰分离，避免样式冲突：**
+```
+┌─────────────────────────────────────────────────────────┐
+│  Ft-Table 组件架构                                      │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  组件注入样式（ft-table.js）             ← 核心功能    │
+│  ├── position: sticky                               │
+│  ├── z-index 层级配置 (10, 50, 100)                │
+│  ├── overflow-x: auto                                │
+│  ├── border-collapse: separate                       │
+│  └── box-shadow (冻结列阴影)                          │
+│                                                         │
+│  外部 CSS（notebook.css）                ← 视觉样式    │
+│  ├── 背景色、文字色                                  │
+│  ├── padding、margin                                  │
+│  ├── border-radius                                     │
+│  ├── hover 效果                                        │
+│  ├── white-space: nowrap                              │
+│  └── min-width: 80px                                  │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### L.2 组件注入样式（ft-table.js）
+
+**核心功能配置：**
+
+```css
+/* 只负责冻结功能的核心逻辑 */
+.ft-table-freeze {
+  overflow-x: auto;
+  position: relative;
+}
+
+.ft-table-freeze .freeze-col {
+  position: sticky;
+}
+
+.ft-table-freeze thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.ft-table-freeze thead .freeze-col {
+  z-index: 100;
+}
+
+.ft-table-freeze tbody .freeze-col {
+  z-index: 50;
+}
+
+.ft-table-freeze .ft-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.ft-table-freeze .freeze-left {
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.1);
+}
+
+.ft-table-freeze .freeze-right {
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
+}
+```
+
+**设计原则：**
+- ✅ 只包含冻结功能必须的样式
+- ✅ 不包含任何视觉样式（颜色、背景等）
+- ✅ z-index 层级由组件统一管理
+- ✅ 避免与外部 CSS 产生冲突
+
+### L.3 外部 CSS（notebook.css）
+
+**视觉样式配置：**
+
+```css
+/* 只负责视觉效果，不涉及核心功能 */
+.ft-table-freeze .ft-table th,
+.ft-table-freeze .ft-table td {
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+/* 表体单元格背景色 */
+.ft-table-freeze .ft-table tbody td {
+  background: white;
+}
+
+/* 表头冻结 - 白色背景 */
+.ft-table-freeze thead th {
+  background: #fff;
+}
+
+.ft-table-freeze tbody .freeze-col {
+  background: white;
+}
+
+.ft-table-freeze tbody tr:hover .freeze-col {
+  background: #f7f6f3 !important;
+}
+```
+
+**设计原则：**
+- ✅ 只包含视觉相关样式
+- ✅ 可以安全修改颜色、背景等
+- ✅ 不影响组件核心功能
+- ✅ 与组件注入样式职责清晰分离
+
+### L.4 层级管理原则
+
+**Z-Index 层级规范：**
+
+| 层级 | 值 | 元素 | 说明 |
+|------|----|------|------|
+| 最底层 | 1 | 普通 tbody td | 普通表格单元格 |
+| | 10 | thead th | 表头（固定顶部） |
+| | 50 | tbody .freeze-col | 冻结列（左右固定） |
+| 最顶层 | 100 | thead .freeze-col | 冻结列的表头（固定 + 冻结） |
+
+**层级优先级：**
+```
+thead.freeze-col (100) > thead (10) > tbody.freeze-col (50) > tbody (1)
+```
+
+### L.5 版本记录
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| V1.0 | 2026-03-07 | 建立架构规范：组件注入 vs 外部 CSS 职责分离 |

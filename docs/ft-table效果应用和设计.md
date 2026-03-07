@@ -18,11 +18,16 @@
 - 页码切换
 - 每页条数选择
 
-### 3. 冻结列
+### 3. 排序功能
+- 多列排序
+- 点击顺序形成优先级
+- 排序指示器（箭头 + 优先级数字）
+
+### 4. 冻结列
 - 左侧冻结
 - 右侧冻结
 
-### 4. 单元格插槽
+### 5. 单元格插槽
 - 自定义渲染
 - 操作列支持
 
@@ -251,15 +256,7 @@ cols: [
 ]
 ```
 
-### 2. 排序功能
-
-```javascript
-cols: [
-  { field: 'profit', title: '盈亏', sortable: true }
-]
-```
-
-### 3. 筛选功能
+### 2. 筛选功能
 
 ```javascript
 cols: [
@@ -267,11 +264,11 @@ cols: [
 ]
 ```
 
-### 4. 行选择
+### 3. 行选择
 
-### 5. 展开行
+### 4. 展开行
 
-### 6. 虚拟滚动
+### 5. 虚拟滚动
 
 ---
 
@@ -398,8 +395,35 @@ cols: [
 
 ---
 
-## 文件位置
+## 架构设计（核心优化）
 
-- 组件源码：`template/js/ft-table.js`
-- 样式文件：`template/js/notebook.css`（.ft-table 相关样式）
+### 职责清晰分离原则
+
+**组件注入样式（ft-table.js）** ← 只负责核心功能
+- `position: sticky` 定位
+- `z-index` 层级管理（10, 50, 100）
+- `overflow-x: auto` 滚动
+- `border-collapse: separate` 边框分离
+- `box-shadow` 冻结列阴影
+
+**外部 CSS（notebook.css）** ← 只负责视觉样式
+- 背景色、文字色
+- `padding`、`margin`
+- `border-radius`
+- `hover` 效果
+- `white-space: nowrap`、`min-width: 80px`
+
+### Z-Index 层级规范
+
+| 层级 | 值 | 元素 | 说明 |
+|------|----|------|------|
+| 最底层 | 1 | 普通 tbody td | 普通表格单元格 |
+| | 10 | thead th | 表头（固定顶部） |
+| | 50 | tbody .freeze-col | 冻结列（左右固定） |
+| 最顶层 | 100 | thead .freeze-col | 冻结列的表头（固定 + 冻结） |
+
+### 文件位置
+
+- 组件源码：`template/js/ft-table.js`（含注入样式）
+- 样式文件：`template/js/notebook.css`（.ft-table 相关视觉样式）
 - 使用示例：`test_comprehensive.html`
