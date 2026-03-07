@@ -215,7 +215,7 @@ const CellRenderer = {
         const updateHeatmap = () => {
             if (!chartInstance || !heatmapRawData.value) return;
             const option = buildChartOption('heatmap', 'heatmap', heatmapRawData.value, props.cell.options, heatmapMultiplier.value);
-            chartInstance.setOption(option);
+            chartInstance.setOption(option, { replaceMerge: ['visualMap'] });
         };
         
         // 更新饼图（当显示选项改变时）
@@ -487,6 +487,7 @@ const CellRenderer = {
                     visualMap: {
                         min: visualMin,
                         max: visualMax,
+                        range: [visualMin, visualMax],
                         calculable: true,
                         orient: 'vertical',
                         right: '2%',
