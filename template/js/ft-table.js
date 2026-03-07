@@ -1,5 +1,6 @@
 /**
- * FT Table Component (原 VueTable)
+ * FT Table Component v1.0.20260226
+ * 版本号说明：主版本.次版本.日期（YYYYMMDD）
  * 基于 alpine-table.js 重构，适配 Vue 3 组合式 API
  * 
  * ============================================
@@ -72,10 +73,6 @@ const FtTable = {
   name: 'FtTable',
   
   props: {
-    id: {
-      type: String,
-      required: true
-    },
     data: {
       type: Array,
       default: () => []
