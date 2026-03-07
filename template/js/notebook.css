@@ -675,7 +675,6 @@ body {
 
 /* 表格容器 */
 .ft-table-container {
-    overflow-x: auto;
     margin: 8px 0;
 }
 
@@ -769,21 +768,12 @@ body {
     margin-left: 10px;
 }
 
-/* 冻结列样式 */
-.ft-table-freeze {
-    overflow-x: auto;
-    position: relative;
-}
-
-.ft-table-freeze .ft-table {
-    border-collapse: separate !important;
-    border-spacing: 0;
-}
+/* 冻结列样式 - 只负责视觉样式 */
 
 .ft-table-freeze .ft-table th,
 .ft-table-freeze .ft-table td {
     white-space: nowrap;
-    min-width: 80px;
+    min-width: 60px;
 }
 
 /* 表体单元格背景色 */
@@ -791,25 +781,12 @@ body {
     background: white;
 }
 
-/* 冻结列核心样式 - 只负责 z-index 层级 */
-.ft-table-freeze .freeze-col {
-    position: sticky;
-}
-
-/* 表头冻结 - Notion 风格：透明背景 */
+/* 表头冻结 - 白色背景 */
 .ft-table-freeze thead th {
-    position: sticky;
-    top: 0;
-    z-index: 10;
     background: #fff;
 }
 
-.ft-table-freeze thead .freeze-col {
-    z-index: 100;
-}
-
 .ft-table-freeze tbody .freeze-col {
-    z-index: 50;
     background: white;
 }
 
