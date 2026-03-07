@@ -9,8 +9,8 @@ const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
 const CellRenderer = {
     name: 'CellRenderer',
     components: {
-        // VueTable 会从父组件传递，如果可用
-        VueTable: typeof window !== 'undefined' && window.VueTable ? window.VueTable : null
+        // FtTable 会从父组件传递，如果可用
+        FtTable: typeof window !== 'undefined' && window.FtTable ? window.FtTable : null
     },
     props: {
         cell: { type: Object, required: true },
@@ -427,18 +427,38 @@ const CellRenderer = {
                     });
                 });
 
-                // 应用传入的放大倍数
-                const displayData = heatmapData.map(d => [d[0], d[1], (d[2] * multiplier).toFixed(2)]);
+                // 应用传入的放大倍数（保持为数字类型）
+                const displayData = heatmapData.map(d => [d[0], d[1], d[2] * multiplier]);
                 
-                // 根据放大后的数据范围设置 visualMap（对称）
-                const displayValues = displayData.map(d => parseFloat(d[2]));
-                const displayMax = Math.max(...displayValues.map(Math.abs));
-                const visualMax = Math.ceil(displayMax / 5) * 5 || 5;
+                // 根据放大后的数据范围设置 visualMap（实际最大值最小值）
+                const displayValues = displayData.map(d => d[2]);
+                const actualMin = Math.min(...displayValues);
+                const actualMax = Math.max(...displayValues);
+                
+                // 根据数值范围确定合适的步长和小数位数
+                const valueRange = actualMax - actualMin;
+                let step = 0.01;
+                let decimalPlaces = 2;
+                
+                if (valueRange >= 10) {
+                    step = 5;
+                    decimalPlaces = 0;
+                } else if (valueRange >= 1) {
+                    step = 0.5;
+                    decimalPlaces = 1;
+                } else if (valueRange >= 0.1) {
+                    step = 0.05;
+                    decimalPlaces = 2;
+                }
+                
+                // 向上/向下取整，让边界更美观
+                const visualMin = Math.floor(actualMin / step) * step;
+                const visualMax = Math.ceil(actualMax / step) * step;
 
                 return {
                     tooltip: { 
                         formatter: function(params) {
-                            return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2];
+                            return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2].toFixed(2);
                         },
                         appendToBody: true,
                         enterable: true,
@@ -465,13 +485,14 @@ const CellRenderer = {
                         splitArea: { show: true } 
                     },
                     visualMap: {
-                        min: -visualMax,
+                        min: visualMin,
                         max: visualMax,
                         calculable: true,
                         orient: 'vertical',
                         right: '2%',
                         top: 'center',
-                        text: [visualMax + ' (×' + multiplier + ')', -visualMax + ' (×' + multiplier + ')'],
+                        text: [visualMax.toFixed(decimalPlaces) + ' (×' + multiplier + ')', 
+                               visualMin.toFixed(decimalPlaces) + ' (×' + multiplier + ')'],
                         inRange: {
                             color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8',
                                     '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']
@@ -481,7 +502,9 @@ const CellRenderer = {
                         name: '收益',
                         type: 'heatmap',
                         data: displayData,
-                        label: { show: true, formatter: '{@[2]}' },
+                        label: { show: true, formatter: function(params) {
+                            return params.value[2].toFixed(2);
+                        }},
                         emphasis: { itemStyle: { shadowBlur: 10 } }
                     }]
                 };
@@ -594,7 +617,7 @@ const CellRenderer = {
                 <div v-if="!cell.content || cell.content.length === 0" class="table-empty">
                     暂无数据
                 </div>
-                <ft-table 
+                <ft-table
                     v-else
                     :id="'table-' + cellId"
                     :data="cell.content"
@@ -619,13 +642,16 @@ const CellRenderer = {
             </div>
             
             <!-- 饼图（带显示控制） -->
-            <div v-else-if="cell.content?.charts && getChartType(cell.content) === 'pie'" 
+            <div v-else-if="cell.content?.charts && getChartType(cell.content) === 'pie'"
                  class="cell-chart pie-with-control">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
                 <div class="pie-wrapper">
-                    <div ref="chartRef" 
+                    <div ref="chartRef"
                          class="chart-container"
-                         :style="{'--height': (cell.content?.height || cell.options?.height || 400) + 'px'}">
+                         :style="{
+                             width: cell.content?.width || '100%',
+                             height: typeof (cell.content?.height || cell.options?.height) === 'string' ? (cell.content?.height || cell.options?.height) : (cell.content?.height || cell.options?.height || 400) + 'px'
+                         }">
                     </div>
                     <div class="pie-control">
                         <div class="control-label">显示选项</div>
@@ -650,13 +676,16 @@ const CellRenderer = {
             </div>
             
             <!-- 热力图（带放大倍数控制） -->
-            <div v-else-if="cell.content?.charts && getChartType(cell.content) === 'heatmap'" 
+            <div v-else-if="cell.content?.charts && getChartType(cell.content) === 'heatmap'"
                  class="cell-chart heatmap-with-control">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
                 <div class="heatmap-wrapper">
-                    <div ref="chartRef" 
+                    <div ref="chartRef"
                          class="chart-container"
-                         :style="{'--height': (cell.content?.height || cell.options?.height || 400) + 'px'}">
+                         :style="{
+                             width: cell.content?.width || '100%',
+                             height: typeof (cell.content?.height || cell.options?.height) === 'string' ? (cell.content?.height || cell.options?.height) : (cell.content?.height || cell.options?.height || 400) + 'px'
+                         }">
                     </div>
                     <div class="heatmap-control">
                         <div class="control-label">数据缩放</div>
@@ -690,15 +719,15 @@ const CellRenderer = {
             <div v-else-if="(cell.type === 'chart' || cell.type === 'pyecharts') && cell.content?.charts" 
                  class="cell-chart">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
-                <div ref="chartRef" 
+                <div ref="chartRef"
                      class="chart-container"
                      :style="{
                          width: cell.content?.width || '100%',
-                         height: cell.content?.height || (cell.options?.height || 400) + 'px'
+                         height: typeof (cell.content?.height || cell.options?.height) === 'string' ? (cell.content?.height || cell.options?.height) : (cell.content?.height || cell.options?.height || 400) + 'px'
                      }">
                 </div>
             </div>
-            
+
             <!-- HTML -->
             <div v-else-if="cell.type === 'html'" class="html-block">
                 <div class="html-block-inner" v-html="cell.content"></div>
@@ -729,14 +758,14 @@ const CellRenderer = {
 
 // ========== 创建 Notebook 应用 ==========
 function createNotebookApp() {
-    // 从全局获取 VueTable 组件（由 vue3-table.js 暴露到 window）
-    const VueTableComponent = typeof window !== 'undefined' ? window.VueTable : null;
-    console.log('VueTableComponent:', VueTableComponent);
+    // 从全局获取 FtTable 组件（由 ft-table.js 暴露到 window）
+    const FtTableComponent = typeof window !== 'undefined' ? window.FtTable : null;
+    console.log('FtTableComponent:', FtTableComponent);
     
     return createApp({
         components: {
             CellRenderer,
-            VueTable: VueTableComponent
+            FtTable: FtTableComponent
         },
 
         setup() {
@@ -847,14 +876,14 @@ function createNotebookApp() {
 
                 try {
                     // 3. 等待表格组件渲染完成
-                    // vue-table 是异步渲染，需要给予足够时间
+                    // ft-table 是异步渲染，需要给予足够时间
                     await new Promise(resolve => setTimeout(resolve, 300));
 
                     // 4. 逐个截图
                     const imageBlobs = [];
                     for (const el of elementsToCapture) {
                         // 检查元素内是否有表格，如果有额外等待
-                        const hasTable = el.querySelector('vue-table, .vue-table, table');
+                        const hasTable = el.querySelector('ft-table, .ft-table, table');
                         if (hasTable) {
                             await new Promise(resolve => setTimeout(resolve, 200));
                         }
