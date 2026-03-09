@@ -165,21 +165,6 @@ const CellRenderer = {
             // 深拷贝一份配置，避免修改原始数据
             const chartsConfig = JSON.parse(JSON.stringify(content.charts));
             
-            // 确保 tooltip 配置存在并强制设置正确的选项
-            if (!chartsConfig.tooltip) {
-                chartsConfig.tooltip = {};
-            }
-            
-            // 统一设置所有图表类型的 tooltip 配置
-            chartsConfig.tooltip.appendToBody = true;
-            chartsConfig.tooltip.enterable = true;
-            chartsConfig.tooltip.padding = [8, 12];
-            chartsConfig.tooltip.textStyle = {
-                fontSize: 13,
-                lineHeight: 20
-            };
-            chartsConfig.tooltip.extraCssText = 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px; max-width: 400px;';
-            
             const extracted = extractChartData(chartsConfig);
             if (!extracted) {
                 // 直接使用原始配置，但已修改了 tooltip
@@ -237,21 +222,7 @@ const CellRenderer = {
         // 构建图表配置
         const buildChartOption = (type, chartType, data, options = {}, multiplier = 1, showValue = true, showPercent = true) => {
             const baseOption = {
-                tooltip: { 
-                    trigger: 'axis',
-                    padding: [8, 12],
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                    borderColor: '#e0e0e0',
-                    borderWidth: 1,
-                    textStyle: {
-                        color: '#333',
-                        fontSize: 13,
-                        lineHeight: 20
-                    },
-                    extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;',
-                    appendToBody: true,
-                    enterable: true
-                },
+                tooltip: {},
                 grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true }
             };
 
@@ -275,23 +246,8 @@ const CellRenderer = {
                     
                     return {
                         color: getChartColors('pie'),
-                        tooltip: { 
-                            trigger: 'item', 
-                            formatter: '{b}: {c} ({d}%)',
-                            appendToBody: true,
-                            enterable: true,
-                            padding: [8, 12],
-                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                            borderColor: '#e0e0e0',
-                            borderWidth: 1,
-                            textStyle: {
-                                color: '#333',
-                                fontSize: 13,
-                                lineHeight: 20
-                            },
-                            extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;'
-                        },
-                        legend: { 
+                        tooltip: {},
+                        legend: {
                             top: 10,
                             left: 'center',
                             orient: 'horizontal'
@@ -301,9 +257,9 @@ const CellRenderer = {
                             data: data,
                             radius: ['40%', '70%'],
                             center: ['45%', '55%'],
-                            label: { 
-                                show: true, 
-                                formatter: labelFormatter 
+                            label: {
+                                show: true,
+                                formatter: labelFormatter
                             },
                             labelLine: {
                                 show: true,
@@ -324,22 +280,8 @@ const CellRenderer = {
                 // 柱状图特殊处理：正负颜色区分
                 if (isBar) {
                     return {
-                        tooltip: { 
-                            trigger: 'axis',
-                            appendToBody: true,
-                            enterable: true,
-                            padding: [8, 12],
-                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                            borderColor: '#e0e0e0',
-                            borderWidth: 1,
-                            textStyle: {
-                                color: '#333',
-                                fontSize: 13,
-                                lineHeight: 20
-                            },
-                            extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;'
-                        },
-                        legend: { 
+                        tooltip: {},
+                        legend: {
                             data: (data.series || []).map(s => ({
                                 name: s.name,
                                 icon: 'rect'
@@ -463,33 +405,17 @@ const CellRenderer = {
                 const visualMax = Math.ceil(actualMax / step) * step;
 
                 return {
-                    tooltip: { 
-                        formatter: function(params) {
-                            return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2].toFixed(2);
-                        },
-                        appendToBody: true,
-                        enterable: true,
-                        padding: [8, 12],
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                        borderColor: '#e0e0e0',
-                        borderWidth: 1,
-                        textStyle: {
-                            color: '#333',
-                            fontSize: 13,
-                            lineHeight: 20
-                        },
-                        extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;'
-                    },
+                    tooltip: {},
                     grid: { left: '10%', right: '18%', top: '10%', bottom: '12%' },
-                    xAxis: { 
-                        type: 'category', 
-                        data: months, 
-                        splitArea: { show: true } 
+                    xAxis: {
+                        type: 'category',
+                        data: months,
+                        splitArea: { show: true }
                     },
-                    yAxis: { 
-                        type: 'category', 
-                        data: years, 
-                        splitArea: { show: true } 
+                    yAxis: {
+                        type: 'category',
+                        data: years,
+                        splitArea: { show: true }
                     },
                     visualMap: {
                         min: visualMin,

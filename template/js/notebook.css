@@ -27,6 +27,15 @@ body {
     line-height: 1.6;
 }
 
+/* ========== 保护 ECharts 不被全局样式影响 ========== */
+/* 只针对 ECharts 图表容器，不影响 tooltip */
+[class*='echarts-instance'],
+[class*='_echarts_instance'] {
+    line-height: normal;
+    color: initial;
+}
+
+
 /* ========== Toast 提示 ========== */
 .toast-container {
     position: fixed;
@@ -513,9 +522,9 @@ body {
     position: relative;
 }
 
-/* ECharts 实例 div 继承容器尺寸 */
-.chart-container > div,
-.pyecharts-container > div {
+/* ECharts 实例 div 继承容器尺寸（只针对第一层子元素，不影响 tooltip） */
+.chart-container > div:first-child,
+.pyecharts-container > div:first-child {
     width: 100% !important;
     height: 100% !important;
 }

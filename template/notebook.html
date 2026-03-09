@@ -41,12 +41,12 @@
             </div>
             
             <!-- TOC 目录面板 -->
-            <aside class="toc-panel" v-if="tocItems.length > 0" :class="{ collapsed: tocCollapsed }">
+            <aside class="toc-panel" v-if="tocItems.length > 0" :class="{ collapsed: tocCollapsed, 'mobile-view': isMobileView }">
                 <!-- 展开状态 -->
                 <template v-if="!tocCollapsed">
-                    <div class="toc-header" @click="toggleToc">
+                    <div class="toc-header" @click="isMobileView && toggleToc()">
                         <span>📑 目录</span>
-                        <span class="toc-toggle-icon">▼</span>
+                        <span class="toc-toggle-icon" v-if="isMobileView">▼</span>
                     </div>
                     <ul class="toc-list">
                         <li 
