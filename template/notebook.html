@@ -70,13 +70,13 @@
             
             <!-- 配色选择面板 -->
             <div class="color-picker-panel">
-                <div class="color-picker-toggle" @click="toggleColorPicker">
-                    🎨 配色选择
+                <div class="color-picker-header" @click="toggleColorPicker">
+                    <span class="header-title">选择图表配色方案</span>
+                    <span class="header-arrow" :class="{ 'expanded': showColorPicker }">
+                        {{ showColorPicker ? '▼' : '▲' }}
+                    </span>
                 </div>
                 <div class="color-picker-content" v-show="showColorPicker">
-                    <div class="color-picker-header">
-                        <h4>选择图表配色方案</h4>
-                    </div>
                     <div class="color-picker-body">
                         <div class="color-palette-group">
                             <h5>全局配色</h5>

@@ -816,28 +816,40 @@ body {
     font-size: 14px;
 }
 
-.color-picker-toggle {
-    padding: 10px 16px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    color: #6b21a8;
-    border: 1px solid #e9d5ff;
+.color-picker-header {
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border: 1px solid #e5e5e5;
     border-radius: 8px;
-    background: #f3e8ff;
-    transition: all 0.3s;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s;
 }
 
-.color-picker-toggle:hover {
-    background: #e9d5ff;
-    transform: translateY(-2px);
+.color-picker-header:hover {
+    background: #e9ecef;
+}
+
+.header-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #37352f;
+}
+
+.header-arrow {
+    font-size: 12px;
+    color: #666;
+    transition: transform 0.2s;
 }
 
 .color-picker-content {
     position: absolute;
     bottom: 100%;
     right: 0;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     background: #fff;
     border-radius: 8px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.15);
@@ -847,13 +859,6 @@ body {
     max-height: 400px;
     overflow-y: auto;
     border: 1px solid #e5e5e5;
-}
-
-.color-picker-header h4 {
-    margin: 0 0 12px 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: #37352f;
 }
 
 .color-picker-body {
