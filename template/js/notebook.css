@@ -676,6 +676,8 @@ body {
 /* 表格容器 */
 .ft-table-container {
     margin: 8px 0;
+    overflow-x: auto;
+    position: relative;
 }
 
 /* 基础表格样式 */
