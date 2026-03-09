@@ -806,15 +806,15 @@ function createNotebookApp() {
             
             // 配色方案
             const colorPalettes = Vue.reactive(window.colorPalettes || {
-                global: 'warmToCool4',
+                global: 'warmToCool',
                 types: {
-                    line: 'warmToCool4',
+                    line: 'warmToCool',
                     bar: 'contrast',
-                    pie: 'dahongdazi2'
+                    pie: 'dahongdazi'
                 },
                 palettes: {
-                    warmToCool4: {
-                        name: '暖冷渐变系4',
+                    warmToCool: {
+                        name: '暖冷渐变系',
                         desc: '珊瑚橙粉紫青金绿',
                         colors: ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4']
                     },
@@ -823,8 +823,8 @@ function createNotebookApp() {
                         desc: '清晰易辨识',
                         colors: ['#e74c3c', '#27ae60', '#f39c12', '#9b59b6', '#3498db', '#e74c3c', '#2ecc71', '#e67e22', '#95a5a6']
                     },
-                    dahongdazi2: {
-                        name: '大红大紫系2',
+                    dahongdazi: {
+                        name: '大红大紫系',
                         desc: '红紫粉金，柔和现代',
                         colors: ['#e74c3c', '#9b59b6', '#f39c12', '#e91e63', '#f1c40f', '#8e44ad', '#ff6b6b', '#af7ac5', '#daa520']
                     },
