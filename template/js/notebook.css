@@ -182,38 +182,67 @@ body {
     transition: transform 0.3s ease;
 }
 
-/* 空间不够时，目录变为左下角浮动按钮 */
-@media (max-width: 1140px) {
+/* 小屏幕 - 目录固定在底部 */
+@media (max-width: 768px) {
     .notebook-wrapper {
         grid-template-columns: 1fr;
         max-width: 900px;
         margin: 0 auto;
-        padding-bottom: 80px;
+        padding: 10px;
+        padding-bottom: 100px;
+    }
+    .notebook-container {
+        margin: 0 10px;
+        padding: 10px;
     }
     .toc-panel {
         position: fixed;
-        bottom: 20px;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        max-height: 70vh;
+        margin: 0;
+        border-radius: 8px 8px 0 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .toc-panel.collapsed {
         left: 20px;
         right: auto;
-        top: auto;
+        bottom: 20px;
         width: auto;
-        max-height: none;
+        display: block;
         background: transparent;
         border: none;
         box-shadow: none;
-        z-index: 1000;
     }
-    .toc-panel:not(.collapsed) {
-        bottom: 20px;
-        left: 20px;
-        right: auto;
-        width: auto;
-        max-width: 90vw;
-        max-height: 70vh;
-        background: #fff;
-        border: 1px solid #e5e5e5;
-        border-radius: 8px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    .toc-list {
+        max-height: none;
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
+    }
+    .toc-actions {
+        flex-wrap: nowrap;
+        padding: 8px 12px;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+    .toc-actions button {
+        flex: 1;
+        padding: 8px 4px;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+    .toc-footer {
+        padding: 8px 12px;
+        flex-shrink: 0;
+    }
+    .toc-footer .full-btn {
+        padding: 10px 12px;
+        font-size: 13px;
     }
 }
 
