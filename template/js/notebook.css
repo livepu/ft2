@@ -232,24 +232,24 @@ body {
         max-height: 70vh;
     }
     .toc-actions {
-        flex-wrap: wrap;
-        padding: 6px 12px;
-        gap: 6px;
+        flex-wrap: nowrap;
+        padding: 8px 12px;
+        gap: 8px;
         flex-shrink: 0;
     }
     .toc-actions button {
-        flex: 1 1 calc(50% - 3px);
-        min-width: calc(50% - 3px);
-        padding: 8px 6px;
-        font-size: 11px;
+        flex: 1;
+        padding: 8px 4px;
+        font-size: 12px;
+        white-space: nowrap;
     }
     .toc-footer {
-        padding: 6px 12px;
+        padding: 8px 12px;
         flex-shrink: 0;
     }
     .toc-footer .full-btn {
         padding: 10px 12px;
-        font-size: 12px;
+        font-size: 13px;
     }
 }
 
