@@ -1,6 +1,6 @@
 /**
- * FT Table Component v1.0.20260226
- * 版本号说明：主版本.次版本.日期（YYYYMMDD）
+ * FT Table Component v1.2.20260309
+ * 版本号说明：主版本。次版本.日期（YYYYMMDD）
  * 基于 alpine-table.js 重构，适配 Vue 3 组合式 API
  * 
  * ============================================
@@ -11,6 +11,19 @@
  * cols         Array            列配置（原 columns）
  * pagination   Object|Boolean   分页配置，false 禁用
  * freeze       Object           冻结列配置 { left: 0, right: 0 }
+ * resetPage    Boolean          数据变化时是否自动重置到第一页，默认 true
+ * 
+ * ============================================
+ * 列配置（cols）详解
+ * ============================================
+ * field        String   字段名（必需）
+ * title        String   列标题（必需）
+ * sort         Boolean  是否可排序，false 禁用排序（默认 true）
+ * width        Number   列宽度（可选）
+ * slot         String   自定义插槽名称（可选，默认 cell-{field}）
+ * 
+ * 示例：
+ * { field: 'name', title: '名称', sort: false, width: 120 }
  * 
  * ============================================
  * 使用示例
@@ -30,7 +43,7 @@
  * const cols2 = [
  *   { field: "code", title: "代码" },
  *   { field: "name", title: "名称" },
- *   { field: "price", title: "价格" }
+ *   { field: "price", title: "价格", sort: false }
  * ];
  * 
  * // 3. 模板使用
@@ -92,6 +105,10 @@ const FtTable = {
     emptyText: {
       type: String,
       default: '暂无数据'
+    },
+    resetPage: {
+      type: Boolean,
+      default: true
     }
   },
 
@@ -233,16 +250,18 @@ const FtTable = {
       currentPage.value = 1;
     };
 
-    // 获取排序指示器
+    // 获取排序指示器（返回对象供模板使用）
     const getSortIndicator = (col) => {
       const multiIndex = multiSort.value.findIndex(s => s.field === col.field);
       if (multiIndex >= 0) {
         const sort = multiSort.value[multiIndex];
-        const icon = sort.order === 'asc' ? '▲' : '▼';
-        return `<span class="sort-stack"><span class="sort-icon">${icon}</span><span class="sort-priority">${sort.priority}</span></span>`;
+        return {
+          show: true,
+          icon: sort.order === 'asc' ? '▲' : '▼',
+          priority: sort.priority
+        };
       }
-      
-      return '';
+      return { show: false };
     };
 
     // 判断是否冻结列
@@ -302,6 +321,11 @@ const FtTable = {
       }
     };
 
+    // 重置分页到第一页
+    const resetPage = () => {
+      currentPage.value = 1;
+    };
+
     // 处理分页变化
     const handlePageChange = (page) => {
       if (page < 1 || page > totalPages.value) return;
@@ -359,6 +383,17 @@ const FtTable = {
 
     // 监听数据变化
     watch(() => props.data, () => {
+      // 如果 resetPage 为 true，数据变化时重置到第一页
+      if (props.resetPage) {
+        resetPage();
+      } else {
+        // 即使不重置，也要确保当前页不超过总页数
+        nextTick(() => {
+          if (currentPage.value > totalPages.value) {
+            currentPage.value = totalPages.value;
+          }
+        });
+      }
       if (hasFreeze.value) {
         nextTick(() => {
           applyFreezeStyles();
@@ -394,6 +429,8 @@ const FtTable = {
     }, { deep: true });
 
     // ========== 注入 CSS ==========
+    // 仅注入冻结列必需的最简样式
+    // 其他样式（表格基础、分页等）请引入 ft-table.css
     const injectTableStyles = () => {
       const styleId = 'ft-table-freeze-core';
       if (document.getElementById(styleId)) return;
@@ -401,6 +438,7 @@ const FtTable = {
       const style = document.createElement('style');
       style.id = styleId;
       style.textContent = `
+        /* 冻结列核心样式 - 组件必需 */
         .ft-table-freeze {
           overflow-x: auto;
           position: relative;
@@ -429,6 +467,7 @@ const FtTable = {
         .ft-table-freeze .freeze-right {
           box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
         }
+        /* 排序图标基础样式 - 保证无外部样式时依然可辨识 */
         span.sort-icon {
           font-size: 0.8em;
         }
@@ -458,7 +497,8 @@ const FtTable = {
       handlePageSizeChange,
       formatValue,
       getCellClass,
-      hasSlot
+      hasSlot,
+      resetPage
     };
   },
 
@@ -475,11 +515,16 @@ const FtTable = {
               <th 
                 v-for="(col, index) in displayCols" 
                 :key="col.field"
-                :class="getFreezeClass(index)"
-                @click="handleSort(col)"
+                :class="[getFreezeClass(index), { 'no-sort': col.sort === false }]"
+                @click="col.sort !== false && handleSort(col)"
               >
                 {{ col.title }}
-                <span class="sort-indicator" v-html="getSortIndicator(col)"></span>
+                <template v-if="col.sort !== false" v-for="indicator in [getSortIndicator(col)]" :key="col.field + '-indicator'">
+                  <span v-if="indicator.show" class="sort-indicator">
+                    <span class="sort-priority">{{ indicator.priority }}</span>
+                    <span class="sort-icon">{{ indicator.icon }}</span>
+                  </span>
+                </template>
               </th>
             </tr>
           </thead>
@@ -491,8 +536,8 @@ const FtTable = {
                 :class="[getFreezeClass(colIndex), getCellClass(row[col.field])]"
               >
                 <!-- 有插槽：调用插槽渲染 -->
-                <template v-if="col.slot && hasSlot(col.slot)">
-                  <component :is="slots[col.slot]" :row="row" :value="row[col.field]" :index="rowIndex" />
+                <template v-if="col.slot && $slots[col.slot]">
+                  <slot :name="col.slot" :row="row" :value="row[col.field]" :index="rowIndex" />
                 </template>
                 <!-- 无插槽：默认渲染 -->
                 <template v-else>
