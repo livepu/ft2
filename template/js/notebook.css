@@ -104,13 +104,14 @@ body {
     align-self: start;
     width: var(--toc-width);
     max-height: calc(100vh - 40px);
-    height: fit-content;
     background: #fff;
     border: 1px solid #e5e5e5;
     border-radius: 8px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
     z-index: 1000;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 /* TOC 收起状态 - 左下角浮动按钮 */
@@ -571,8 +572,9 @@ body {
     list-style: none;
     padding: 8px 0;
     margin: 0;
-    max-height: calc(100vh - 100px);
     overflow-y: auto;
+    flex: 1;
+    min-height: 0;
 }
 
 .toc-item {
@@ -607,6 +609,7 @@ body {
     border-top: 1px solid #e5e5e5;
     display: flex;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 .toc-actions button {
@@ -628,6 +631,7 @@ body {
 .toc-footer {
     padding: 8px 16px;
     border-top: 1px solid #e5e5e5;
+    flex-shrink: 0;
 }
 
 .toc-footer .full-btn {
