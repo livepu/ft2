@@ -751,7 +751,7 @@ function createNotebookApp() {
                 types: {
                     line: 'warmToCool',
                     bar: 'contrast',
-                    pie: 'dahongdazi'
+                    pie: 'warmToCool'
                 },
                 palettes: {
                     warmToCool: {
