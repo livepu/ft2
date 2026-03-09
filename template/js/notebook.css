@@ -944,13 +944,20 @@ body {
     border-radius: 8px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.15);
     border: 1px solid #e5e5e5;
-    min-width: 500px;
-    max-width: 90vw;
+    width: 500px;
+    max-width: calc(100vw - 40px);
     max-height: 0;
     overflow: hidden;
     opacity: 0;
     transform: translateY(10px);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (max-width: 540px) {
+    .color-picker-popup {
+        width: calc(100vw - 40px);
+        right: -20px;
+    }
 }
 
 .color-picker-popup.show {
