@@ -807,6 +807,18 @@ function createNotebookApp() {
             // 目录收起状态（小屏幕/底部固定时）
             const tocCollapsed = ref(false);
             
+            // 是否移动端视图（≤768px）
+            const isMobileView = ref(false);
+            
+            // 检测屏幕宽度
+            const checkScreenWidth = () => {
+                isMobileView.value = window.innerWidth <= 768;
+                // 切换到桌面时自动展开目录
+                if (!isMobileView.value) {
+                    tocCollapsed.value = false;
+                }
+            };
+            
             // 配色方案
             const colorPalettes = Vue.reactive(window.colorPalettes || {
                 global: 'warmToCool',
@@ -1120,6 +1132,15 @@ function createNotebookApp() {
 
             onMounted(() => {
                 console.log('Notebook Vue3 应用已加载');
+                // 初始化屏幕宽度检测
+                checkScreenWidth();
+                // 监听窗口大小变化
+                window.addEventListener('resize', checkScreenWidth);
+            });
+
+            onUnmounted(() => {
+                // 移除resize监听
+                window.removeEventListener('resize', checkScreenWidth);
             });
 
             // 切换目录收起状态
@@ -1151,7 +1172,8 @@ function createNotebookApp() {
                 updateChartColors,
                 // 目录收起
                 tocCollapsed,
-                toggleToc
+                toggleToc,
+                isMobileView
             };
         }
     });
