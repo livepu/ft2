@@ -61,11 +61,12 @@ const columns = [
 | `pagination` | Object/Boolean | `false` | 分页配置，`false` 禁用分页 |
 | `freeze` | Object | `{left: 0, right: 0}` | 冻结列配置 |
 | `emptyText` | String | `"暂无数据"` | 空数据提示文本 |
+| `reset-page` | Boolean | `true` | 数据变化时是否自动重置到第一页 |
 
 ### pagination 配置
 
 ```javascript
-// 启用分页，每页20条
+// 启用分页，每页 20 条
 :pagination="{ pageSize: 20 }"
 
 // 自定义每页条数选项
@@ -78,10 +79,10 @@ const columns = [
 ### freeze 配置
 
 ```javascript
-// 冻结左侧2列
+// 冻结左侧 2 列
 :freeze="{ left: 2 }"
 
-// 冻结右侧1列
+// 冻结右侧 1 列
 :freeze="{ right: 1 }"
 
 // 同时冻结左右
@@ -200,5 +201,73 @@ const cols = [
 
 ## 版本信息
 
-- **ft-table.js**: v1.0.20260226
+- **当前版本**: ft-table.js v1.2.20260309
 - 基于 alpine-table.js 重构，适配 Vue 3 组合式 API
+
+---
+
+## 修订记录
+
+### v1.2.20260309（2026-03-09）
+
+**新功能**：
+- ✅ 新增 `reset-page` 参数：控制数据变化时是否自动重置到第一页（默认 `true`）
+- ✅ 新增 `resetPage()` 方法：支持通过组件 ref 手动重置分页
+- ✅ 修复潜在 Bug：数据变化导致总页数减少时，自动调整当前页到有效范围内
+
+**参数说明**：
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `reset-page` | Boolean | `true` | 数据变化时是否自动重置到第一页 |
+
+**使用示例**：
+```html
+<!-- 默认行为：数据变化时重置到第一页 -->
+<ft-table :data="tableData"></ft-table>
+
+<!-- 禁用自动重置 -->
+<ft-table :data="tableData" :reset-page="false"></ft-table>
+
+<!-- 手动重置（通过 ref） -->
+<ft-table ref="tableRef" :data="tableData" :reset-page="false"></ft-table>
+<script>
+// 在需要重置的地方
+tableRef.value.resetPage();
+</script>
+```
+
+**技术细节**：
+- 当 `reset-page="true"` 时，数据变化自动重置到第 1 页
+- 当 `reset-page="false"` 时，数据变化时检查当前页是否超过总页数，超过则自动调整到最后一页
+- 彻底解决了"切换分类后当前页无数据"的问题
+
+**升级建议**：
+- API 向后兼容，建议所有使用者升级
+- 利用新参数可以更灵活地控制分页行为
+
+### v1.1.20260308（2026-03-08）
+
+**改进内容**：
+- ✅ 排序指示器优化：从 `v-html` 改为纯模板渲染
+- ✅ 性能优化：使用 `v-for` 缓存函数调用结果，避免重复计算
+- ✅ 代码质量：HTML 结构更清晰，易于维护
+- ✅ 样式定制：支持页面级 CSS 覆盖通用样式
+
+**技术细节**：
+- `getSortIndicator()` 函数从返回 HTML 字符串改为返回对象
+- 模板中使用 `<template v-for="indicator in [getSortIndicator(col)]">` 缓存结果
+- 排序显示顺序可通过 CSS `flex-direction: column-reverse` 自定义
+
+**升级建议**：
+- 此次升级为优化版本，API 无破坏性变更
+- 建议所有使用者升级到 v1.1 版本
+
+### v1.0.20260226（2026-02-26）
+
+**初始版本**：
+- ✅ 基于 alpine-table.js 重构，适配 Vue 3 组合式 API
+- ✅ 支持分页功能（首页/末页/页码选择）
+- ✅ 支持冻结列（左侧/右侧）
+- ✅ 支持作用域插槽自定义列渲染
+- ✅ 支持多列排序（点击顺序形成优先级）
+- ✅ 自动注入基础样式

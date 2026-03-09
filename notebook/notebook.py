@@ -323,17 +323,18 @@ class Notebook:
         """导出为JSON"""
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
     
-    def export_html(self, output_path: str = None, template_path: str = None) -> str:
+    def export_html(self, name: str = None, template_path: str = None) -> str:
         """
         导出为HTML文件
         
-        :param output_path: 输出文件路径，默认输出到 base_dir/{title}.html
+        :param name: 输出文件名（不含扩展名），默认使用标题
         :param template_path: 自定义模板路径
         :return: 输出文件路径
         """
-        if output_path is None:
-            safe_title = self.nb_title.replace('/', '_').replace('\\', '_')
-            output_path = os.path.join(self.base_dir, f"{safe_title}.html")
+        if name is None:
+            name = self.nb_title.replace('/', '_').replace('\\', '_')
+        
+        output_path = os.path.join(self.base_dir, f"{name}.html")
         if template_path is None:
             template_dir = Path(__file__).parent.parent / 'template'
             template_path = str(template_dir / 'notebook.html')

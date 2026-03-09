@@ -15,7 +15,7 @@ from .core import (
 )
 
 # Notebook模块
-from .notebook import Notebook, Cell, CellType
+from .notebook import Notebook
 
 __all__ = [
     # 核心
@@ -24,5 +24,5 @@ __all__ = [
     'account', 'AccountManager', 'PositionSnapshot', 'AccountSnapshot', 'TradeRecord',
     'AccountAnalyzer',
     # Notebook
-    'Notebook', 'Cell', 'CellType',
+    'Notebook',
 ]
