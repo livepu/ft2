@@ -804,6 +804,9 @@ function createNotebookApp() {
             // 配色选择面板
             const showColorPicker = ref(false);
             
+            // 目录收起状态（小屏幕/底部固定时）
+            const tocCollapsed = ref(false);
+            
             // 配色方案
             const colorPalettes = Vue.reactive(window.colorPalettes || {
                 global: 'warmToCool',
@@ -1119,6 +1122,11 @@ function createNotebookApp() {
                 console.log('Notebook Vue3 应用已加载');
             });
 
+            // 切换目录收起状态
+            const toggleToc = () => {
+                tocCollapsed.value = !tocCollapsed.value;
+            };
+
             return {
                 title,
                 createdAt,
@@ -1140,7 +1148,10 @@ function createNotebookApp() {
                 colorPalettes,
                 toggleColorPicker,
                 setColorPalette,
-                updateChartColors
+                updateChartColors,
+                // 目录收起
+                tocCollapsed,
+                toggleToc
             };
         }
     });

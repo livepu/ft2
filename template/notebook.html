@@ -41,30 +41,43 @@
             </div>
             
             <!-- TOC 目录面板 -->
-            <aside class="toc-panel" v-if="tocItems.length > 0">
-                <div class="toc-header">📑 目录</div>
-                <ul class="toc-list">
-                    <li 
-                        v-for="(item, index) in tocItems" 
-                        :key="index"
-                        class="toc-item"
-                        :class="{ selected: isSelected(item.index) }"
-                        @click="scrollToSection(item.index)">
-                        <input 
-                            type="checkbox" 
-                            :checked="isSelected(item.index)"
-                            @click.stop="toggleSelection(item.index)">
-                        <span>{{ item.title }}</span>
-                    </li>
-                </ul>
-                <div class="toc-actions">
-                    <button @click="selectAll">全选</button>
-                    <button @click="clearSelection">清空</button>
-                    <button @click="captureScreenshot" :disabled="selectedCount === 0">截图选中</button>
-                </div>
-                <div class="toc-footer">
-                    <button @click="captureAll" class="full-btn">📋 全页截图</button>
-                </div>
+            <aside class="toc-panel" v-if="tocItems.length > 0" :class="{ collapsed: tocCollapsed }">
+                <!-- 展开状态 -->
+                <template v-if="!tocCollapsed">
+                    <div class="toc-header" @click="toggleToc">
+                        <span>📑 目录</span>
+                        <span class="toc-toggle-icon">▼</span>
+                    </div>
+                    <ul class="toc-list">
+                        <li 
+                            v-for="(item, index) in tocItems" 
+                            :key="index"
+                            class="toc-item"
+                            :class="{ selected: isSelected(item.index) }"
+                            @click="scrollToSection(item.index)">
+                            <input 
+                                type="checkbox" 
+                                :checked="isSelected(item.index)"
+                                @click.stop="toggleSelection(item.index)">
+                            <span>{{ item.title }}</span>
+                        </li>
+                    </ul>
+                    <div class="toc-actions">
+                        <button @click="selectAll">全选</button>
+                        <button @click="clearSelection">清空</button>
+                        <button @click="captureScreenshot" :disabled="selectedCount === 0">截图选中</button>
+                    </div>
+                    <div class="toc-footer">
+                        <button @click="captureAll" class="full-btn">📋 全页截图</button>
+                    </div>
+                </template>
+                <!-- 收起状态 - 底部浮动按钮 -->
+                <template v-else>
+                    <div class="toc-collapsed-trigger" @click="toggleToc">
+                        <span class="trigger-icon">📑</span>
+                        <span class="trigger-text">目录</span>
+                    </div>
+                </template>
             </aside>
         </div>
             
