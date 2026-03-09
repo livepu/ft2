@@ -225,8 +225,46 @@ const CellRenderer = {
             chartInstance.setOption(option);
         };
 
-        // 暖冷渐变系4 配色方案
-        const chartColors = ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4'];
+        // 配色方案定义
+        const colorPalettes = window.colorPalettes || {
+            global: 'warmToCool4',
+            types: {
+                line: 'warmToCool4',
+                bar: 'contrast',
+                pie: 'dahongdazi2'
+            },
+            palettes: {
+                warmToCool4: {
+                    name: '暖冷渐变系4',
+                    desc: '珊瑚橙粉紫青金绿',
+                    colors: ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4']
+                },
+                contrast: {
+                    name: '高对比度系',
+                    desc: '清晰易辨识',
+                    colors: ['#ff0000', '#00ff00', '#f39c12', '#9b59b6', '#3498db', '#e74c3c', '#2ecc71', '#e67e22', '#95a5a6']
+                },
+                dahongdazi2: {
+                    name: '大红大紫系2',
+                    desc: '红紫粉金，柔和现代',
+                    colors: ['#e74c3c', '#9b59b6', '#f39c12', '#e91e63', '#f1c40f', '#8e44ad', '#ff6b6b', '#af7ac5', '#daa520']
+                },
+                echartsDefault: {
+                    name: 'ECharts默认',
+                    desc: '官方默认配色',
+                    colors: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
+                }
+            }
+        };
+        window.colorPalettes = colorPalettes;
+        
+        // 获取图表配色
+        const getChartColors = (chartType) => {
+            const typeSpecific = colorPalettes.types[chartType];
+            const paletteKey = typeSpecific || colorPalettes.global;
+            const palette = colorPalettes.palettes[paletteKey];
+            return palette ? palette.colors : ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4'];
+        };
 
         // 构建图表配置
         const buildChartOption = (type, chartType, data, options = {}, multiplier = 1, showValue = true, showPercent = true) => {
@@ -268,7 +306,7 @@ const CellRenderer = {
                     }
                     
                     return {
-                        color: chartColors,
+                        color: getChartColors('pie'),
                         tooltip: { 
                             trigger: 'item', 
                             formatter: '{b}: {c} ({d}%)',
@@ -340,7 +378,7 @@ const CellRenderer = {
                             })),
                             top: 5,
                             itemStyle: {
-                                color: '#e74c3c'
+                                color: getChartColors('bar')[0]
                             }
                         },
                         grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
@@ -359,11 +397,12 @@ const CellRenderer = {
                             data: s.data,
                             itemStyle: { 
                                 color: function(params) {
+                                    const colors = getChartColors('bar');
                                     const value = params.value;
                                     if (value >= 0) {
-                                        return '#e74c3c';
+                                        return colors[0];
                                     } else {
-                                        return '#5499c7';
+                                        return colors[1];
                                     }
                                 },
                                 borderRadius: [4, 4, 0, 0]
@@ -374,7 +413,7 @@ const CellRenderer = {
 
                 // 折线图和面积图
                 return {
-                    color: chartColors,
+                    color: getChartColors('line'),
                     ...baseOption,
                     legend: { 
                         data: (data.series || []).map(s => s.name), 
@@ -400,12 +439,12 @@ const CellRenderer = {
                                 type: 'linear',
                                 x: 0, y: 0, x2: 0, y2: 1,
                                 colorStops: [
-                                    { offset: 0, color: chartColors[i % chartColors.length] + '60' },
-                                    { offset: 1, color: chartColors[i % chartColors.length] + '10' }
+                                    { offset: 0, color: getChartColors('line')[i % getChartColors('line').length] + '60' },
+                                    { offset: 1, color: getChartColors('line')[i % getChartColors('line').length] + '10' }
                                 ]
                             }
                         } : undefined,
-                        itemStyle: { color: chartColors[i % chartColors.length] }
+                        itemStyle: { color: getChartColors('line')[i % getChartColors('line').length] }
                     }))
                 };
             } else if (type === 'heatmap') {
@@ -520,12 +559,17 @@ const CellRenderer = {
                 
                 // 监听窗口大小变化，自动调整图表尺寸
                 window.addEventListener('resize', handleResize);
+                
+                // 监听配色方案变化，更新图表
+                window.addEventListener('colorSchemeChanged', initChart);
             }
         });
         
         onUnmounted(() => {
             // 移除resize监听，避免内存泄漏
             window.removeEventListener('resize', handleResize);
+            // 移除配色方案变化监听
+            window.removeEventListener('colorSchemeChanged', initChart);
             // 销毁图表实例
             if (chartInstance) {
                 chartInstance.dispose();
@@ -789,6 +833,42 @@ function createNotebookApp() {
             const toastType = ref('info');
             let toastTimer = null;
             
+            // 配色选择面板
+            const showColorPicker = ref(false);
+            
+            // 配色方案
+            const colorPalettes = window.colorPalettes || {
+                global: 'warmToCool4',
+                types: {
+                    line: 'warmToCool4',
+                    bar: 'contrast',
+                    pie: 'dahongdazi2'
+                },
+                palettes: {
+                    warmToCool4: {
+                        name: '暖冷渐变系4',
+                        desc: '珊瑚橙粉紫青金绿',
+                        colors: ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4']
+                    },
+                    contrast: {
+                        name: '高对比度系',
+                        desc: '清晰易辨识',
+                        colors: ['#ff0000', '#00ff00', '#f39c12', '#9b59b6', '#3498db', '#e74c3c', '#2ecc71', '#e67e22', '#95a5a6']
+                    },
+                    dahongdazi2: {
+                        name: '大红大紫系2',
+                        desc: '红紫粉金，柔和现代',
+                        colors: ['#e74c3c', '#9b59b6', '#f39c12', '#e91e63', '#f1c40f', '#8e44ad', '#ff6b6b', '#af7ac5', '#daa520']
+                    },
+                    echartsDefault: {
+                        name: 'ECharts默认',
+                        desc: '官方默认配色',
+                        colors: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
+                    }
+                }
+            };
+            window.colorPalettes = colorPalettes;
+            
             const showToast = (message, type = 'info', duration = 3000) => {
                 toastMessage.value = message;
                 toastType.value = type;
@@ -1041,6 +1121,27 @@ function createNotebookApp() {
                     showToast('截图失败: ' + err.message, 'error');
                 }
             };
+            
+            // 配色选择面板
+            const toggleColorPicker = () => {
+                showColorPicker.value = !showColorPicker.value;
+            };
+            
+            // 设置配色方案
+            const setColorPalette = (scope, paletteKey) => {
+                if (scope === 'global') {
+                    colorPalettes.global = paletteKey;
+                } else if (colorPalettes.types[scope]) {
+                    colorPalettes.types[scope] = paletteKey;
+                }
+                updateChartColors();
+            };
+            
+            // 更新图表配色
+            const updateChartColors = () => {
+                // 触发自定义事件，通知所有图表更新配色
+                window.dispatchEvent(new CustomEvent('colorSchemeChanged'));
+            };
 
             onMounted(() => {
                 console.log('Notebook Vue3 应用已加载');
@@ -1061,7 +1162,13 @@ function createNotebookApp() {
                 clearSelection,
                 scrollToSection,
                 captureScreenshot,
-                captureAll
+                captureAll,
+                // 配色管理
+                showColorPicker,
+                colorPalettes,
+                toggleColorPicker,
+                setColorPalette,
+                updateChartColors
             };
         }
     });

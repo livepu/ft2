@@ -67,6 +67,70 @@
                 </div>
             </aside>
         </div>
+            
+            <!-- 配色选择面板 -->
+            <div class="color-picker-panel">
+                <div class="color-picker-toggle" @click="toggleColorPicker">
+                    🎨 配色选择
+                </div>
+                <div class="color-picker-content" v-show="showColorPicker">
+                    <div class="color-picker-header">
+                        <h4>选择图表配色方案</h4>
+                    </div>
+                    <div class="color-picker-body">
+                        <div class="color-palette-group">
+                            <h5>全局配色</h5>
+                            <div class="color-palette-options">
+                                <button 
+                                    v-for="(palette, key) in colorPalettes.palettes" 
+                                    :key="key"
+                                    :class="['color-palette-btn', { active: colorPalettes.global === key }]"
+                                    @click="setColorPalette('global', key)"
+                                >
+                                    <div class="palette-colors">
+                                        <span 
+                                            v-for="(color, index) in palette.colors.slice(0, 4)" 
+                                            :key="index"
+                                            class="palette-color" 
+                                            :style="{ backgroundColor: color }"
+                                        ></span>
+                                    </div>
+                                    <span class="palette-name">{{ palette.name }}</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="color-palette-group">
+                            <h5>按图表类型</h5>
+                            <div class="color-palette-options">
+                                <div class="chart-type-picker">
+                                    <label>折线图:</label>
+                                    <select v-model="colorPalettes.types.line" @change="updateChartColors">
+                                        <option v-for="(palette, key) in colorPalettes.palettes" :key="key" :value="key">
+                                            {{ palette.name }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="chart-type-picker">
+                                    <label>柱状图:</label>
+                                    <select v-model="colorPalettes.types.bar" @change="updateChartColors">
+                                        <option v-for="(palette, key) in colorPalettes.palettes" :key="key" :value="key">
+                                            {{ palette.name }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="chart-type-picker">
+                                    <label>饼图:</label>
+                                    <select v-model="colorPalettes.types.pie" @change="updateChartColors">
+                                        <option v-for="(palette, key) in colorPalettes.palettes" :key="key" :value="key">
+                                            {{ palette.name }}
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
     </div>
     {% endraw %}
 
