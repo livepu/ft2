@@ -1,0 +1,3018 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>综合测试报告</title>
+    <link rel="stylesheet" href="template/js/notebook.css">
+    <style>
+        /* 配色选择面板样式 */
+        .color-picker-panel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+            overflow: hidden;
+        }
+        
+        .color-picker-toggle {
+            padding: 10px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #6b21a8;
+            border: 1px solid #e9d5ff;
+            border-radius: 8px;
+            background: #f3e8ff;
+            transition: all 0.3s;
+        }
+        
+        .color-picker-toggle:hover {
+            background: #e9d5ff;
+            transform: translateY(-2px);
+        }
+        
+        .color-picker-content {
+            padding: 16px;
+            min-width: 500px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .color-picker-header h4 {
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            color: #37352f;
+        }
+        
+        .color-picker-body {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .color-palette-group {
+            flex: 1;
+        }
+        
+        .color-palette-group h5 {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            color: #666;
+        }
+        
+        .color-palette-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .color-palette-btn {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+        }
+        
+        .color-palette-btn:hover {
+            border-color: #9b51e0;
+            background: #f3e8ff;
+        }
+        
+        .color-palette-btn.active {
+            border-color: #9b51e0;
+            background: #f3e8ff;
+            box-shadow: 0 2px 8px rgba(155, 81, 224, 0.2);
+        }
+        
+        .palette-colors {
+            display: flex;
+            gap: 2px;
+        }
+        
+        .palette-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 2px;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        
+        .palette-name {
+            font-size: 13px;
+            color: #333;
+        }
+        
+        .chart-type-picker {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .chart-type-picker label {
+            font-size: 13px;
+            color: #666;
+            min-width: 60px;
+        }
+        
+        .chart-type-picker select {
+            flex: 1;
+            padding: 6px 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #333;
+        }
+        
+        /* 确保配色面板不在截图范围内 */
+        @media print {
+            .color-picker-panel {
+                display: none;
+            }
+        }
+    </style>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/vue.global.prod.js"></script>
+    <script src="template/js/ft-table.js"></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/echarts.min.js"></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/snapdom.min.js"></script>
+</head>
+<body>
+    
+    <div id="app">
+        <!-- Toast 提示容器 -->
+        <div class="toast-container" v-if="toastMessage">
+            <div class="toast" :class="toastType">{{ toastMessage }}</div>
+        </div>
+        
+        <!-- 整体居中 wrapper -->
+        <div class="notebook-wrapper">
+            <!-- 主体容器 -->
+            <div class="notebook-container">
+                <!-- 头部 -->
+                <div class="notebook-header">
+                    <h1>{{ title }}</h1>
+                    <div class="meta">
+                        <span>📅 {{ createdAt }}</span>
+                    </div>
+                </div>
+                
+                <!-- 内容区域 -->
+                <cell-renderer 
+                    v-for="(cell, index) in cells" 
+                    :key="index"
+                    :cell="cell"
+                    :cell-id="index"
+                    :level="0">
+                </cell-renderer>
+            </div>
+            
+            <!-- TOC 目录面板 -->
+            <aside class="toc-panel" v-if="tocItems.length > 0">
+                <div class="toc-header">📑 目录</div>
+                <ul class="toc-list">
+                    <li 
+                        v-for="(item, index) in tocItems" 
+                        :key="index"
+                        class="toc-item"
+                        :class="{ selected: isSelected(item.index) }"
+                        @click="scrollToSection(item.index)">
+                        <input 
+                            type="checkbox" 
+                            :checked="isSelected(item.index)"
+                            @click.stop="toggleSelection(item.index)">
+                        <span>{{ item.title }}</span>
+                    </li>
+                </ul>
+                <div class="toc-actions">
+                    <button @click="selectAll">全选</button>
+                    <button @click="clearSelection">清空</button>
+                    <button @click="captureScreenshot" :disabled="selectedCount === 0">截图选中</button>
+                </div>
+                <div class="toc-footer">
+                    <button @click="captureAll" class="full-btn">📋 全页截图</button>
+                </div>
+            </aside>
+        </div>
+            
+            <!-- 配色选择面板 -->
+            <div class="color-picker-panel">
+                <div class="color-picker-toggle" @click="toggleColorPicker">
+                    🎨 配色选择
+                </div>
+                <div class="color-picker-content" v-show="showColorPicker">
+                    <div class="color-picker-header">
+                        <h4>选择图表配色方案</h4>
+                    </div>
+                    <div class="color-picker-body">
+                        <div class="color-palette-group">
+                            <h5>全局配色</h5>
+                            <div class="color-palette-options">
+                                <button 
+                                    v-for="(palette, key) in colorPalettes.palettes" 
+                                    :key="key"
+                                    :class="['color-palette-btn', { active: colorPalettes.global === key }]"
+                                    @click="setColorPalette('global', key)"
+                                >
+                                    <div class="palette-colors">
+                                        <span 
+                                            v-for="(color, index) in palette.colors.slice(0, 4)" 
+                                            :key="index"
+                                            class="palette-color" 
+                                            :style="{ backgroundColor: color }"
+                                        ></span>
+                                    </div>
+                                    <span class="palette-name">{{ palette.name }}</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="color-palette-group">
+                            <h5>按图表类型</h5>
+                            <div class="color-palette-options">
+                                <div class="chart-type-picker">
+                                    <label>折线图:</label>
+                                    <select v-model="colorPalettes.types.line" @change="updateChartColors">
+                                        <option v-for="(palette, key) in colorPalettes.palettes" :key="key" :value="key">
+                                            {{ palette.name }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="chart-type-picker">
+                                    <label>柱状图:</label>
+                                    <select v-model="colorPalettes.types.bar" @change="updateChartColors">
+                                        <option v-for="(palette, key) in colorPalettes.palettes" :key="key" :value="key">
+                                            {{ palette.name }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="chart-type-picker">
+                                    <label>饼图:</label>
+                                    <select v-model="colorPalettes.types.pie" @change="updateChartColors">
+                                        <option v-for="(palette, key) in colorPalettes.palettes" :key="key" :value="key">
+                                            {{ palette.name }}
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+
+    <!-- Notebook 数据注入（Jinja2 渲染） -->
+    <script id="notebook-data" type="application/json">{
+  "title": "综合测试报告",
+  "createdAt": "2026-03-06 19:07:32",
+  "children": [
+    {
+      "type": "title",
+      "content": "策略回测报告",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "divider",
+      "content": null
+    },
+    {
+      "type": "markdown",
+      "content": "\n**策略类型**: 趋势跟踪 | **回测区间**: 2024-01 至 2024-05 | **初始资金**: 1,000,000\n    "
+    },
+    {
+      "type": "metrics",
+      "content": [
+        {
+          "name": "总收益",
+          "value": "45.6%",
+          "desc": "累计收益"
+        },
+        {
+          "name": "夏普",
+          "value": "1.85",
+          "desc": "风险调整"
+        },
+        {
+          "name": "最大回撤",
+          "value": "-12.3%",
+          "desc": "2024-03"
+        },
+        {
+          "name": "胜率",
+          "value": "58%",
+          "desc": "盈利占比"
+        }
+      ],
+      "options": {
+        "columns": 4
+      }
+    },
+    {
+      "type": "divider",
+      "content": null
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "text",
+          "content": "净值曲线与基准对比：",
+          "options": {
+            "style": "normal"
+          }
+        },
+        {
+          "type": "chart",
+          "content": {
+            "charts": {
+              "animation": true,
+              "animationThreshold": 2000,
+              "animationDuration": 1000,
+              "animationEasing": "cubicOut",
+              "animationDelay": 0,
+              "animationDurationUpdate": 300,
+              "animationEasingUpdate": "cubicOut",
+              "animationDelayUpdate": 0,
+              "aria": {
+                "enabled": false
+              },
+              "series": [
+                {
+                  "type": "line",
+                  "name": "策略",
+                  "connectNulls": false,
+                  "xAxisIndex": 0,
+                  "symbolSize": 4,
+                  "showSymbol": true,
+                  "smooth": false,
+                  "clip": true,
+                  "step": false,
+                  "stackStrategy": "samesign",
+                  "data": [
+                    [
+                      "2024-01",
+                      1.0
+                    ],
+                    [
+                      "2024-02",
+                      1.05
+                    ],
+                    [
+                      "2024-03",
+                      1.12
+                    ],
+                    [
+                      "2024-04",
+                      1.08
+                    ],
+                    [
+                      "2024-05",
+                      1.15
+                    ]
+                  ],
+                  "hoverAnimation": true,
+                  "label": {
+                    "show": true,
+                    "margin": 8,
+                    "richInheritPlainLabel": true,
+                    "valueAnimation": false
+                  },
+                  "logBase": 10,
+                  "seriesLayoutBy": "column",
+                  "lineStyle": {
+                    "show": false
+                  },
+                  "areaStyle": {
+                    "opacity": 0
+                  },
+                  "zlevel": 0,
+                  "z": 0
+                },
+                {
+                  "type": "line",
+                  "name": "基准",
+                  "connectNulls": false,
+                  "xAxisIndex": 0,
+                  "symbolSize": 4,
+                  "showSymbol": true,
+                  "smooth": false,
+                  "clip": true,
+                  "step": false,
+                  "stackStrategy": "samesign",
+                  "data": [
+                    [
+                      "2024-01",
+                      1.0
+                    ],
+                    [
+                      "2024-02",
+                      1.02
+                    ],
+                    [
+                      "2024-03",
+                      1.04
+                    ],
+                    [
+                      "2024-04",
+                      1.06
+                    ],
+                    [
+                      "2024-05",
+                      1.08
+                    ]
+                  ],
+                  "hoverAnimation": true,
+                  "label": {
+                    "show": true,
+                    "margin": 8,
+                    "richInheritPlainLabel": true,
+                    "valueAnimation": false
+                  },
+                  "logBase": 10,
+                  "seriesLayoutBy": "column",
+                  "lineStyle": {
+                    "show": false
+                  },
+                  "areaStyle": {
+                    "opacity": 0
+                  },
+                  "zlevel": 0,
+                  "z": 0
+                }
+              ],
+              "legend": [
+                {
+                  "data": [
+                    "策略",
+                    "基准"
+                  ],
+                  "selected": {}
+                }
+              ],
+              "tooltip": {
+                "show": true,
+                "trigger": "item",
+                "triggerOn": "mousemove|click",
+                "axisPointer": {
+                  "type": "line"
+                },
+                "showContent": true,
+                "alwaysShowContent": false,
+                "showDelay": 0,
+                "hideDelay": 100,
+                "enterable": false,
+                "confine": false,
+                "appendToBody": false,
+                "transitionDuration": 0.4,
+                "displayTransition": true,
+                "textStyle": {
+                  "fontSize": 14,
+                  "richInheritPlainLabel": true
+                },
+                "borderWidth": 0,
+                "padding": 5,
+                "order": "seriesAsc"
+              },
+              "xAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "data": [
+                    "2024-01",
+                    "2024-02",
+                    "2024-03",
+                    "2024-04",
+                    "2024-05"
+                  ]
+                }
+              ],
+              "yAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0
+                }
+              ]
+            },
+            "width": "100%",
+            "height": "300px"
+          },
+          "title": "净值曲线"
+        },
+        {
+          "type": "section",
+          "children": [
+            {
+              "type": "chart",
+              "content": {
+                "charts": {
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "aria": {
+                    "enabled": false
+                  },
+                  "series": [
+                    {
+                      "type": "bar",
+                      "name": "月收益%",
+                      "legendHoverLink": true,
+                      "data": [
+                        5,
+                        -2,
+                        8,
+                        3,
+                        6
+                      ],
+                      "realtimeSort": false,
+                      "showBackground": false,
+                      "stackStrategy": "samesign",
+                      "cursor": "pointer",
+                      "barMinHeight": 0,
+                      "barCategoryGap": "20%",
+                      "barGap": "30%",
+                      "large": false,
+                      "largeThreshold": 400,
+                      "seriesLayoutBy": "column",
+                      "datasetIndex": 0,
+                      "clip": true,
+                      "zlevel": 0,
+                      "z": 2,
+                      "label": {
+                        "show": true,
+                        "margin": 8,
+                        "richInheritPlainLabel": true,
+                        "valueAnimation": false
+                      }
+                    }
+                  ],
+                  "legend": [
+                    {
+                      "data": [
+                        "月收益%"
+                      ],
+                      "selected": {}
+                    }
+                  ],
+                  "tooltip": {
+                    "show": true,
+                    "trigger": "item",
+                    "triggerOn": "mousemove|click",
+                    "axisPointer": {
+                      "type": "line"
+                    },
+                    "showContent": true,
+                    "alwaysShowContent": false,
+                    "showDelay": 0,
+                    "hideDelay": 100,
+                    "enterable": false,
+                    "confine": false,
+                    "appendToBody": false,
+                    "transitionDuration": 0.4,
+                    "displayTransition": true,
+                    "textStyle": {
+                      "fontSize": 14,
+                      "richInheritPlainLabel": true
+                    },
+                    "borderWidth": 0,
+                    "padding": 5,
+                    "order": "seriesAsc"
+                  },
+                  "xAxis": [
+                    {
+                      "show": true,
+                      "scale": false,
+                      "nameLocation": "end",
+                      "nameGap": 15,
+                      "nameTruncate": {},
+                      "nameMoveOverlap": true,
+                      "inverse": false,
+                      "offset": 0,
+                      "splitNumber": 5,
+                      "minInterval": 0,
+                      "silent": false,
+                      "triggerEvent": false,
+                      "splitLine": {
+                        "show": true,
+                        "lineStyle": {
+                          "show": false
+                        }
+                      },
+                      "animation": true,
+                      "animationThreshold": 2000,
+                      "animationDuration": 1000,
+                      "animationEasing": "cubicOut",
+                      "animationDelay": 0,
+                      "animationDurationUpdate": 300,
+                      "animationEasingUpdate": "cubicOut",
+                      "animationDelayUpdate": 0,
+                      "data": [
+                        "1月",
+                        "2月",
+                        "3月",
+                        "4月",
+                        "5月"
+                      ]
+                    }
+                  ],
+                  "yAxis": [
+                    {
+                      "show": true,
+                      "scale": false,
+                      "nameLocation": "end",
+                      "nameGap": 15,
+                      "nameTruncate": {},
+                      "nameMoveOverlap": true,
+                      "inverse": false,
+                      "offset": 0,
+                      "splitNumber": 5,
+                      "minInterval": 0,
+                      "silent": false,
+                      "triggerEvent": false,
+                      "splitLine": {
+                        "show": true,
+                        "lineStyle": {
+                          "show": false
+                        }
+                      },
+                      "animation": true,
+                      "animationThreshold": 2000,
+                      "animationDuration": 1000,
+                      "animationEasing": "cubicOut",
+                      "animationDelay": 0,
+                      "animationDurationUpdate": 300,
+                      "animationEasingUpdate": "cubicOut",
+                      "animationDelayUpdate": 0
+                    }
+                  ]
+                },
+                "width": "100%",
+                "height": "400px"
+              },
+              "title": "月度收益"
+            },
+            {
+              "type": "chart",
+              "content": {
+                "charts": {
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "aria": {
+                    "enabled": false
+                  },
+                  "series": [
+                    {
+                      "type": "pie",
+                      "colorBy": "data",
+                      "legendHoverLink": true,
+                      "selectedMode": false,
+                      "selectedOffset": 10,
+                      "clockwise": true,
+                      "startAngle": 90,
+                      "minAngle": 0,
+                      "minShowLabelAngle": 0,
+                      "avoidLabelOverlap": true,
+                      "stillShowZeroSum": true,
+                      "percentPrecision": 2,
+                      "showEmptyCircle": true,
+                      "emptyCircleStyle": {
+                        "color": "lightgray",
+                        "borderColor": "#000",
+                        "borderWidth": 0,
+                        "borderType": "solid",
+                        "borderDashOffset": 0,
+                        "borderCap": "butt",
+                        "borderJoin": "bevel",
+                        "borderMiterLimit": 10,
+                        "opacity": 1
+                      },
+                      "data": [
+                        {
+                          "name": "股票",
+                          "value": 60
+                        },
+                        {
+                          "name": "债券",
+                          "value": 25
+                        },
+                        {
+                          "name": "现金",
+                          "value": 15
+                        }
+                      ],
+                      "radius": [
+                        "0%",
+                        "75%"
+                      ],
+                      "center": [
+                        "50%",
+                        "50%"
+                      ],
+                      "label": {
+                        "show": true,
+                        "margin": 8,
+                        "richInheritPlainLabel": true,
+                        "valueAnimation": false
+                      },
+                      "labelLine": {
+                        "show": true,
+                        "showAbove": false,
+                        "length": 15,
+                        "length2": 15,
+                        "smooth": false,
+                        "minTurnAngle": 90,
+                        "maxSurfaceAngle": 90
+                      }
+                    }
+                  ],
+                  "legend": [
+                    {
+                      "data": [
+                        "股票",
+                        "债券",
+                        "现金"
+                      ],
+                      "selected": {}
+                    }
+                  ],
+                  "tooltip": {
+                    "show": true,
+                    "trigger": "item",
+                    "triggerOn": "mousemove|click",
+                    "axisPointer": {
+                      "type": "line"
+                    },
+                    "showContent": true,
+                    "alwaysShowContent": false,
+                    "showDelay": 0,
+                    "hideDelay": 100,
+                    "enterable": false,
+                    "confine": false,
+                    "appendToBody": false,
+                    "transitionDuration": 0.4,
+                    "displayTransition": true,
+                    "textStyle": {
+                      "fontSize": 14,
+                      "richInheritPlainLabel": true
+                    },
+                    "borderWidth": 0,
+                    "padding": 5,
+                    "order": "seriesAsc"
+                  }
+                },
+                "width": "100%",
+                "height": "250px"
+              },
+              "title": "资产配置"
+            }
+          ],
+          "title": "月度分析",
+          "options": {
+            "level": 2
+          }
+        }
+      ],
+      "title": "收益分析",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "text",
+      "content": "【自由内容】以下是风险分析部分，可直接阅读或点击目录跳转。",
+      "options": {
+        "style": "normal"
+      }
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "chart",
+          "content": {
+            "charts": {
+              "animation": true,
+              "animationThreshold": 2000,
+              "animationDuration": 1000,
+              "animationEasing": "cubicOut",
+              "animationDelay": 0,
+              "animationDurationUpdate": 300,
+              "animationEasingUpdate": "cubicOut",
+              "animationDelayUpdate": 0,
+              "aria": {
+                "enabled": false
+              },
+              "series": [
+                {
+                  "type": "line",
+                  "name": "回撤%",
+                  "connectNulls": false,
+                  "xAxisIndex": 0,
+                  "symbolSize": 4,
+                  "showSymbol": true,
+                  "smooth": false,
+                  "clip": true,
+                  "step": false,
+                  "stackStrategy": "samesign",
+                  "data": [
+                    [
+                      "2024-01",
+                      0
+                    ],
+                    [
+                      "2024-02",
+                      -2
+                    ],
+                    [
+                      "2024-03",
+                      -5
+                    ],
+                    [
+                      "2024-04",
+                      -3
+                    ],
+                    [
+                      "2024-05",
+                      -1
+                    ]
+                  ],
+                  "hoverAnimation": true,
+                  "label": {
+                    "show": true,
+                    "margin": 8,
+                    "richInheritPlainLabel": true,
+                    "valueAnimation": false
+                  },
+                  "logBase": 10,
+                  "seriesLayoutBy": "column",
+                  "lineStyle": {
+                    "show": false
+                  },
+                  "areaStyle": {
+                    "opacity": 0.3
+                  },
+                  "zlevel": 0,
+                  "z": 0
+                }
+              ],
+              "legend": [
+                {
+                  "data": [
+                    "回撤%"
+                  ],
+                  "selected": {}
+                }
+              ],
+              "tooltip": {
+                "show": true,
+                "trigger": "item",
+                "triggerOn": "mousemove|click",
+                "axisPointer": {
+                  "type": "line"
+                },
+                "showContent": true,
+                "alwaysShowContent": false,
+                "showDelay": 0,
+                "hideDelay": 100,
+                "enterable": false,
+                "confine": false,
+                "appendToBody": false,
+                "transitionDuration": 0.4,
+                "displayTransition": true,
+                "textStyle": {
+                  "fontSize": 14,
+                  "richInheritPlainLabel": true
+                },
+                "borderWidth": 0,
+                "padding": 5,
+                "order": "seriesAsc"
+              },
+              "xAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "data": [
+                    "2024-01",
+                    "2024-02",
+                    "2024-03",
+                    "2024-04",
+                    "2024-05"
+                  ]
+                }
+              ],
+              "yAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0
+                }
+              ]
+            },
+            "width": "100%",
+            "height": 250
+          },
+          "title": "回撤曲线"
+        },
+        {
+          "type": "chart",
+          "content": {
+            "charts": {
+              "animation": true,
+              "animationThreshold": 2000,
+              "animationDuration": 1000,
+              "animationEasing": "cubicOut",
+              "animationDelay": 0,
+              "animationDurationUpdate": 300,
+              "animationEasingUpdate": "cubicOut",
+              "animationDelayUpdate": 0,
+              "aria": {
+                "enabled": false
+              },
+              "series": [
+                {
+                  "type": "heatmap",
+                  "coordinateSystem": "cartesian2d",
+                  "data": [
+                    [
+                      0,
+                      0,
+                      0.02
+                    ],
+                    [
+                      1,
+                      0,
+                      -0.01
+                    ],
+                    [
+                      2,
+                      0,
+                      0.03
+                    ],
+                    [
+                      3,
+                      0,
+                      0.01
+                    ],
+                    [
+                      4,
+                      0,
+                      -0.02
+                    ],
+                    [
+                      5,
+                      0,
+                      0.04
+                    ],
+                    [
+                      0,
+                      1,
+                      0.05
+                    ],
+                    [
+                      1,
+                      1,
+                      -0.02
+                    ],
+                    [
+                      2,
+                      1,
+                      0.08
+                    ],
+                    [
+                      3,
+                      1,
+                      0.03
+                    ],
+                    [
+                      4,
+                      1,
+                      0.06
+                    ],
+                    [
+                      5,
+                      1,
+                      -0.01
+                    ]
+                  ],
+                  "label": {
+                    "show": true,
+                    "margin": 8,
+                    "richInheritPlainLabel": true,
+                    "valueAnimation": false
+                  },
+                  "selectedMode": false,
+                  "zlevel": 0,
+                  "z": 2
+                }
+              ],
+              "legend": [
+                {
+                  "data": [
+                    ""
+                  ],
+                  "selected": {},
+                  "show": true,
+                  "padding": 5,
+                  "itemGap": 10,
+                  "itemWidth": 25,
+                  "itemHeight": 14,
+                  "backgroundColor": "transparent",
+                  "borderColor": "#ccc",
+                  "borderRadius": 0,
+                  "pageButtonItemGap": 5,
+                  "pageButtonPosition": "end",
+                  "pageFormatter": "{current}/{total}",
+                  "pageIconColor": "#2f4554",
+                  "pageIconInactiveColor": "#aaa",
+                  "pageIconSize": 15,
+                  "animationDurationUpdate": 800,
+                  "selector": false,
+                  "selectorPosition": "auto",
+                  "selectorItemGap": 7,
+                  "selectorButtonGap": 10,
+                  "triggerEvent": false
+                }
+              ],
+              "tooltip": {
+                "show": true,
+                "trigger": "item",
+                "triggerOn": "mousemove|click",
+                "axisPointer": {
+                  "type": "line"
+                },
+                "showContent": true,
+                "alwaysShowContent": false,
+                "showDelay": 0,
+                "hideDelay": 100,
+                "enterable": false,
+                "confine": false,
+                "appendToBody": false,
+                "transitionDuration": 0.4,
+                "displayTransition": true,
+                "textStyle": {
+                  "fontSize": 14,
+                  "richInheritPlainLabel": true
+                },
+                "borderWidth": 0,
+                "padding": 5,
+                "order": "seriesAsc"
+              },
+              "xAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "data": [
+                    "01",
+                    "02",
+                    "03",
+                    "04",
+                    "05",
+                    "06"
+                  ]
+                }
+              ],
+              "yAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "data": [
+                    "2023",
+                    "2024"
+                  ]
+                }
+              ],
+              "title": [
+                {
+                  "show": true,
+                  "target": "blank",
+                  "subtarget": "blank",
+                  "padding": 5,
+                  "itemGap": 10,
+                  "textAlign": "auto",
+                  "textVerticalAlign": "auto",
+                  "triggerEvent": false
+                }
+              ],
+              "visualMap": {
+                "show": true,
+                "type": "continuous",
+                "min": 0,
+                "max": 100,
+                "inRange": {
+                  "color": [
+                    "#50a3ba",
+                    "#eac763",
+                    "#d94e5d"
+                  ]
+                },
+                "calculable": true,
+                "inverse": false,
+                "splitNumber": 5,
+                "hoverLink": true,
+                "orient": "horizontal",
+                "padding": 5,
+                "showLabel": true,
+                "itemWidth": 20,
+                "itemHeight": 140,
+                "borderWidth": 0
+              }
+            },
+            "width": "100%",
+            "height": "400px"
+          },
+          "title": "月度收益热力图"
+        },
+        {
+          "type": "section",
+          "children": [
+            {
+              "type": "markdown",
+              "content": "\n**VaR(95%)**: 2.5%  \n**CVaR(95%)**: 3.8%  \n**下行波动率**: 8.2%\n            "
+            }
+          ],
+          "title": "风险评估",
+          "options": {
+            "level": 2,
+            "collapsed": true
+          }
+        }
+      ],
+      "title": "风险分析",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "html",
+      "content": "\n    <div style=\"background: linear-gradient(90deg, #f3f4f6 0%, #fff 100%); padding: 12px 16px; border-radius: 6px; margin: 12px 0;\">\n        <strong>💡 【自由内容提示】</strong> 持仓明细如下，详细数据可点击 Section 查看。\n    </div>\n    "
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "table",
+          "content": [
+            {
+              "代码": "600000",
+              "名称": "浦发银行",
+              "数量": 10000,
+              "成本": 10.5,
+              "现价": 11.2,
+              "盈亏": "+6.7%"
+            },
+            {
+              "代码": "000001",
+              "名称": "平安银行",
+              "数量": 5000,
+              "成本": 15.2,
+              "现价": 16.8,
+              "盈亏": "+10.5%"
+            },
+            {
+              "代码": "000002",
+              "名称": "万科A",
+              "数量": 8000,
+              "成本": 8.3,
+              "现价": 7.5,
+              "盈亏": "-9.6%"
+            }
+          ],
+          "title": "持仓列表",
+          "options": {
+            "columns": [
+              {
+                "field": "代码",
+                "title": "代码"
+              },
+              {
+                "field": "名称",
+                "title": "名称"
+              },
+              {
+                "field": "数量",
+                "title": "数量"
+              },
+              {
+                "field": "成本",
+                "title": "成本"
+              },
+              {
+                "field": "现价",
+                "title": "现价"
+              },
+              {
+                "field": "盈亏",
+                "title": "盈亏"
+              }
+            ]
+          }
+        }
+      ],
+      "title": "持仓明细",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "text",
+          "content": "多列表格，冻结左侧2列：",
+          "options": {
+            "style": "normal"
+          }
+        },
+        {
+          "type": "table",
+          "content": [
+            {
+              "股票代码": "600000",
+              "股票名称": "股票0名称",
+              "收盘价": 10.0,
+              "涨跌幅": "-10%",
+              "成交量": 1000000,
+              "成交额": 10000000,
+              "振幅": "0.0%",
+              "换手率": "0.0%",
+              "市盈率": 20.0,
+              "市净率": 2.0,
+              "总市值": 1000000000,
+              "流通市值": 800000000
+            },
+            {
+              "股票代码": "600001",
+              "股票名称": "股票1名称",
+              "收盘价": 10.5,
+              "涨跌幅": "-9%",
+              "成交量": 1100000,
+              "成交额": 11000000,
+              "振幅": "0.5%",
+              "换手率": "0.3%",
+              "市盈率": 20.5,
+              "市净率": 2.1,
+              "总市值": 1010000000,
+              "流通市值": 808000000
+            },
+            {
+              "股票代码": "600002",
+              "股票名称": "股票2名称",
+              "收盘价": 11.0,
+              "涨跌幅": "-8%",
+              "成交量": 1200000,
+              "成交额": 12000000,
+              "振幅": "1.0%",
+              "换手率": "0.6%",
+              "市盈率": 21.0,
+              "市净率": 2.2,
+              "总市值": 1020000000,
+              "流通市值": 816000000
+            },
+            {
+              "股票代码": "600003",
+              "股票名称": "股票3名称",
+              "收盘价": 11.5,
+              "涨跌幅": "-7%",
+              "成交量": 1300000,
+              "成交额": 13000000,
+              "振幅": "1.5%",
+              "换手率": "0.8999999999999999%",
+              "市盈率": 21.5,
+              "市净率": 2.3,
+              "总市值": 1030000000,
+              "流通市值": 824000000
+            },
+            {
+              "股票代码": "600004",
+              "股票名称": "股票4名称",
+              "收盘价": 12.0,
+              "涨跌幅": "-6%",
+              "成交量": 1400000,
+              "成交额": 14000000,
+              "振幅": "2.0%",
+              "换手率": "1.2%",
+              "市盈率": 22.0,
+              "市净率": 2.4,
+              "总市值": 1040000000,
+              "流通市值": 832000000
+            },
+            {
+              "股票代码": "600005",
+              "股票名称": "股票5名称",
+              "收盘价": 12.5,
+              "涨跌幅": "-5%",
+              "成交量": 1500000,
+              "成交额": 15000000,
+              "振幅": "2.5%",
+              "换手率": "1.5%",
+              "市盈率": 22.5,
+              "市净率": 2.5,
+              "总市值": 1050000000,
+              "流通市值": 840000000
+            },
+            {
+              "股票代码": "600006",
+              "股票名称": "股票6名称",
+              "收盘价": 13.0,
+              "涨跌幅": "-4%",
+              "成交量": 1600000,
+              "成交额": 16000000,
+              "振幅": "3.0%",
+              "换手率": "1.7999999999999998%",
+              "市盈率": 23.0,
+              "市净率": 2.6,
+              "总市值": 1060000000,
+              "流通市值": 848000000
+            },
+            {
+              "股票代码": "600007",
+              "股票名称": "股票7名称",
+              "收盘价": 13.5,
+              "涨跌幅": "-3%",
+              "成交量": 1700000,
+              "成交额": 17000000,
+              "振幅": "3.5%",
+              "换手率": "2.1%",
+              "市盈率": 23.5,
+              "市净率": 2.7,
+              "总市值": 1070000000,
+              "流通市值": 856000000
+            },
+            {
+              "股票代码": "600008",
+              "股票名称": "股票8名称",
+              "收盘价": 14.0,
+              "涨跌幅": "-2%",
+              "成交量": 1800000,
+              "成交额": 18000000,
+              "振幅": "4.0%",
+              "换手率": "2.4%",
+              "市盈率": 24.0,
+              "市净率": 2.8,
+              "总市值": 1080000000,
+              "流通市值": 864000000
+            },
+            {
+              "股票代码": "600009",
+              "股票名称": "股票9名称",
+              "收盘价": 14.5,
+              "涨跌幅": "-1%",
+              "成交量": 1900000,
+              "成交额": 19000000,
+              "振幅": "4.5%",
+              "换手率": "2.6999999999999997%",
+              "市盈率": 24.5,
+              "市净率": 2.9,
+              "总市值": 1090000000,
+              "流通市值": 872000000
+            },
+            {
+              "股票代码": "600010",
+              "股票名称": "股票10名称",
+              "收盘价": 15.0,
+              "涨跌幅": "0%",
+              "成交量": 2000000,
+              "成交额": 20000000,
+              "振幅": "5.0%",
+              "换手率": "3.0%",
+              "市盈率": 25.0,
+              "市净率": 3.0,
+              "总市值": 1100000000,
+              "流通市值": 880000000
+            },
+            {
+              "股票代码": "600011",
+              "股票名称": "股票11名称",
+              "收盘价": 15.5,
+              "涨跌幅": "1%",
+              "成交量": 2100000,
+              "成交额": 21000000,
+              "振幅": "5.5%",
+              "换手率": "3.3%",
+              "市盈率": 25.5,
+              "市净率": 3.1,
+              "总市值": 1110000000,
+              "流通市值": 888000000
+            },
+            {
+              "股票代码": "600012",
+              "股票名称": "股票12名称",
+              "收盘价": 16.0,
+              "涨跌幅": "2%",
+              "成交量": 2200000,
+              "成交额": 22000000,
+              "振幅": "6.0%",
+              "换手率": "3.5999999999999996%",
+              "市盈率": 26.0,
+              "市净率": 3.2,
+              "总市值": 1120000000,
+              "流通市值": 896000000
+            },
+            {
+              "股票代码": "600013",
+              "股票名称": "股票13名称",
+              "收盘价": 16.5,
+              "涨跌幅": "3%",
+              "成交量": 2300000,
+              "成交额": 23000000,
+              "振幅": "6.5%",
+              "换手率": "3.9%",
+              "市盈率": 26.5,
+              "市净率": 3.3,
+              "总市值": 1130000000,
+              "流通市值": 904000000
+            },
+            {
+              "股票代码": "600014",
+              "股票名称": "股票14名称",
+              "收盘价": 17.0,
+              "涨跌幅": "4%",
+              "成交量": 2400000,
+              "成交额": 24000000,
+              "振幅": "7.0%",
+              "换手率": "4.2%",
+              "市盈率": 27.0,
+              "市净率": 3.4,
+              "总市值": 1140000000,
+              "流通市值": 912000000
+            },
+            {
+              "股票代码": "600015",
+              "股票名称": "股票15名称",
+              "收盘价": 17.5,
+              "涨跌幅": "5%",
+              "成交量": 2500000,
+              "成交额": 25000000,
+              "振幅": "7.5%",
+              "换手率": "4.5%",
+              "市盈率": 27.5,
+              "市净率": 3.5,
+              "总市值": 1150000000,
+              "流通市值": 920000000
+            },
+            {
+              "股票代码": "600016",
+              "股票名称": "股票16名称",
+              "收盘价": 18.0,
+              "涨跌幅": "6%",
+              "成交量": 2600000,
+              "成交额": 26000000,
+              "振幅": "8.0%",
+              "换手率": "4.8%",
+              "市盈率": 28.0,
+              "市净率": 3.6,
+              "总市值": 1160000000,
+              "流通市值": 928000000
+            },
+            {
+              "股票代码": "600017",
+              "股票名称": "股票17名称",
+              "收盘价": 18.5,
+              "涨跌幅": "7%",
+              "成交量": 2700000,
+              "成交额": 27000000,
+              "振幅": "8.5%",
+              "换手率": "5.1%",
+              "市盈率": 28.5,
+              "市净率": 3.7,
+              "总市值": 1170000000,
+              "流通市值": 936000000
+            },
+            {
+              "股票代码": "600018",
+              "股票名称": "股票18名称",
+              "收盘价": 19.0,
+              "涨跌幅": "8%",
+              "成交量": 2800000,
+              "成交额": 28000000,
+              "振幅": "9.0%",
+              "换手率": "5.3999999999999995%",
+              "市盈率": 29.0,
+              "市净率": 3.8,
+              "总市值": 1180000000,
+              "流通市值": 944000000
+            },
+            {
+              "股票代码": "600019",
+              "股票名称": "股票19名称",
+              "收盘价": 19.5,
+              "涨跌幅": "9%",
+              "成交量": 2900000,
+              "成交额": 29000000,
+              "振幅": "9.5%",
+              "换手率": "5.7%",
+              "市盈率": 29.5,
+              "市净率": 3.9,
+              "总市值": 1190000000,
+              "流通市值": 952000000
+            }
+          ],
+          "title": "股票行情（冻结左侧2列，共12列）",
+          "options": {
+            "columns": [
+              {
+                "field": "股票代码",
+                "title": "股票代码"
+              },
+              {
+                "field": "股票名称",
+                "title": "股票名称"
+              },
+              {
+                "field": "收盘价",
+                "title": "收盘价"
+              },
+              {
+                "field": "涨跌幅",
+                "title": "涨跌幅"
+              },
+              {
+                "field": "成交量",
+                "title": "成交量"
+              },
+              {
+                "field": "成交额",
+                "title": "成交额"
+              },
+              {
+                "field": "振幅",
+                "title": "振幅"
+              },
+              {
+                "field": "换手率",
+                "title": "换手率"
+              },
+              {
+                "field": "市盈率",
+                "title": "市盈率"
+              },
+              {
+                "field": "市净率",
+                "title": "市净率"
+              },
+              {
+                "field": "总市值",
+                "title": "总市值"
+              },
+              {
+                "field": "流通市值",
+                "title": "流通市值"
+              }
+            ],
+            "freeze": {
+              "left": 2,
+              "right": 0
+            }
+          }
+        }
+      ],
+      "title": "股票行情",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "divider",
+      "content": null
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "table",
+          "content": [
+            {
+              "日期": "2024-01-05",
+              "方向": "买入",
+              "代码": "600000",
+              "价格": 10.5,
+              "数量": 1000
+            },
+            {
+              "日期": "2024-02-10",
+              "方向": "卖出",
+              "代码": "600000",
+              "价格": 11.2,
+              "数量": 1000
+            },
+            {
+              "日期": "2024-02-15",
+              "方向": "买入",
+              "代码": "000001",
+              "价格": 15.0,
+              "数量": 500
+            },
+            {
+              "日期": "2024-03-20",
+              "方向": "卖出",
+              "代码": "000001",
+              "价格": 16.8,
+              "数量": 500
+            }
+          ],
+          "title": "历史交易",
+          "options": {
+            "columns": [
+              {
+                "field": "日期",
+                "title": "日期"
+              },
+              {
+                "field": "方向",
+                "title": "方向"
+              },
+              {
+                "field": "代码",
+                "title": "代码"
+              },
+              {
+                "field": "价格",
+                "title": "价格"
+              },
+              {
+                "field": "数量",
+                "title": "数量"
+              }
+            ]
+          }
+        }
+      ],
+      "title": "历史记录",
+      "options": {
+        "level": 1,
+        "collapsed": true
+      }
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "code",
+          "content": {
+            "code": "# 策略核心逻辑\ndef on_bar(bar):\n    if bar.close > ma20:\n        buy(symbol=bar.symbol, quantity=100)\n    elif bar.close < ma20:\n        sell(symbol=bar.symbol, quantity=100)\n",
+            "language": "python",
+            "output": "策略初始化完成\n回测结束"
+          }
+        }
+      ],
+      "title": "策略代码",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "html",
+      "content": "\n<div style=\"background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 6px; margin-top: 20px;\">\n    <strong>⚠️ 【自由内容】风险提示</strong>\n    <p style=\"margin: 8px 0 0 0; color: #856404;\">\n        本报告仅供参考，不构成投资建议。历史业绩不代表未来表现。\n    </p>\n</div>\n    "
+    }
+  ]
+}</script>
+    
+    <!-- Notebook Vue3 JS -->
+    <script>
+        const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
+
+        // ========== Cell 渲染组件（组合式 API）==========
+        const CellRenderer = {
+            name: 'CellRenderer',
+            components: {
+                // FtTable 会从父组件传递，如果可用
+                FtTable: typeof window !== 'undefined' && window.FtTable ? window.FtTable : null
+            },
+            props: {
+                cell: { type: Object, required: true },
+                cellId: { type: [String, Number], required: true },
+                level: { type: Number, default: 0 }
+            },
+            setup(props, { emit }) {
+                const chartRef = ref(null);
+                let chartInstance = null;
+                
+                // 热力图放大倍数控制
+                const heatmapMultiplier = ref(1);
+                const heatmapRawData = ref(null);
+                
+                // 饼图显示控制
+                const pieShowValue = ref(true);
+                const pieShowPercent = ref(true);
+                const pieRawData = ref(null);
+
+                // 渲染 Markdown
+                const renderMarkdown = (content) => {
+                    if (!content) return '';
+                    return content
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                        .replace(/`(.*?)`/g, '<code>$1</code>')
+                        .replace(/\n/g, '<br>');
+                };
+
+                // 获取指标样式类
+                const getMetricClass = (value) => {
+                    if (typeof value !== 'string') return '';
+                    if (value.includes('%')) {
+                        const num = parseFloat(value);
+                        if (!isNaN(num)) {
+                            return num >= 0 ? 'positive' : 'negative';
+                        }
+                    }
+                    return '';
+                };
+
+                // 获取表格列配置
+                const getTableCols = (cell) => {
+                    if (cell.options?.columns) {
+                        // 支持两种格式：字符串数组 或 对象数组
+                        return cell.options.columns.map(col => {
+                            if (typeof col === 'string') {
+                                return { field: col, title: col };
+                            }
+                            // 已经是对象格式 {field, title}
+                            return { field: col.field, title: col.title || col.field };
+                        });
+                    }
+                    if (cell.content && cell.content.length > 0) {
+                        return Object.keys(cell.content[0]).map(key => ({
+                            field: key,
+                            title: key
+                        }));
+                    }
+                    return [];
+                };
+
+                // 获取表格选项
+                const getTableOptions = (cell) => {
+                    const opts = {};
+                    if (cell.options?.freeze) opts.freeze = cell.options.freeze;
+                    // 默认开启分页：数据超过10条时自动分页，也可通过 options.pagination 自定义
+                    if (cell.options?.pagination !== false) {
+                        const dataLength = cell.content?.length || 0;
+                        if (dataLength > 10 || cell.options?.pagination) {
+                            opts.pagination = cell.options?.pagination || {
+                                pageSize: 10,
+                                pageSizeOptions: [10, 20, 50, 100]
+                            };
+                        }
+                    }
+                    return opts;
+                };
+
+                // 获取图表类型（从 pyecharts 的 charts 配置中提取）
+                const getChartType = (content) => {
+                    return content.charts?.series?.[0]?.type || null;
+                };
+
+                // 从 pyecharts 配置中提取核心数据，转换为 buildChartOption 格式
+                const extractChartData = (charts) => {
+                    if (!charts || !charts.series || !charts.series[0]) return null;
+                    
+                    const series = charts.series;
+                    const chartType = series[0].type;
+                    
+                    if (chartType === 'line' || chartType === 'bar') {
+                        const xAxisData = charts.xAxis?.[0]?.data || [];
+                        const extractedSeries = series.map(s => {
+                            let data = s.data || [];
+                            if (data.length > 0 && Array.isArray(data[0])) {
+                                data = data.map(d => d[1]);
+                            }
+                            return { name: s.name, data };
+                        });
+                        return {
+                            chart_type: chartType,
+                            xAxis: xAxisData,
+                            series: extractedSeries
+                        };
+                    }
+                    
+                    if (chartType === 'pie') {
+                        return {
+                            chart_type: 'pie',
+                            data: series[0].data || []
+                        };
+                    }
+                    
+                    if (chartType === 'heatmap') {
+                        const xAxisData = charts.xAxis?.[0]?.data || [];
+                        const yAxisData = charts.yAxis?.[0]?.data || [];
+                        const heatmapRawData = series[0].data || [];
+                        const heatmapDict = {};
+                        yAxisData.forEach((year, yIdx) => {
+                            heatmapDict[year] = {};
+                            xAxisData.forEach((month, mIdx) => {
+                                const point = heatmapRawData.find(p => p[0] === mIdx && p[1] === yIdx);
+                                heatmapDict[year][month] = point ? point[2] : 0;
+                            });
+                        });
+                        return {
+                            chart_type: 'heatmap',
+                            data: heatmapDict
+                        };
+                    }
+                    
+                    return null;
+                };
+
+                // 初始化图表
+                const initChart = () => {
+                    if (!chartRef.value || !props.cell.content) {
+                        console.warn('Chart init skipped: no chartRef or content');
+                        return;
+                    }
+
+                    const cell = props.cell;
+                    const content = cell.content;
+                    chartInstance = echarts.init(chartRef.value);
+                    
+                    if (!content.charts) {
+                        console.warn('Chart init skipped: no charts config');
+                        return;
+                    }
+                    
+                    // 深拷贝一份配置，避免修改原始数据
+                    const chartsConfig = JSON.parse(JSON.stringify(content.charts));
+                    
+                    // 确保 tooltip 配置存在并强制设置正确的选项
+                    if (!chartsConfig.tooltip) {
+                        chartsConfig.tooltip = {};
+                    }
+                    
+                    // 统一设置所有图表类型的 tooltip 配置
+                    chartsConfig.tooltip.appendToBody = true;
+                    chartsConfig.tooltip.enterable = true;
+                    chartsConfig.tooltip.padding = [8, 12];
+                    chartsConfig.tooltip.textStyle = {
+                        fontSize: 13,
+                        lineHeight: 20
+                    };
+                    chartsConfig.tooltip.extraCssText = 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px; max-width: 400px;';
+                    
+                    const extracted = extractChartData(chartsConfig);
+                    if (!extracted) {
+                        // 直接使用原始配置，但已修改了 tooltip
+                        chartInstance.setOption(chartsConfig);
+                        return;
+                    }
+                    
+                    // 使用 buildChartOption 处理
+                    const chartType = extracted.chart_type;
+                    const data = extracted.data || extracted;
+                    
+                    if (chartType === 'pie') {
+                        pieRawData.value = extracted.data;
+                    }
+                    if (chartType === 'heatmap') {
+                        heatmapRawData.value = extracted.data;
+                        heatmapMultiplier.value = 1;
+                    }
+                    
+                    const option = buildChartOption(
+                        chartType === 'heatmap' ? 'heatmap' : 'chart',
+                        chartType,
+                        data,
+                        cell.options,
+                        heatmapMultiplier.value,
+                        pieShowValue.value,
+                        pieShowPercent.value
+                    );
+                    chartInstance.setOption(option);
+                };
+                
+                // 更新热力图（当放大倍数改变时）
+                const updateHeatmap = () => {
+                    if (!chartInstance || !heatmapRawData.value) return;
+                    const option = buildChartOption('heatmap', 'heatmap', heatmapRawData.value, props.cell.options, heatmapMultiplier.value);
+                    chartInstance.setOption(option, { replaceMerge: ['visualMap'] });
+                };
+                
+                // 更新饼图（当显示选项改变时）
+                const updatePie = () => {
+                    if (!chartInstance || !pieRawData.value) return;
+                    const option = buildChartOption('chart', 'pie', pieRawData.value, props.cell.options, 1, pieShowValue.value, pieShowPercent.value);
+                    chartInstance.setOption(option);
+                };
+
+                // 配色方案
+                const colorPalettes = window.colorPalettes || {
+                    global: 'warmToCool4',
+                    types: {
+                        line: 'warmToCool4',
+                        bar: 'contrast',
+                        pie: 'dahongdazi2'
+                    },
+                    palettes: {
+                        warmToCool4: {
+                            name: '暖冷渐变系4',
+                            desc: '珊瑚橙粉紫青金绿',
+                            colors: ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4']
+                        },
+                        contrast: {
+                            name: '高对比度系',
+                            desc: '清晰易辨识',
+                            colors: ['#ff0000', '#00ff00', '#f39c12', '#9b59b6', '#3498db', '#e74c3c', '#2ecc71', '#e67e22', '#95a5a6']
+                        },
+                        dahongdazi2: {
+                            name: '大红大紫系2',
+                            desc: '红紫粉金，柔和现代',
+                            colors: ['#e74c3c', '#9b59b6', '#f39c12', '#e91e63', '#f1c40f', '#8e44ad', '#ff6b6b', '#af7ac5', '#daa520']
+                        },
+                        echartsDefault: {
+                            name: 'ECharts默认',
+                            desc: '官方默认配色',
+                            colors: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
+                        }
+                    }
+                };
+
+                // 获取当前图表类型的配色
+                const getChartColors = (chartType) => {
+                    const globalPalettes = window.colorPalettes || colorPalettes;
+                    const paletteKey = globalPalettes.types[chartType] || globalPalettes.global;
+                    return globalPalettes.palettes[paletteKey].colors;
+                };
+
+                // 构建图表配置
+                const buildChartOption = (type, chartType, data, options = {}, multiplier = 1, showValue = true, showPercent = true) => {
+                    const chartColors = getChartColors(chartType);
+                    const baseOption = {
+                        tooltip: { 
+                            trigger: 'axis',
+                            padding: [8, 12],
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            borderColor: '#e0e0e0',
+                            borderWidth: 1,
+                            textStyle: {
+                                color: '#333',
+                                fontSize: 13,
+                                lineHeight: 20
+                            },
+                            extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;',
+                            appendToBody: true,
+                            enterable: true
+                        },
+                        grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true }
+                    };
+
+                    if (type === 'chart') {
+                        const isLine = chartType === 'line';
+                        const isBar = chartType === 'bar';
+                        const isArea = chartType === 'area';
+                        const isPie = chartType === 'pie';
+
+                        // 饼图特殊处理
+                        if (isPie) {
+                            // 构建 label 格式
+                            let labelFormatter = '{b}';
+                            if (showValue && showPercent) {
+                                labelFormatter = '{b}\n{c} ({d}%)';
+                            } else if (showValue) {
+                                labelFormatter = '{b}\n{c}';
+                            } else if (showPercent) {
+                                labelFormatter = '{b}\n({d}%)';
+                            }
+                            
+                            return {
+                                color: chartColors,
+                                tooltip: { 
+                                    trigger: 'item', 
+                                    formatter: '{b}: {c} ({d}%)',
+                                    appendToBody: true,
+                                    enterable: true,
+                                    padding: [8, 12],
+                                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                    borderColor: '#e0e0e0',
+                                    borderWidth: 1,
+                                    textStyle: {
+                                        color: '#333',
+                                        fontSize: 13,
+                                        lineHeight: 20
+                                    },
+                                    extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;'
+                                },
+                                legend: { 
+                                    top: 10,
+                                    left: 'center',
+                                    orient: 'horizontal'
+                                },
+                                series: [{
+                                    type: 'pie',
+                                    data: data,
+                                    radius: ['40%', '70%'],
+                                    center: ['45%', '55%'],
+                                    label: { 
+                                        show: true, 
+                                        formatter: labelFormatter 
+                                    },
+                                    labelLine: {
+                                        show: true,
+                                        length: 15,
+                                        length2: 10
+                                    },
+                                    emphasis: {
+                                        label: {
+                                            show: true,
+                                            fontSize: 14,
+                                            fontWeight: 'bold'
+                                        }
+                                    }
+                                }]
+                            };
+                        }
+
+                        // 柱状图特殊处理：正负颜色区分
+                        if (isBar) {
+                            return {
+                                tooltip: { 
+                                    trigger: 'axis',
+                                    appendToBody: true,
+                                    enterable: true,
+                                    padding: [8, 12],
+                                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                    borderColor: '#e0e0e0',
+                                    borderWidth: 1,
+                                    textStyle: {
+                                        color: '#333',
+                                        fontSize: 13,
+                                        lineHeight: 20
+                                    },
+                                    extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;'
+                                },
+                                legend: { 
+                                    data: (data.series || []).map(s => ({
+                                        name: s.name,
+                                        icon: 'rect'
+                                    })),
+                                    top: 5,
+                                    itemStyle: {
+                                        color: chartColors[0]
+                                    }
+                                },
+                                grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
+                                xAxis: {
+                                    type: 'category',
+                                    data: data.xAxis || data.dates || data.categories || []
+                                },
+                                yAxis: { 
+                                    type: 'value',
+                                    scale: true,
+                                    boundaryGap: ['10%', '10%']
+                                },
+                                series: (data.series || []).map(s => ({
+                                    name: s.name,
+                                    type: 'bar',
+                                    data: s.data,
+                                    itemStyle: { 
+                                        color: function(params) {
+                                            const value = params.value;
+                                            if (value >= 0) {
+                                                return chartColors[0];
+                                            } else {
+                                                return chartColors[1];
+                                            }
+                                        },
+                                        borderRadius: [4, 4, 0, 0]
+                                    }
+                                }))
+                            };
+                        }
+
+                        // 折线图和面积图
+                        return {
+                            color: chartColors,
+                            ...baseOption,
+                            legend: { 
+                                data: (data.series || []).map(s => s.name), 
+                                top: 5 
+                            },
+                            xAxis: {
+                                type: 'category',
+                                boundaryGap: false,
+                                data: data.xAxis || data.dates || data.categories || []
+                            },
+                            yAxis: { 
+                                type: 'value',
+                                scale: true,
+                                boundaryGap: ['10%', '10%']
+                            },
+                            series: (data.series || []).map((s, i) => ({
+                                name: s.name,
+                                type: isArea ? 'line' : chartType,
+                                data: s.data,
+                                smooth: true,
+                                areaStyle: isArea ? { 
+                                    color: {
+                                        type: 'linear',
+                                        x: 0, y: 0, x2: 0, y2: 1,
+                                        colorStops: [
+                                            { offset: 0, color: chartColors[i % chartColors.length] + '60' },
+                                            { offset: 1, color: chartColors[i % chartColors.length] + '10' }
+                                        ]
+                                    }
+                                } : undefined,
+                                itemStyle: { color: chartColors[i % chartColors.length] }
+                            }))
+                        };
+                    } else if (type === 'heatmap') {
+                        const years = Object.keys(data);
+                        const months = Object.keys(data[years[0]]);
+                        const heatmapData = [];
+                        let minValue = Infinity;
+                        let maxValue = -Infinity;
+                        
+                        years.forEach((year, yIndex) => {
+                            months.forEach((month, mIndex) => {
+                                const value = data[year][month];
+                                if (value !== undefined) {
+                                    const numValue = parseFloat(value);
+                                    heatmapData.push([mIndex, yIndex, numValue]);
+                                    minValue = Math.min(minValue, numValue);
+                                    maxValue = Math.max(maxValue, numValue);
+                                }
+                            });
+                        });
+
+                        // 应用传入的放大倍数（保持为数字类型）
+                        const displayData = heatmapData.map(d => [d[0], d[1], d[2] * multiplier]);
+                        
+                        // 根据放大后的数据范围设置 visualMap（实际最大值最小值）
+                        const displayValues = displayData.map(d => d[2]);
+                        const actualMin = Math.min(...displayValues);
+                        const actualMax = Math.max(...displayValues);
+                        
+                        // 根据数值范围确定合适的步长和小数位数
+                        const valueRange = actualMax - actualMin;
+                        let step = 0.01;
+                        let decimalPlaces = 2;
+                        
+                        if (valueRange >= 10) {
+                            step = 5;
+                            decimalPlaces = 0;
+                        } else if (valueRange >= 1) {
+                            step = 0.5;
+                            decimalPlaces = 1;
+                        } else if (valueRange >= 0.1) {
+                            step = 0.05;
+                            decimalPlaces = 2;
+                        }
+                        
+                        // 向上/向下取整，让边界更美观
+                        const visualMin = Math.floor(actualMin / step) * step;
+                        const visualMax = Math.ceil(actualMax / step) * step;
+
+                        return {
+                            tooltip: { 
+                                formatter: function(params) {
+                                    return years[params.value[1]] + '-' + months[params.value[0]] + ': ' + params.value[2].toFixed(2);
+                                },
+                                appendToBody: true,
+                                enterable: true,
+                                padding: [8, 12],
+                                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                                borderColor: '#e0e0e0',
+                                borderWidth: 1,
+                                textStyle: {
+                                    color: '#333',
+                                    fontSize: 13,
+                                    lineHeight: 20
+                                },
+                                extraCssText: 'box-shadow: 0 2px 8px rgba(0,0,0,0.15); border-radius: 4px;'
+                            },
+                            grid: { left: '10%', right: '18%', top: '10%', bottom: '12%' },
+                            xAxis: { 
+                                type: 'category', 
+                                data: months, 
+                                splitArea: { show: true } 
+                            },
+                            yAxis: { 
+                                type: 'category', 
+                                data: years, 
+                                splitArea: { show: true } 
+                            },
+                            visualMap: {
+                                min: visualMin,
+                                max: visualMax,
+                                range: [visualMin, visualMax],
+                                calculable: true,
+                                orient: 'vertical',
+                                right: '2%',
+                                top: 'center',
+                                text: [visualMax.toFixed(decimalPlaces) + ' (×' + multiplier + ')', 
+                                       visualMin.toFixed(decimalPlaces) + ' (×' + multiplier + ')'],
+                                inRange: {
+                                    color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8',
+                                            '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']
+                                }
+                            },
+                            series: [{
+                                name: '收益',
+                                type: 'heatmap',
+                                data: displayData,
+                                label: { show: true, formatter: function(params) {
+                                    return params.value[2].toFixed(2);
+                                }},
+                                emphasis: { itemStyle: { shadowBlur: 10 } }
+                            }]
+                        };
+                    }
+
+                    return baseOption;
+                };
+
+                onMounted(() => {
+                    if (['chart', 'heatmap', 'pyecharts'].includes(props.cell.type)) {
+                        nextTick(() => initChart());
+                        
+                        // 监听窗口大小变化，自动调整图表尺寸
+                        window.addEventListener('resize', handleResize);
+                    }
+                });
+                
+                onUnmounted(() => {
+                    // 移除resize监听，避免内存泄漏
+                    window.removeEventListener('resize', handleResize);
+                    // 销毁图表实例
+                    if (chartInstance) {
+                        chartInstance.dispose();
+                        chartInstance = null;
+                    }
+                });
+                
+                // 处理窗口resize
+                const handleResize = () => {
+                    if (chartInstance) {
+                        chartInstance.resize();
+                    }
+                };
+
+                // 监听配色变化
+                window.addEventListener('colorPaletteChange', initChart);
+
+                return {
+                    chartRef,
+                    heatmapMultiplier,
+                    updateHeatmap,
+                    pieShowValue,
+                    pieShowPercent,
+                    updatePie,
+                    renderMarkdown,
+                    getMetricClass,
+                    getTableCols,
+                    getTableOptions,
+                    getChartType
+                };
+            },
+            template: `
+        <!-- Section - 直接渲染，不包裹 .cell -->
+        <div v-if="cell.type === 'section'" 
+             class="section"
+             :class="{ 
+                 'nested-section': level > 0,
+                 'collapsible-section': cell.options?.collapsed !== undefined
+             }"
+             :id="'section-' + cellId">
+            <div v-if="cell.title" 
+                 class="section-title"
+                 :class="{ 'collapsible-header': cell.options?.collapsed !== undefined }"
+                 @click="cell.options?.collapsed !== undefined && (cell.options.collapsed = !cell.options.collapsed)">
+                <span>{{ cell.title }}</span>
+                <span v-if="cell.options?.collapsed !== undefined" class="collapse-icon">
+                    {{ cell.options?.collapsed ? '▶' : '▼' }}
+                </span>
+            </div>
+            <div class="section-content" v-show="cell.options?.collapsed !== true">
+                <cell-renderer 
+                    v-for="(subCell, idx) in cell.children" 
+                    :key="idx"
+                    :cell="subCell"
+                    :cell-id="cellId + '-' + idx"
+                    :level="level + 1">
+                </cell-renderer>
+            </div>
+        </div>
+        
+        <!-- 其他类型 - 包裹在 .cell 中 -->
+        <div v-else class="cell">
+            <!-- 标题 -->
+            <div v-if="cell.type === 'title'" class="cell-title">
+                <h1 v-if="cell.options?.level === 1">{{ cell.content }}</h1>
+                <h2 v-else-if="cell.options?.level === 2">{{ cell.content }}</h2>
+                <h3 v-else>{{ cell.content }}</h3>
+            </div>
+            
+            <!-- 文本 -->
+            <div v-else-if="cell.type === 'text'" 
+                 class="cell-text" 
+                 :class="'text-' + (cell.options?.style || 'normal')">
+                {{ cell.content }}
+            </div>
+            
+            <!-- Markdown -->
+            <div v-else-if="cell.type === 'markdown'" 
+                 class="markdown-content" 
+                 v-html="renderMarkdown(cell.content)">
+            </div>
+            
+            <!-- 代码 -->
+            <div v-else-if="cell.type === 'code'" class="code-block">
+                <div class="code-header">{{ cell.content?.lang || 'Python' }}</div>
+                <div class="code-input"><pre>{{ cell.content?.code }}</pre></div>
+                <div v-if="cell.content?.output" class="code-output">{{ cell.content.output }}</div>
+            </div>
+            
+            <!-- 表格 -->
+            <div v-else-if="cell.type === 'table'" class="cell-table">
+                <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div v-if="!cell.content || cell.content.length === 0" class="table-empty">
+                    暂无数据
+                </div>
+                <ft-table
+                    v-else
+                    :id="'table-' + cellId"
+                    :data="cell.content"
+                    :cols="getTableCols(cell)"
+                    v-bind="getTableOptions(cell)">
+                </ft-table>
+            </div>
+            
+            <!-- 指标 -->
+            <div v-else-if="cell.type === 'metrics'" class="cell-metrics">
+                <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div class="metrics-grid" :style="{'--columns': cell.options?.columns || 4}">
+                    <div v-for="metric in cell.content" 
+                         :key="metric.name"
+                         class="metric-card"
+                         :class="getMetricClass(metric.value)">
+                        <div class="metric-value">{{ metric.value }}</div>
+                        <div class="metric-label">{{ metric.name }}</div>
+                        <div v-if="metric.desc" class="metric-desc">{{ metric.desc }}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 饼图（带显示控制） -->
+            <div v-else-if="cell.content?.charts && getChartType(cell.content) === 'pie'"
+                 class="cell-chart pie-with-control">
+                <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div class="pie-wrapper">
+                    <div ref="chartRef"
+                         class="chart-container"
+                         :style="{
+                             width: cell.content?.width || '100%',
+                             height: typeof (cell.content?.height || cell.options?.height) === 'string' ? (cell.content?.height || cell.options?.height) : (cell.content?.height || cell.options?.height || 400) + 'px'
+                         }">
+                    </div>
+                    <div class="pie-control">
+                        <div class="control-label">显示选项</div>
+                        <div class="checkbox-group">
+                            <label class="checkbox-item">
+                                <input 
+                                    type="checkbox" 
+                                    v-model="pieShowValue"
+                                    @change="updatePie">
+                                <span>原始数据</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input 
+                                    type="checkbox" 
+                                    v-model="pieShowPercent"
+                                    @change="updatePie">
+                                <span>百分比</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 热力图（带放大倍数控制） -->
+            <div v-else-if="cell.content?.charts && getChartType(cell.content) === 'heatmap'"
+                 class="cell-chart heatmap-with-control">
+                <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div class="heatmap-wrapper">
+                    <div ref="chartRef"
+                         class="chart-container"
+                         :style="{
+                             width: cell.content?.width || '100%',
+                             height: typeof (cell.content?.height || cell.options?.height) === 'string' ? (cell.content?.height || cell.options?.height) : (cell.content?.height || cell.options?.height || 400) + 'px'
+                         }">
+                    </div>
+                    <div class="heatmap-control">
+                        <div class="control-label">数据缩放</div>
+                        <div class="current-multiplier">×{{ heatmapMultiplier }}</div>
+                        <div class="multiplier-buttons">
+                            <button 
+                                v-for="m in [1000, 100, 10]" 
+                                :key="m"
+                                :class="{ active: heatmapMultiplier === m }"
+                                @click="heatmapMultiplier = m; updateHeatmap()">
+                                ×{{ m }}
+                            </button>
+                            <button 
+                                :class="{ active: heatmapMultiplier === 1 }"
+                                @click="heatmapMultiplier = 1; updateHeatmap()">
+                                原始
+                            </button>
+                            <button 
+                                v-for="m in [0.1, 0.01]" 
+                                :key="m"
+                                :class="{ active: heatmapMultiplier === m }"
+                                @click="heatmapMultiplier = m; updateHeatmap()">
+                                1/{{ m === 0.1 ? 10 : 100 }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 其他图表（折线图、柱状图等） -->
+            <div v-else-if="(cell.type === 'chart' || cell.type === 'pyecharts') && cell.content?.charts" 
+                 class="cell-chart">
+                <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div ref="chartRef"
+                     class="chart-container"
+                     :style="{
+                         width: cell.content?.width || '100%',
+                         height: typeof (cell.content?.height || cell.options?.height) === 'string' ? (cell.content?.height || cell.options?.height) : (cell.content?.height || cell.options?.height || 400) + 'px'
+                     }">
+                </div>
+            </div>
+
+            <!-- HTML -->
+            <div v-else-if="cell.type === 'html'" class="html-block">
+                <div class="html-block-inner" v-html="cell.content"></div>
+            </div>
+            
+            <!-- 分隔线 -->
+            <div v-else-if="cell.type === 'divider'" class="cell-divider"></div>
+            
+            <!-- 可折叠（遗留类型，保持兼容） -->
+            <div v-else-if="cell.type === 'collapsible'" class="cell-collapsible">
+                <button class="collapse-toggle" @click="cell.options.collapsed = !cell.options.collapsed">
+                    <span>{{ cell.title }}</span>
+                    <span>{{ cell.options?.collapsed ? '▶' : '▼' }}</span>
+                </button>
+                <div v-show="!cell.options?.collapsed" class="collapse-content">
+                    <cell-renderer 
+                        v-for="(subCell, idx) in cell.children" 
+                        :key="idx"
+                        :cell="subCell"
+                        :cell-id="cellId + '-' + idx"
+                        :level="level + 1">
+                    </cell-renderer>
+                </div>
+            </div>
+        </div>
+    `
+        };
+
+        // ========== 创建 Notebook 应用 ==========
+        function createNotebookApp() {
+            // 从全局获取 FtTable 组件（由 ft-table.js 暴露到 window）
+            const FtTableComponent = typeof window !== 'undefined' ? window.FtTable : null;
+            console.log('FtTableComponent:', FtTableComponent);
+            
+            return createApp({
+                components: {
+                    CellRenderer,
+                    FtTable: FtTableComponent
+                },
+
+                setup() {
+                    // 从全局变量获取配置（由后端渲染时注入）
+                    const config = window.notebookConfig || {
+                        title: '未命名 Notebook',
+                        createdAt: new Date().toLocaleString(),
+                        children: []
+                    };
+
+                    const title = ref(config.title);
+                    const createdAt = ref(config.createdAt);
+                    // 兼容 cells 和 children 两种字段名
+                    const cells = ref(config.children || config.cells || []);
+                    const selectedIndices = ref(new Set());
+                    const isScreenshotMode = ref(false);
+                    
+                    // Toast 提示
+                    const toastMessage = ref('');
+                    const toastType = ref('info');
+                    let toastTimer = null;
+                    
+                    const showToast = (message, type = 'info', duration = 3000) => {
+                        toastMessage.value = message;
+                        toastType.value = type;
+                        if (toastTimer) clearTimeout(toastTimer);
+                        toastTimer = setTimeout(() => {
+                            toastMessage.value = '';
+                        }, duration);
+                    };
+
+                    // 计算目录项
+                    const tocItems = computed(() => {
+                        const items = [];
+                        if (title.value) {
+                            items.push({ title: title.value, type: 'header', index: -1 });
+                        }
+                        cells.value.forEach((cell, index) => {
+                            if (cell.type === 'section' && cell.title) {
+                                items.push({ title: cell.title, type: 'section', index });
+                            }
+                        });
+                        return items;
+                    });
+
+                    // 选中数量
+                    const selectedCount = computed(() => selectedIndices.value.size);
+
+                    // 判断是否选中
+                    const isSelected = (index) => selectedIndices.value.has(index);
+
+                    // 切换选择
+                    const toggleSelection = (index) => {
+                        const newSet = new Set(selectedIndices.value);
+                        if (newSet.has(index)) {
+                            newSet.delete(index);
+                        } else {
+                            newSet.add(index);
+                        }
+                        selectedIndices.value = newSet;
+                    };
+
+                    // 全选
+                    const selectAll = () => {
+                        const allIndices = tocItems.value.map(item => item.index);
+                        selectedIndices.value = new Set(allIndices);
+                    };
+
+                    // 清空选择
+                    const clearSelection = () => {
+                        selectedIndices.value = new Set();
+                    };
+
+                    // 滚动到章节
+                    const scrollToSection = (index) => {
+                        if (index === -1) {
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        } else {
+                            const el = document.getElementById('section-' + index);
+                            if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }
+                    };
+
+                    // 截图功能 - 逐个元素截图后 Canvas 拼接（保证所见即所得）
+                    const captureScreenshot = async () => {
+                        if (selectedIndices.value.size === 0) return;
+
+                        const mainContainer = document.querySelector('.notebook-container');
+
+                        // 收集需要截图的元素
+                        const elementsToCapture = [];
+
+                        // 1. 头部（如果选中）
+                        if (selectedIndices.value.has(-1)) {
+                            const header = mainContainer.querySelector('.notebook-header');
+                            if (header) elementsToCapture.push(header);
+                        }
+
+                        // 2. 按原始顺序收集选中的 sections
+                        const sortedIndices = [...selectedIndices.value]
+                            .filter(index => index !== -1)
+                            .sort((a, b) => a - b);
+
+                        sortedIndices.forEach(index => {
+                            const section = document.getElementById('section-' + index);
+                            if (section) elementsToCapture.push(section);
+                        });
+
+                        try {
+                            // 3. 等待表格组件渲染完成
+                            // ft-table 是异步渲染，需要给予足够时间
+                            await new Promise(resolve => setTimeout(resolve, 300));
+
+                            // 4. 逐个截图
+                            const imageBlobs = [];
+                            for (const el of elementsToCapture) {
+                                // 检查元素内是否有表格，如果有额外等待
+                                const hasTable = el.querySelector('ft-table, .ft-table, table');
+                                if (hasTable) {
+                                    await new Promise(resolve => setTimeout(resolve, 200));
+                                }
+                                
+                                const result = await snapdom(el, {
+                                    scale: 2,
+                                    backgroundColor: '#f5f5f5',
+                                    cache: 'auto'
+                                });
+                                const blob = await result.toBlob({ type: 'png' });
+                                imageBlobs.push(blob);
+                            }
+
+                            // 4. Canvas 拼接
+                            const finalBlob = await stitchImages(imageBlobs);
+
+                            // 5. 复制到剪贴板
+                            try {
+                                window.focus();
+                                await navigator.clipboard.write([
+                                    new ClipboardItem({ 'image/png': finalBlob })
+                                ]);
+                                showToast(`已复制 ${selectedIndices.value.size} 个选中区域到剪贴板`, 'success');
+                            } catch (clipboardErr) {
+                                console.error('复制到剪贴板失败:', clipboardErr);
+                                // 自动下载图片
+                                showToast('复制到剪贴板失败，正在下载图片...', 'info');
+                                const reader = new FileReader();
+                                reader.onload = function(e) {
+                                    const link = document.createElement('a');
+                                    link.download = `${title.value || 'notebook'}-选中部分.png`;
+                                    link.href = e.target.result;
+                                    link.click();
+                                };
+                                reader.readAsDataURL(finalBlob);
+                            }
+
+                        } catch (err) {
+                            console.error('截图失败:', err);
+                            showToast('截图失败: ' + err.message, 'error');
+                        }
+                    };
+
+                    // 图片拼接函数 - 将多个图片 blob 垂直拼接（保留间距、padding和背景）
+                    const stitchImages = async (imageBlobs) => {
+                        // 加载所有图片
+                        const images = await Promise.all(imageBlobs.map(blob => {
+                            return new Promise((resolve, reject) => {
+                                const img = new Image();
+                                img.onload = () => resolve(img);
+                                img.onerror = reject;
+                                img.src = URL.createObjectURL(blob);
+                            });
+                        }));
+
+                        // 配置间距和 padding（与原 CSS 一致）
+                        const MARGIN_TOP = 12;       // section margin-top
+                        const MARGIN_BOTTOM = 12;    // section margin-bottom
+                        const CONTAINER_PADDING = 20; // notebook-container padding
+
+                        // 计算总尺寸（包含间距和 container padding）
+                        const maxContentWidth = Math.max(...images.map(img => img.width));
+                        const maxWidth = maxContentWidth + CONTAINER_PADDING * 2; // 左右 padding
+                        const contentHeight = images.reduce((sum, img) => sum + img.height, 0);
+                        const spacingHeight = (images.length - 1) * (MARGIN_TOP + MARGIN_BOTTOM);
+                        const totalHeight = contentHeight + spacingHeight + CONTAINER_PADDING * 2; // 上下 padding
+
+                        // 创建 Canvas
+                        const canvas = document.createElement('canvas');
+                        canvas.width = maxWidth;
+                        canvas.height = totalHeight;
+                        const ctx = canvas.getContext('2d');
+
+                        // 填充背景色（#f5f5f5 页面背景）
+                        ctx.fillStyle = '#f5f5f5';
+                        ctx.fillRect(0, 0, maxWidth, totalHeight);
+
+                        // 按顺序绘制图片（添加间距和 padding）
+                        let currentY = CONTAINER_PADDING; // 顶部 padding
+                        images.forEach((img, index) => {
+                            // 水平居中（包含左右 padding）
+                            const x = Math.floor((maxWidth - img.width) / 2);
+                            
+                            // 为第一个元素之后的每个元素添加上边距背景
+                            if (index > 0) {
+                                ctx.fillStyle = '#f5f5f5';
+                                ctx.fillRect(0, currentY, maxWidth, MARGIN_TOP);
+                                currentY += MARGIN_TOP;
+                            }
+                            
+                            // 绘制图片
+                            ctx.drawImage(img, x, currentY);
+                            currentY += img.height;
+                            
+                            // 添加下边距背景
+                            if (index < images.length - 1) {
+                                ctx.fillStyle = '#f5f5f5';
+                                ctx.fillRect(0, currentY, maxWidth, MARGIN_BOTTOM);
+                                currentY += MARGIN_BOTTOM;
+                            }
+                            
+                            // 释放 blob URL
+                            URL.revokeObjectURL(img.src);
+                        });
+
+                        // 转为 Blob
+                        return new Promise((resolve) => {
+                            canvas.toBlob(resolve, 'image/png');
+                        });
+                    };
+
+                    // 全页截图
+                    const captureAll = async () => {
+                        const element = document.querySelector('.notebook-container');
+                        if (!element) {
+                            showToast('未找到截图区域', 'error');
+                            return;
+                        }
+
+                        try {
+                            // 截图前确保页面有焦点
+                            window.focus();
+                            document.body.focus();
+                            
+                            const result = await snapdom(element, {
+                                backgroundColor: '#f5f5f5',
+                                scale: 1,
+                                cache: 'auto'
+                            });
+                            
+                            const blob = await result.toBlob({ type: 'png' });
+                            
+                            // 再次确保焦点
+                            window.focus();
+                            
+                            try {
+                                await navigator.clipboard.write([
+                                    new ClipboardItem({ 'image/png': blob })
+                                ]);
+                                showToast('全页截图已复制到剪贴板', 'success');
+                            } catch (err) {
+                                console.error('复制到剪贴板失败:', err);
+                                // 自动下载图片
+                                showToast('复制到剪贴板失败，正在下载图片...', 'info');
+                                const url = URL.createObjectURL(blob);
+                                const link = document.createElement('a');
+                                link.download = `截图_${new Date().toLocaleString().replace(/[/:]/g, '-')}.png`;
+                                link.href = url;
+                                link.click();
+                                URL.revokeObjectURL(url);
+                            }
+                        } catch (err) {
+                            console.error('截图失败:', err);
+                            showToast('截图失败: ' + err.message, 'error');
+                        }
+                    };
+
+                    // 配色选择功能
+                    const showColorPicker = ref(false);
+                    const colorPalettes = ref({
+                        global: 'warmToCool4',
+                        types: {
+                            line: 'warmToCool4',
+                            bar: 'contrast',
+                            pie: 'dahongdazi2'
+                        },
+                        palettes: {
+                            warmToCool4: {
+                                name: '暖冷渐变系4',
+                                desc: '珊瑚橙粉紫青金绿',
+                                colors: ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4']
+                            },
+                            contrast: {
+                                name: '高对比度系',
+                                desc: '清晰易辨识',
+                                colors: ['#e74c3c', '#27ae60', '#f39c12', '#9b59b6', '#3498db', '#c0392b', '#2ecc71', '#e67e22', '#95a5a6']
+                            },
+                            dahongdazi2: {
+                                name: '大红大紫系2',
+                                desc: '红紫粉金，柔和现代',
+                                colors: ['#e74c3c', '#9b59b6', '#f39c12', '#e91e63', '#f1c40f', '#8e44ad', '#ff6b6b', '#af7ac5', '#daa520']
+                            },
+                            echartsDefault: {
+                                name: 'ECharts默认',
+                                desc: '官方默认配色',
+                                colors: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
+                            }
+                        }
+                    });
+
+                    // 切换配色选择面板
+                    const toggleColorPicker = () => {
+                        showColorPicker.value = !showColorPicker.value;
+                    };
+
+                    // 设置配色方案
+                    const setColorPalette = (type, paletteKey) => {
+                        if (type === 'global') {
+                            colorPalettes.value.global = paletteKey;
+                            // 同时更新所有图表类型的配色
+                            Object.keys(colorPalettes.value.types).forEach(key => {
+                                colorPalettes.value.types[key] = paletteKey;
+                            });
+                        } else {
+                            colorPalettes.value.types[type] = paletteKey;
+                        }
+                        updateChartColors();
+                    };
+
+                    // 更新图表颜色
+                    const updateChartColors = () => {
+                        // 保存到全局，供 CellRenderer 使用
+                        window.colorPalettes = colorPalettes.value;
+                        // 触发所有图表重新渲染
+                        window.dispatchEvent(new Event('colorPaletteChange'));
+                    };
+
+                    onMounted(() => {
+                        console.log('Notebook Vue3 应用已加载');
+                        // 初始化全局配色
+                        window.colorPalettes = colorPalettes.value;
+                    });
+
+                    return {
+                        title,
+                        createdAt,
+                        cells,
+                        tocItems,
+                        selectedCount,
+                        isScreenshotMode,
+                        toastMessage,
+                        toastType,
+                        isSelected,
+                        toggleSelection,
+                        selectAll,
+                        clearSelection,
+                        scrollToSection,
+                        captureScreenshot,
+                        captureAll,
+                        showColorPicker,
+                        colorPalettes,
+                        toggleColorPicker,
+                        setColorPalette,
+                        updateChartColors
+                    };
+                }
+            });
+        }
+
+        // 从 Jinja2 注入的数据创建配置
+        const dataElement = document.getElementById('notebook-data');
+        window.notebookConfig = dataElement ? JSON.parse(dataElement.textContent) : {
+            title: '未命名 Notebook',
+            createdAt: new Date().toLocaleString(),
+            cells: []
+        };
+        
+        // 创建并挂载应用
+        createNotebookApp().mount('#app');
+    </script>
+</body>
+</html>
