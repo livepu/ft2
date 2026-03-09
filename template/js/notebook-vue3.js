@@ -225,41 +225,9 @@ const CellRenderer = {
             chartInstance.setOption(option);
         };
 
-        // 配色方案定义
-        const colorPalettes = window.colorPalettes || {
-            global: 'warmToCool4',
-            types: {
-                line: 'warmToCool4',
-                bar: 'contrast',
-                pie: 'dahongdazi2'
-            },
-            palettes: {
-                warmToCool4: {
-                    name: '暖冷渐变系4',
-                    desc: '珊瑚橙粉紫青金绿',
-                    colors: ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4']
-                },
-                contrast: {
-                    name: '高对比度系',
-                    desc: '清晰易辨识',
-                    colors: ['#ff0000', '#00ff00', '#f39c12', '#9b59b6', '#3498db', '#e74c3c', '#2ecc71', '#e67e22', '#95a5a6']
-                },
-                dahongdazi2: {
-                    name: '大红大紫系2',
-                    desc: '红紫粉金，柔和现代',
-                    colors: ['#e74c3c', '#9b59b6', '#f39c12', '#e91e63', '#f1c40f', '#8e44ad', '#ff6b6b', '#af7ac5', '#daa520']
-                },
-                echartsDefault: {
-                    name: 'ECharts默认',
-                    desc: '官方默认配色',
-                    colors: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
-                }
-            }
-        };
-        window.colorPalettes = colorPalettes;
-        
         // 获取图表配色
         const getChartColors = (chartType) => {
+            const colorPalettes = window.colorPalettes;
             const typeSpecific = colorPalettes.types[chartType];
             const paletteKey = typeSpecific || colorPalettes.global;
             const palette = colorPalettes.palettes[paletteKey];
@@ -837,7 +805,7 @@ function createNotebookApp() {
             const showColorPicker = ref(false);
             
             // 配色方案
-            const colorPalettes = window.colorPalettes || {
+            const colorPalettes = Vue.reactive(window.colorPalettes || {
                 global: 'warmToCool4',
                 types: {
                     line: 'warmToCool4',
@@ -853,7 +821,7 @@ function createNotebookApp() {
                     contrast: {
                         name: '高对比度系',
                         desc: '清晰易辨识',
-                        colors: ['#ff0000', '#00ff00', '#f39c12', '#9b59b6', '#3498db', '#e74c3c', '#2ecc71', '#e67e22', '#95a5a6']
+                        colors: ['#e74c3c', '#27ae60', '#f39c12', '#9b59b6', '#3498db', '#e74c3c', '#2ecc71', '#e67e22', '#95a5a6']
                     },
                     dahongdazi2: {
                         name: '大红大紫系2',
@@ -866,7 +834,7 @@ function createNotebookApp() {
                         colors: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
                     }
                 }
-            };
+            });
             window.colorPalettes = colorPalettes;
             
             const showToast = (message, type = 'info', duration = 3000) => {
@@ -1131,6 +1099,10 @@ function createNotebookApp() {
             const setColorPalette = (scope, paletteKey) => {
                 if (scope === 'global') {
                     colorPalettes.global = paletteKey;
+                    // 当选择全局配色时，同步更新所有图表类型的配色
+                    Object.keys(colorPalettes.types).forEach(type => {
+                        colorPalettes.types[type] = paletteKey;
+                    });
                 } else if (colorPalettes.types[scope]) {
                     colorPalettes.types[scope] = paletteKey;
                 }
