@@ -14,7 +14,7 @@ class AccountAnalyzer:
         self.account = account
         if account:
             self._daily_total_assets = self._compute_daily_total_assets(account.snapshots)
-            self._trade_profits = self._calculate_profit(account.trade_log)
+            self._trade_profits = self._calculate_profit(account._trade_records)
         elif external_daily_total_assets:
             self._daily_total_assets = external_daily_total_assets
             self._trade_profits = []
@@ -289,11 +289,11 @@ class AccountAnalyzer:
 
         return start_date, end_date
 
-    def _calculate_profit(self, trade_log):
+    def _calculate_profit(self, trade_records):
         positions = defaultdict(lambda: {'volume': 0, 'cost': 0, 'open_time': None, 'open_price': 0, 'open_fee': 0})
         processed_trades = []
 
-        for trade in trade_log:
+        for trade in trade_records:
             if trade.volume == 0 or math.isnan(trade.price):
                 continue
             symbol = trade.symbol
@@ -569,7 +569,7 @@ class AccountAnalyzer:
         largest_profit_trades = self.get_largest_profit_trades(5)
         largest_loss_trades = self.get_largest_loss_trades(5)
 
-        formatted_transaction_log=self.format_transaction_log(self.account.trade_log)
+        formatted_transaction_log=self.format_transaction_log(self.account._trade_records)
         formatted_profit_trades = [self.format_trade(trade) for trade in largest_profit_trades]
         formatted_loss_trades = [self.format_trade(trade) for trade in largest_loss_trades]
         assets_data_zh=self.translate_keys(assets_data)
