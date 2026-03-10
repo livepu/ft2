@@ -14,13 +14,16 @@ class AccountAnalyzer:
         self.account = account
         if account:
             self._daily_total_assets = self._compute_daily_total_assets(account.snapshots)
-            self._trade_profits = self._calculate_profit(account.trade_log) 
+            self._trade_profits = self._calculate_profit(account.trade_log)
         elif external_daily_total_assets:
             self._daily_total_assets = external_daily_total_assets
             self._trade_profits = []
         else:
             self._daily_total_assets = {}
             self._trade_profits = []
+
+        # 获取调用者所在目录作为输出目录（与 Notebook 一致）
+        self.base_dir = self._get_caller_dir()
     @property
     def daily_total_assets(self):
         return self._daily_total_assets.copy()
@@ -407,6 +410,24 @@ class AccountAnalyzer:
         
         return abs(avg_profit / avg_loss)
 
+    def _get_caller_dir(self):
+        """获取调用者所在目录（与 Notebook 一致）"""
+        frame = inspect.currentframe()
+        try:
+            # 跳过当前方法和 __init__
+            caller_frame = None
+            for frame_info in inspect.stack():
+                if frame_info.filename != __file__:
+                    caller_frame = frame_info
+                    break
+
+            if caller_frame:
+                return os.path.dirname(os.path.abspath(caller_frame.filename))
+            else:
+                return os.path.dirname(os.path.abspath(__file__))
+        finally:
+            del frame
+
     @staticmethod
     def translate_keys(data):
         field_mapping = {
@@ -483,7 +504,14 @@ class AccountAnalyzer:
         return result
 
 
-    def to_html_report(self, report_name="回测报告", output_dir="."):
+    def export_html(self, report_name="回测报告", output_dir="."):
+        """
+        导出HTML报告
+
+        Args:
+            report_name: 报告名称
+            output_dir: 输出目录（相对路径，基于实例化时的调用者目录）
+        """
         initial_cash = self.account.snapshots[0].cash if self.account.snapshots else 0
         final_assets = self.account.snapshots[-1].nav if self.account.snapshots else 0
         return_rate = self.calculate_return_rate() * 100
@@ -495,7 +523,7 @@ class AccountAnalyzer:
 
         avg_profit_loss_ratio = self.calculate_avg_profit_loss_ratio()
         avg_holding_period = self.calculate_average_holding_period()
-        
+
         sortino_ratio = self.calculate_sortino_ratio()
         var_95 = self.calculate_var(confidence=0.95)
         cvar_95 = self.calculate_cvar(confidence=0.95)
@@ -527,8 +555,8 @@ class AccountAnalyzer:
             {"name": "UPI", "value": f"{upi:.2f}" if upi is not None else "N/A"},
             {
                 "name": "平均盈亏比",
-                "value": f"{avg_profit_loss_ratio:.2f}（平均盈利{avg_profit * 100:.2f}%，平均亏损{abs(avg_loss) * 100:.2f}%）" 
-                        if avg_profit_loss_ratio is not None and avg_profit is not None and avg_loss is not None 
+                "value": f"{avg_profit_loss_ratio:.2f}（平均盈利{avg_profit * 100:.2f}%，平均亏损{abs(avg_loss) * 100:.2f}%）"
+                        if avg_profit_loss_ratio is not None and avg_profit is not None and avg_loss is not None
                         else "N/A"
             },
             {"name": "胜率", "value": f"{self.calculate_win_rate()*100:.2f}%" if self.calculate_win_rate() is not None else "N/A"},
@@ -567,13 +595,9 @@ class AccountAnalyzer:
             largest_loss_trades=formatted_loss_trades_json
         )
 
-        frame = inspect.currentframe().f_back
-        caller_file = frame.f_code.co_filename
-        caller_dir = Path(caller_file).resolve().parent
-
+        # 使用实例化时确定的 base_dir（与 Notebook 一致）
         current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
-
-        output_path = caller_dir / output_dir / f"{report_name}_{current_datetime}.html"
+        output_path = Path(self.base_dir) / output_dir / f"{report_name}_{current_datetime}.html"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(output_path, "w", encoding="utf-8") as f:
