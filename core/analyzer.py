@@ -15,6 +15,40 @@ import inspect
 # 账户分析类
 # ============================================================================
 
+"""
+账户分析器模块
+
+输出规范:
+---------
+JSON输出结构:
+{
+    "title": "回测报告",
+    "createdAt": "2024-01-01 12:00:00",
+    "metrics": [{"name": "指标名", "value": 值, "order": 排序号}, ...],
+    "dailyAssets": [{"date": "2024-01-01", "assets": 100000}, ...],
+    "trades": [...],
+    "topProfits": [...],
+    "topLosses": [...]
+}
+
+指标分类排序规范:
+----------------
+order范围    | 类别              | 指标
+------------|------------------|------------------
+1-9         | 基础信息          | 回测区间、初始资金、最终资产
+10-19       | 收益指标          | 累计收益率、年化收益率
+20-29       | 风险指标          | 年化波动率、最大回撤、VaR、CVaR、Ulcer Index
+30-39       | 风险调整收益指标   | 夏普比率、索提诺比率、UPI
+40-49       | 交易分析指标       | 胜率、平均盈亏比、平均持仓时间
+50-59       | 仓位建议          | 凯利公式最优仓位、半凯利仓位
+
+新增指标规范:
+------------
+1. 方法名以 calc_ 开头
+2. 计算结果存入 self._metrics，格式: {'name': '中文名', 'value': 值, 'order': 排序号}
+3. export_html() 自动调用所有 calc_ 方法并按 order 排序
+"""
+
 class AccountAnalyzer:
     """账户分析器，负责计算各类风险收益指标和生成分析报告"""
 
@@ -96,7 +130,7 @@ class AccountAnalyzer:
         if start_value == 0:
             raise ValueError("初始资产不能为零")
         value = (end_value - start_value) / start_value
-        self._metrics['calc_return_rate'] = {'name': '累计收益率', 'value': value}
+        self._metrics['calc_return_rate'] = {'name': '累计收益率', 'value': value, 'order': 10}
         return value
 
     def calc_annualized_return(self, time_interval=None) -> float:
@@ -121,7 +155,7 @@ class AccountAnalyzer:
             raise ValueError("亏损超过100%，无法计算年化收益率")
         else:
             value = ((1 + interval_return) ** (365 / days)) - 1
-        self._metrics['calc_annualized_return'] = {'name': '年化收益率', 'value': value}
+        self._metrics['calc_annualized_return'] = {'name': '年化收益率', 'value': value, 'order': 11}
         return value
 
     # ------------------------------------------------------------------------
@@ -151,7 +185,7 @@ class AccountAnalyzer:
         variance = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns)
         daily_volatility = math.sqrt(variance)
         value = daily_volatility * math.sqrt(252)
-        self._metrics['calc_volatility'] = {'name': '年化波动率', 'value': value}
+        self._metrics['calc_volatility'] = {'name': '年化波动率', 'value': value, 'order': 20}
         return value
 
     def calc_max_drawdown(self) -> Tuple[float, date, date]:
@@ -185,7 +219,8 @@ class AccountAnalyzer:
             'name': '最大回撤', 
             'value': max_drawdown,
             'start': start_date,
-            'end': end_date
+            'end': end_date,
+            'order': 21
         }
         return max_drawdown, start_date, end_date
 
@@ -247,7 +282,7 @@ class AccountAnalyzer:
 
         tail_returns = sorted_returns[:index]
         cvar = -sum(tail_returns) / len(tail_returns)
-        self._metrics['calc_cvar'] = {'name': 'CVaR(95%)', 'value': cvar}
+        self._metrics['calc_cvar'] = {'name': 'CVaR(95%)', 'value': cvar, 'order': 23}
         return cvar
 
     def calc_ulcer_index(self, time_interval=None) -> float:
@@ -306,7 +341,7 @@ class AccountAnalyzer:
             return None
 
         value = (annualized_return - risk_free_rate) / volatility
-        self._metrics['calc_sharpe_ratio'] = {'name': '夏普比率', 'value': value}
+        self._metrics['calc_sharpe_ratio'] = {'name': '夏普比率', 'value': value, 'order': 30}
         return value
 
     def calc_sortino_ratio(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
@@ -346,7 +381,7 @@ class AccountAnalyzer:
             return float('inf')
 
         value = (annualized_return - risk_free_rate) / annualized_downside_deviation
-        self._metrics['calc_sortino_ratio'] = {'name': '索提诺比率', 'value': value}
+        self._metrics['calc_sortino_ratio'] = {'name': '索提诺比率', 'value': value, 'order': 31}
         return value
 
     def calc_upi(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
@@ -385,7 +420,7 @@ class AccountAnalyzer:
             return None
         wins = sum(1 for t in self._trade_profits if t['profit'] > 0)
         value = wins / len(self._trade_profits)
-        self._metrics['calc_win_rate'] = {'name': '胜率', 'value': value}
+        self._metrics['calc_win_rate'] = {'name': '胜率', 'value': value, 'order': 40}
         return value
 
     def calc_avg_profit(self, mode: str = 'amount') -> float:
@@ -471,7 +506,7 @@ class AccountAnalyzer:
             return None
         total_days = sum((t['close_time'] - t['open_time']).days for t in self._trade_profits)
         value = total_days / len(self._trade_profits)
-        self._metrics['calc_avg_holding_period'] = {'name': '平均持仓时间', 'value': value}
+        self._metrics['calc_avg_holding_period'] = {'name': '平均持仓时间', 'value': value, 'order': 42}
         return value
 
     def calc_kelly_criterion(self, time_interval=None) -> float:
@@ -518,7 +553,7 @@ class AccountAnalyzer:
         if kelly is None:
             return None
         value = kelly * fraction
-        self._metrics['calc_kelly_fraction'] = {'name': '半凯利仓位', 'value': value}
+        self._metrics['calc_kelly_fraction'] = {'name': '半凯利仓位', 'value': value, 'order': 51}
         return value
 
     # ------------------------------------------------------------------------
@@ -593,10 +628,18 @@ class AccountAnalyzer:
         backtest_period = f"{start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}" if start_date and end_date else "N/A"
 
         metrics = [
-            {"name": "回测区间", "value": backtest_period},
+            {"name": "回测区间", "value": backtest_period, "order": 1},
+            {"name": "初始资金", "value": initial_cash, "order": 2},
+            {"name": "最终资产", "value": final_assets, "order": 3},
         ]
         for method_name, data in self._metrics.items():
-            metrics.append({"name": data['name'], "value": data['value']})
+            metrics.append({
+                "name": data['name'], 
+                "value": data['value'],
+                "order": data.get('order', 99)
+            })
+        
+        metrics.sort(key=lambda x: x['order'])
 
         data = {
             'title': report_name,
@@ -607,8 +650,8 @@ class AccountAnalyzer:
                 for d, v in self._daily_total_assets.items()
             ],
             'trades': [self._to_dict(t) for t in self.account._trade_records],
-            'topProfits': [self._to_dict(t, exclude='original_trade') for t in self.get_largest_profit_trades(5)],
-            'topLosses': [self._to_dict(t, exclude='original_trade') for t in self.get_largest_loss_trades(5)],
+            'topProfits': [self._to_dict(t, exclude='original_trade') for t in self.get_largest_profit_trades(20)],
+            'topLosses': [self._to_dict(t, exclude='original_trade') for t in self.get_largest_loss_trades(20)],
         }
 
         current_file_path = Path(__file__).resolve()
