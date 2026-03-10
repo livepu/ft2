@@ -4,7 +4,7 @@ from dateutil.relativedelta import relativedelta
 import math
 import os
 from datetime import datetime, date
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any, Optional
 import json
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
@@ -28,6 +28,24 @@ class AccountAnalyzer:
         '5y': relativedelta(years=5)
     }
 
+    FIELD_ZH = {
+        'date': '日期',
+        'assets': '资产',
+        'symbol': '标的',
+        'volume': '数量',
+        'price': '价格',
+        'side': '方向',
+        'fee': '手续费',
+        'created_at': '时间',
+        'profit': '盈亏',
+        'open_time': '开仓时间',
+        'open_price': '开仓价格',
+        'open_fee': '开仓手续费',
+        'close_time': '平仓时间',
+        'close_price': '平仓价格',
+        'close_fee': '平仓手续费',
+    }
+
     def __init__(self, account=None, external_daily_total_assets=None):
         """
         初始化账户分析器
@@ -37,6 +55,7 @@ class AccountAnalyzer:
             external_daily_total_assets: 外部每日资产数据，格式为{date: nav}
         """
         self.account = account
+        self._metrics = {}
         if account:
             self._daily_total_assets = self._compute_daily_total_assets(account.snapshots)
             self._trade_profits = self._calculate_profit(account._trade_records)
@@ -60,6 +79,19 @@ class AccountAnalyzer:
         return self._trade_profits.copy()
 
     # ------------------------------------------------------------------------
+    # 统一指标获取方法
+    # ------------------------------------------------------------------------
+
+    def get_metrics(self) -> Dict[str, Dict]:
+        """
+        获取所有已计算的指标
+        
+        Returns:
+            Dict: {方法名: {'name': 中文名, 'value': 原始值}}
+        """
+        return self._metrics.copy()
+
+    # ------------------------------------------------------------------------
     # 收益指标
     # ------------------------------------------------------------------------
 
@@ -81,7 +113,9 @@ class AccountAnalyzer:
         end_value = self._daily_total_assets[end_date]
         if start_value == 0:
             raise ValueError("初始资产不能为零")
-        return (end_value - start_value) / start_value
+        value = (end_value - start_value) / start_value
+        self._metrics['calc_return_rate'] = {'name': '累计收益率', 'value': value}
+        return value
 
     def calc_annualized_return(self, time_interval=None) -> float:
         """
@@ -100,10 +134,13 @@ class AccountAnalyzer:
         start_date, end_date = self._get_start_end_date(time_interval)
         days = (end_date - start_date).days
         if days == 0:
-            return 0
-        if interval_return <= -1:
+            value = 0
+        elif interval_return <= -1:
             raise ValueError("亏损超过100%，无法计算年化收益率")
-        return ((1 + interval_return) ** (365 / days)) - 1
+        else:
+            value = ((1 + interval_return) ** (365 / days)) - 1
+        self._metrics['calc_annualized_return'] = {'name': '年化收益率', 'value': value}
+        return value
 
     # ------------------------------------------------------------------------
     # 风险指标
@@ -131,9 +168,9 @@ class AccountAnalyzer:
         mean_return = sum(daily_returns) / len(daily_returns)
         variance = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns)
         daily_volatility = math.sqrt(variance)
-        annualized_volatility = daily_volatility * math.sqrt(252)
-
-        return annualized_volatility
+        value = daily_volatility * math.sqrt(252)
+        self._metrics['calc_volatility'] = {'name': '年化波动率', 'value': value}
+        return value
 
     def calc_max_drawdown(self) -> Tuple[float, date, date]:
         """
@@ -162,6 +199,12 @@ class AccountAnalyzer:
                 end_date = date
         if max_drawdown == 0:
             return 0, None, None
+        self._metrics['calc_max_drawdown'] = {
+            'name': '最大回撤', 
+            'value': max_drawdown,
+            'start': start_date,
+            'end': end_date
+        }
         return max_drawdown, start_date, end_date
 
     def calc_var(self, confidence: float = 0.95, time_interval=None) -> float:
@@ -191,6 +234,7 @@ class AccountAnalyzer:
             index = 0
 
         var = -sorted_returns[index]
+        self._metrics['calc_var'] = {'name': 'VaR(95%)', 'value': var}
         return var
 
     def calc_cvar(self, confidence: float = 0.95, time_interval=None) -> float:
@@ -221,6 +265,7 @@ class AccountAnalyzer:
 
         tail_returns = sorted_returns[:index]
         cvar = -sum(tail_returns) / len(tail_returns)
+        self._metrics['calc_cvar'] = {'name': 'CVaR(95%)', 'value': cvar}
         return cvar
 
     def calc_ulcer_index(self, time_interval=None) -> float:
@@ -254,6 +299,7 @@ class AccountAnalyzer:
             squared_drawdowns.append(drawdown_pct ** 2)
 
         ulcer_index = math.sqrt(sum(squared_drawdowns) / len(squared_drawdowns))
+        self._metrics['calc_ulcer_index'] = {'name': 'Ulcer Index', 'value': ulcer_index}
         return ulcer_index
 
     # ------------------------------------------------------------------------
@@ -277,7 +323,9 @@ class AccountAnalyzer:
         if annualized_return is None or volatility is None:
             return None
 
-        return (annualized_return - risk_free_rate) / volatility
+        value = (annualized_return - risk_free_rate) / volatility
+        self._metrics['calc_sharpe_ratio'] = {'name': '夏普比率', 'value': value}
+        return value
 
     def calc_sortino_ratio(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
         """
@@ -315,7 +363,9 @@ class AccountAnalyzer:
         if annualized_downside_deviation == 0:
             return float('inf')
 
-        return (annualized_return - risk_free_rate) / annualized_downside_deviation
+        value = (annualized_return - risk_free_rate) / annualized_downside_deviation
+        self._metrics['calc_sortino_ratio'] = {'name': '索提诺比率', 'value': value}
+        return value
 
     def calc_upi(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
         """
@@ -334,7 +384,9 @@ class AccountAnalyzer:
         if annualized_return is None or ulcer_index is None or ulcer_index == 0:
             return None
 
-        return (annualized_return - risk_free_rate) / (ulcer_index / 100)
+        value = (annualized_return - risk_free_rate) / (ulcer_index / 100)
+        self._metrics['calc_upi'] = {'name': 'UPI', 'value': value}
+        return value
 
     # ------------------------------------------------------------------------
     # 交易分析指标
@@ -350,7 +402,9 @@ class AccountAnalyzer:
         if not self._trade_profits:
             return None
         wins = sum(1 for t in self._trade_profits if t['profit'] > 0)
-        return wins / len(self._trade_profits)
+        value = wins / len(self._trade_profits)
+        self._metrics['calc_win_rate'] = {'name': '胜率', 'value': value}
+        return value
 
     def calc_avg_profit(self, mode: str = 'amount') -> float:
         """
@@ -420,7 +474,9 @@ class AccountAnalyzer:
         if avg_profit is None or avg_loss is None:
             return None
 
-        return abs(avg_profit / avg_loss)
+        value = abs(avg_profit / avg_loss)
+        self._metrics['calc_avg_profit_loss_ratio'] = {'name': '平均盈亏比', 'value': value}
+        return value
 
     def calc_avg_holding_period(self) -> float:
         """
@@ -432,7 +488,9 @@ class AccountAnalyzer:
         if not self._trade_profits:
             return None
         total_days = sum((t['close_time'] - t['open_time']).days for t in self._trade_profits)
-        return total_days / len(self._trade_profits)
+        value = total_days / len(self._trade_profits)
+        self._metrics['calc_avg_holding_period'] = {'name': '平均持仓时间', 'value': value}
+        return value
 
     def calc_kelly_criterion(self, time_interval=None) -> float:
         """
@@ -460,7 +518,7 @@ class AccountAnalyzer:
         profit_loss_ratio = abs(avg_profit / avg_loss)
 
         kelly = win_rate - (1 - win_rate) / profit_loss_ratio
-
+        self._metrics['calc_kelly_criterion'] = {'name': '凯利公式最优仓位', 'value': kelly}
         return kelly
 
     def calc_kelly_fraction(self, fraction: float = 0.5, time_interval=None) -> float:
@@ -477,7 +535,9 @@ class AccountAnalyzer:
         kelly = self.calc_kelly_criterion(time_interval)
         if kelly is None:
             return None
-        return kelly * fraction
+        value = kelly * fraction
+        self._metrics['calc_kelly_fraction'] = {'name': '半凯利仓位', 'value': value}
+        return value
 
     # ------------------------------------------------------------------------
     # 查询方法
@@ -521,118 +581,6 @@ class AccountAnalyzer:
         return sorted(self._trade_profits, key=lambda t: t['profit'])[:n]
 
     # ------------------------------------------------------------------------
-    # 格式化方法
-    # ------------------------------------------------------------------------
-
-    def format_daily_assets(self) -> List:
-        """
-        格式化每日资产数据
-        
-        Returns:
-            List: 格式化后的资产列表
-        """
-        result = []
-        for date, assets in self._daily_total_assets.items():
-            if hasattr(date, 'strftime'):
-                date_str = date.strftime("%Y-%m-%d")
-            else:
-                date_str = str(date)
-
-            result.append({
-                "date": date_str,
-                "assets": round(float(assets), 2)
-            })
-        return result
-
-    @staticmethod
-    def format_transaction_log(transaction_records: List) -> List:
-        """
-        格式化交易记录
-        
-        Args:
-            transaction_records: 交易记录列表
-            
-        Returns:
-            List: 格式化后的交易记录
-        """
-        result = []
-        for record in transaction_records:
-            if hasattr(record, '__dict__'):
-                data = record.__dict__
-            else:
-                data = record
-
-            formatted = {}
-            for key, value in data.items():
-                if key == 'volume':
-                    formatted[key] = int(value)
-                elif key == 'price' or key == 'fee':
-                    formatted[key] = round(float(value), 2)
-                elif key == 'side':
-                    formatted[key] = '买入' if value == 'buy' else '卖出'
-                elif key == 'created_at':
-                    formatted[key] = value.strftime("%Y-%m-%d")
-                else:
-                    formatted[key] = value
-
-            result.append(formatted)
-
-        return result
-
-    @staticmethod
-    def format_trade(trade: Dict) -> Dict:
-        """
-        格式化单笔交易盈亏记录
-        
-        Args:
-            trade: 交易盈亏记录
-            
-        Returns:
-            Dict: 格式化后的交易记录
-        """
-        original_trade = trade['original_trade']
-        return {
-            'symbol': original_trade.symbol,
-            'profit': f"{trade['profit']:.2f}",
-            'open_time': trade['open_time'].strftime('%Y-%m-%d'),
-            'open_price': f"{trade['open_price']:.2f}",
-            'open_fee': f"{trade['open_fee']:.2f}",
-            'close_time': trade['close_time'].strftime('%Y-%m-%d'),
-            'close_price': f"{trade['close_price']:.2f}",
-            'close_fee': f"{trade['close_fee']:.2f}",
-            'volume': f"{abs(trade['volume']):d}"
-        }
-
-    @staticmethod
-    def translate_keys(data: List) -> List:
-        """
-        将字段名翻译为中文
-        
-        Args:
-            data: 数据列表
-            
-        Returns:
-            List: 翻译后的数据列表
-        """
-        field_mapping = {
-            "date": "日期",
-            "value": "净值",
-            "benchmark": "基准",
-            "action": "操作",
-            "code": "代码",
-            "quantity": "数量",
-            "price": "价格",
-            "assets": "资产",
-            "symbol": "标的",
-            "created_at": "时间",
-            "volume": "数量",
-            "side": "方向",
-            "fee": "手续费",
-            "order_id": "成交单号",
-        }
-        return [{field_mapping.get(k, k): v for k, v in item.items()} for item in data]
-
-    # ------------------------------------------------------------------------
     # 导出方法
     # ------------------------------------------------------------------------
 
@@ -644,73 +592,51 @@ class AccountAnalyzer:
             report_name: 报告名称
             output_dir: 输出目录（相对路径，基于实例化时的调用者目录）
         """
+        for name in dir(self):
+            if name.startswith('calc_'):
+                method = getattr(self, name)
+                if callable(method):
+                    try:
+                        method()
+                    except Exception:
+                        pass
+
         initial_cash = self.account.snapshots[0].cash if self.account.snapshots else 0
         final_assets = self.account.snapshots[-1].nav if self.account.snapshots else 0
-        return_rate = self.calc_return_rate() * 100
-        an_return_rate = self.calc_annualized_return() * 100
-        sharpe_ratio = self.calc_sharpe_ratio()
-        max_drawdown, max_drawdown_start_date, max_drawdown_end_date = self.calc_max_drawdown()
-        avg_profit = self.calc_avg_profit()
-        avg_loss = self.calc_avg_loss()
 
-        avg_profit_loss_ratio = self.calc_avg_profit_loss_ratio()
-        avg_holding_period = self.calc_avg_holding_period()
-
-        sortino_ratio = self.calc_sortino_ratio()
-        var_95 = self.calc_var(confidence=0.95)
-        cvar_95 = self.calc_cvar(confidence=0.95)
-        ulcer_index = self.calc_ulcer_index()
-        upi = self.calc_upi()
-        kelly = self.calc_kelly_criterion()
-        half_kelly = self.calc_kelly_fraction(fraction=0.5)
-
-        max_drawdown_period = f"{max_drawdown_start_date.strftime('%Y-%m-%d')} 至 {max_drawdown_end_date.strftime('%Y-%m-%d')}" if max_drawdown_start_date and max_drawdown_end_date else "N/A"
         dates = sorted(self._daily_total_assets.keys())
-        start_date = dates[1] if dates else None
+        start_date = dates[1] if len(dates) > 1 else None
         end_date = dates[-1] if dates else None
 
         backtest_period = f"{start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}" if start_date and end_date else "N/A"
 
         metrics = [
             {"name": "回测区间", "value": backtest_period},
-            {"name": "初始资金", "value": f"{initial_cash:.2f}"},
-            {"name": "最终资产", "value": f"{final_assets:.2f}"},
-            {"name": "累计收益率", "value": f"{return_rate:.2f}%"},
-            {"name": "年化收益率", "value": f"{an_return_rate:.2f}%"},
-            {"name": "年化波动率", "value": f"{self.calc_volatility()*100:.2f}%"},
-            {"name": "夏普比率", "value": f"{sharpe_ratio:.2f}" if sharpe_ratio is not None else "N/A"},
-            {"name": "索提诺比率", "value": f"{sortino_ratio:.2f}" if sortino_ratio is not None and sortino_ratio != float('inf') else "N/A"},
-            {"name": "最大回撤", "value": f"{max_drawdown * 100:.2f}%，时段：{max_drawdown_period}"},
-            {"name": "VaR(95%)", "value": f"{var_95*100:.2f}%" if var_95 is not None else "N/A"},
-            {"name": "CVaR(95%)", "value": f"{cvar_95*100:.2f}%" if cvar_95 is not None else "N/A"},
-            {"name": "Ulcer Index", "value": f"{ulcer_index:.2f}" if ulcer_index is not None else "N/A"},
-            {"name": "UPI", "value": f"{upi:.2f}" if upi is not None else "N/A"},
-            {
-                "name": "平均盈亏比",
-                "value": f"{avg_profit_loss_ratio:.2f}（平均盈利{avg_profit * 100:.2f}%，平均亏损{abs(avg_loss) * 100:.2f}%）"
-                        if avg_profit_loss_ratio is not None and avg_profit is not None and avg_loss is not None
-                        else "N/A"
-            },
-            {"name": "胜率", "value": f"{self.calc_win_rate()*100:.2f}%" if self.calc_win_rate() is not None else "N/A"},
-            {"name": "凯利公式最优仓位", "value": f"{kelly*100:.2f}%" if kelly is not None and kelly > 0 else f"不建议投资（{kelly*100:.2f}%）" if kelly is not None else "N/A"},
-            {"name": "半凯利仓位", "value": f"{half_kelly*100:.2f}%" if half_kelly is not None and half_kelly > 0 else "N/A"},
-            {"name": "平均持仓时间（天）", "value": f"{avg_holding_period:.2f}" if avg_holding_period is not None else "N/A"},
+            {"name": "初始资金", "value": initial_cash},
+            {"name": "最终资产", "value": final_assets},
         ]
+        for method_name, data in self._metrics.items():
+            metrics.append({"name": data['name'], "value": data['value']})
 
-        assets_data = self.format_daily_assets()
-        largest_profit_trades = self.get_largest_profit_trades(5)
-        largest_loss_trades = self.get_largest_loss_trades(5)
+        daily_assets = [
+            {'date': d.strftime('%Y-%m-%d'), 'assets': v} 
+            for d, v in self._daily_total_assets.items()
+        ]
+        
+        trades = self._format_trades(self.account._trade_records)
+        top_profits = self._format_trades(self.get_largest_profit_trades(5))
+        top_losses = self._format_trades(self.get_largest_loss_trades(5))
 
-        formatted_transaction_log = self.format_transaction_log(self.account._trade_records)
-        formatted_profit_trades = [self.format_trade(trade) for trade in largest_profit_trades]
-        formatted_loss_trades = [self.format_trade(trade) for trade in largest_loss_trades]
-        assets_data_zh = self.translate_keys(assets_data)
-        formatted_transaction_log_zh = self.translate_keys(formatted_transaction_log)
-
-        assets_data_json = json.dumps(assets_data_zh, indent=4, ensure_ascii=False)
-        formatted_transaction_log_json = json.dumps(formatted_transaction_log_zh, indent=4, ensure_ascii=False)
-        formatted_profit_trades_json = json.dumps(formatted_profit_trades, indent=4, ensure_ascii=False)
-        formatted_loss_trades_json = json.dumps(formatted_loss_trades, indent=4, ensure_ascii=False)
+        data = {
+            'title': report_name,
+            'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'metrics': metrics,
+            'dailyAssets': daily_assets,
+            'trades': trades,
+            'topProfits': top_profits,
+            'topLosses': top_losses,
+            'fieldZh': self.FIELD_ZH,
+        }
 
         current_file_path = Path(__file__).resolve()
         template_dir = current_file_path.parent.parent / "template"
@@ -718,14 +644,7 @@ class AccountAnalyzer:
         env = Environment(loader=FileSystemLoader(template_dir))
         template = env.get_template("analyzer.html")
 
-        html_content = template.render(
-            report_name=report_name,
-            metrics=metrics,
-            assets_data=assets_data_json,
-            transaction_data=formatted_transaction_log_json,
-            largest_profit_trades=formatted_profit_trades_json,
-            largest_loss_trades=formatted_loss_trades_json
-        )
+        html_content = template.render(data=json.dumps(data, ensure_ascii=False, default=str))
 
         current_datetime = datetime.now().strftime("%Y%m%d_%H%M")
         output_path = Path(self.base_dir) / output_dir / f"{report_name}_{current_datetime}.html"
@@ -734,6 +653,36 @@ class AccountAnalyzer:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_content)
         print(f"报告已生成至: {output_path}")
+
+    def _format_trades(self, trades: List) -> List:
+        """格式化交易记录为可JSON序列化的列表"""
+        result = []
+        for trade in trades:
+            if hasattr(trade, '__dict__'):
+                t = trade.__dict__
+            else:
+                t = trade
+            
+            formatted = {
+                'symbol': t.get('symbol'),
+                'volume': int(t.get('volume', 0)),
+                'price': float(t.get('price', 0)),
+                'side': '买入' if t.get('side') == 'buy' else '卖出',
+                'fee': float(t.get('fee', 0)),
+                'created_at': t['created_at'].strftime('%Y-%m-%d') if t.get('created_at') else None,
+            }
+            
+            if 'profit' in t:
+                formatted['profit'] = float(t['profit'])
+                formatted['open_time'] = t['open_time'].strftime('%Y-%m-%d') if t.get('open_time') else None
+                formatted['open_price'] = float(t.get('open_price', 0))
+                formatted['open_fee'] = float(t.get('open_fee', 0))
+                formatted['close_time'] = t['close_time'].strftime('%Y-%m-%d') if t.get('close_time') else None
+                formatted['close_price'] = float(t.get('close_price', 0))
+                formatted['close_fee'] = float(t.get('close_fee', 0))
+            
+            result.append(formatted)
+        return result
 
     # ------------------------------------------------------------------------
     # 私有方法
