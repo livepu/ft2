@@ -63,7 +63,7 @@ class AccountAnalyzer:
     # 收益指标
     # ------------------------------------------------------------------------
 
-    def calculate_return_rate(self, time_interval=None) -> float:
+    def calc_return_rate(self, time_interval=None) -> float:
         """
         计算收益率
         
@@ -83,7 +83,7 @@ class AccountAnalyzer:
             raise ValueError("初始资产不能为零")
         return (end_value - start_value) / start_value
 
-    def calculate_annualized_return(self, time_interval=None) -> float:
+    def calc_annualized_return(self, time_interval=None) -> float:
         """
         计算年化收益率
         
@@ -93,7 +93,7 @@ class AccountAnalyzer:
         Returns:
             float: 年化收益率
         """
-        interval_return = self.calculate_return_rate(time_interval)
+        interval_return = self.calc_return_rate(time_interval)
         if interval_return is None:
             return None
 
@@ -109,7 +109,7 @@ class AccountAnalyzer:
     # 风险指标
     # ------------------------------------------------------------------------
 
-    def calculate_volatility(self, time_interval=None) -> float:
+    def calc_volatility(self, time_interval=None) -> float:
         """
         计算年化波动率
         
@@ -135,7 +135,7 @@ class AccountAnalyzer:
 
         return annualized_volatility
 
-    def calculate_max_drawdown(self) -> Tuple[float, date, date]:
+    def calc_max_drawdown(self) -> Tuple[float, date, date]:
         """
         计算最大回撤
         
@@ -164,7 +164,7 @@ class AccountAnalyzer:
             return 0, None, None
         return max_drawdown, start_date, end_date
 
-    def calculate_var(self, confidence: float = 0.95, time_interval=None) -> float:
+    def calc_var(self, confidence: float = 0.95, time_interval=None) -> float:
         """
         计算风险价值(VaR)
         
@@ -193,7 +193,7 @@ class AccountAnalyzer:
         var = -sorted_returns[index]
         return var
 
-    def calculate_cvar(self, confidence: float = 0.95, time_interval=None) -> float:
+    def calc_cvar(self, confidence: float = 0.95, time_interval=None) -> float:
         """
         计算条件风险价值(CVaR)
         
@@ -223,7 +223,7 @@ class AccountAnalyzer:
         cvar = -sum(tail_returns) / len(tail_returns)
         return cvar
 
-    def calculate_ulcer_index(self, time_interval=None) -> float:
+    def calc_ulcer_index(self, time_interval=None) -> float:
         """
         计算溃疡指数(Ulcer Index)
         
@@ -260,7 +260,7 @@ class AccountAnalyzer:
     # 风险调整收益指标
     # ------------------------------------------------------------------------
 
-    def calculate_sharpe_ratio(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
+    def calc_sharpe_ratio(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
         """
         计算夏普比率
         
@@ -271,15 +271,15 @@ class AccountAnalyzer:
         Returns:
             float: 夏普比率
         """
-        annualized_return = self.calculate_annualized_return(time_interval)
-        volatility = self.calculate_volatility(time_interval)
+        annualized_return = self.calc_annualized_return(time_interval)
+        volatility = self.calc_volatility(time_interval)
 
         if annualized_return is None or volatility is None:
             return None
 
         return (annualized_return - risk_free_rate) / volatility
 
-    def calculate_sortino_ratio(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
+    def calc_sortino_ratio(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
         """
         计算索提诺比率
         
@@ -290,7 +290,7 @@ class AccountAnalyzer:
         Returns:
             float: 索提诺比率
         """
-        annualized_return = self.calculate_annualized_return(time_interval)
+        annualized_return = self.calc_annualized_return(time_interval)
         if annualized_return is None:
             return None
 
@@ -317,7 +317,7 @@ class AccountAnalyzer:
 
         return (annualized_return - risk_free_rate) / annualized_downside_deviation
 
-    def calculate_upi(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
+    def calc_upi(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
         """
         计算Ulcer Performance Index (UPI)
         
@@ -328,8 +328,8 @@ class AccountAnalyzer:
         Returns:
             float: UPI值
         """
-        annualized_return = self.calculate_annualized_return(time_interval)
-        ulcer_index = self.calculate_ulcer_index(time_interval)
+        annualized_return = self.calc_annualized_return(time_interval)
+        ulcer_index = self.calc_ulcer_index(time_interval)
 
         if annualized_return is None or ulcer_index is None or ulcer_index == 0:
             return None
@@ -340,7 +340,7 @@ class AccountAnalyzer:
     # 交易分析指标
     # ------------------------------------------------------------------------
 
-    def calculate_win_rate(self) -> float:
+    def calc_win_rate(self) -> float:
         """
         计算胜率
         
@@ -352,7 +352,7 @@ class AccountAnalyzer:
         wins = sum(1 for t in self._trade_profits if t['profit'] > 0)
         return wins / len(self._trade_profits)
 
-    def calculate_avg_profit(self, mode: str = 'amount') -> float:
+    def calc_avg_profit(self, mode: str = 'amount') -> float:
         """
         计算平均盈利
         
@@ -378,7 +378,7 @@ class AccountAnalyzer:
 
         return sum(profits) / len(profits)
 
-    def calculate_avg_loss(self, mode: str = 'amount') -> float:
+    def calc_avg_loss(self, mode: str = 'amount') -> float:
         """
         计算平均亏损
         
@@ -404,7 +404,7 @@ class AccountAnalyzer:
 
         return sum(losses) / len(losses)
 
-    def calculate_avg_profit_loss_ratio(self, mode: str = 'amount') -> float:
+    def calc_avg_profit_loss_ratio(self, mode: str = 'amount') -> float:
         """
         计算平均盈亏比
         
@@ -414,15 +414,15 @@ class AccountAnalyzer:
         Returns:
             float: 平均盈亏比
         """
-        avg_profit = self.calculate_avg_profit(mode)
-        avg_loss = self.calculate_avg_loss(mode)
+        avg_profit = self.calc_avg_profit(mode)
+        avg_loss = self.calc_avg_loss(mode)
 
         if avg_profit is None or avg_loss is None:
             return None
 
         return abs(avg_profit / avg_loss)
 
-    def calculate_average_holding_period(self) -> float:
+    def calc_avg_holding_period(self) -> float:
         """
         计算平均持仓时间
         
@@ -434,7 +434,7 @@ class AccountAnalyzer:
         total_days = sum((t['close_time'] - t['open_time']).days for t in self._trade_profits)
         return total_days / len(self._trade_profits)
 
-    def calculate_kelly_criterion(self, time_interval=None) -> float:
+    def calc_kelly_criterion(self, time_interval=None) -> float:
         """
         计算凯利公式最优仓位
         
@@ -447,12 +447,12 @@ class AccountAnalyzer:
         if not self._trade_profits:
             return None
 
-        win_rate = self.calculate_win_rate()
+        win_rate = self.calc_win_rate()
         if win_rate is None:
             return None
 
-        avg_profit = self.calculate_avg_profit(mode='amount')
-        avg_loss = self.calculate_avg_loss(mode='amount')
+        avg_profit = self.calc_avg_profit(mode='amount')
+        avg_loss = self.calc_avg_loss(mode='amount')
 
         if avg_profit is None or avg_loss is None or avg_loss == 0:
             return None
@@ -463,7 +463,7 @@ class AccountAnalyzer:
 
         return kelly
 
-    def calculate_kelly_fraction(self, fraction: float = 0.5, time_interval=None) -> float:
+    def calc_kelly_fraction(self, fraction: float = 0.5, time_interval=None) -> float:
         """
         计算凯利分数仓位
         
@@ -474,7 +474,7 @@ class AccountAnalyzer:
         Returns:
             float: 凯利分数仓位比例
         """
-        kelly = self.calculate_kelly_criterion(time_interval)
+        kelly = self.calc_kelly_criterion(time_interval)
         if kelly is None:
             return None
         return kelly * fraction
@@ -646,23 +646,23 @@ class AccountAnalyzer:
         """
         initial_cash = self.account.snapshots[0].cash if self.account.snapshots else 0
         final_assets = self.account.snapshots[-1].nav if self.account.snapshots else 0
-        return_rate = self.calculate_return_rate() * 100
-        an_return_rate = self.calculate_annualized_return() * 100
-        sharpe_ratio = self.calculate_sharpe_ratio()
-        max_drawdown, max_drawdown_start_date, max_drawdown_end_date = self.calculate_max_drawdown()
-        avg_profit = self.calculate_avg_profit()
-        avg_loss = self.calculate_avg_loss()
+        return_rate = self.calc_return_rate() * 100
+        an_return_rate = self.calc_annualized_return() * 100
+        sharpe_ratio = self.calc_sharpe_ratio()
+        max_drawdown, max_drawdown_start_date, max_drawdown_end_date = self.calc_max_drawdown()
+        avg_profit = self.calc_avg_profit()
+        avg_loss = self.calc_avg_loss()
 
-        avg_profit_loss_ratio = self.calculate_avg_profit_loss_ratio()
-        avg_holding_period = self.calculate_average_holding_period()
+        avg_profit_loss_ratio = self.calc_avg_profit_loss_ratio()
+        avg_holding_period = self.calc_avg_holding_period()
 
-        sortino_ratio = self.calculate_sortino_ratio()
-        var_95 = self.calculate_var(confidence=0.95)
-        cvar_95 = self.calculate_cvar(confidence=0.95)
-        ulcer_index = self.calculate_ulcer_index()
-        upi = self.calculate_upi()
-        kelly = self.calculate_kelly_criterion()
-        half_kelly = self.calculate_kelly_fraction(fraction=0.5)
+        sortino_ratio = self.calc_sortino_ratio()
+        var_95 = self.calc_var(confidence=0.95)
+        cvar_95 = self.calc_cvar(confidence=0.95)
+        ulcer_index = self.calc_ulcer_index()
+        upi = self.calc_upi()
+        kelly = self.calc_kelly_criterion()
+        half_kelly = self.calc_kelly_fraction(fraction=0.5)
 
         max_drawdown_period = f"{max_drawdown_start_date.strftime('%Y-%m-%d')} 至 {max_drawdown_end_date.strftime('%Y-%m-%d')}" if max_drawdown_start_date and max_drawdown_end_date else "N/A"
         dates = sorted(self._daily_total_assets.keys())
@@ -677,7 +677,7 @@ class AccountAnalyzer:
             {"name": "最终资产", "value": f"{final_assets:.2f}"},
             {"name": "累计收益率", "value": f"{return_rate:.2f}%"},
             {"name": "年化收益率", "value": f"{an_return_rate:.2f}%"},
-            {"name": "年化波动率", "value": f"{self.calculate_volatility()*100:.2f}%"},
+            {"name": "年化波动率", "value": f"{self.calc_volatility()*100:.2f}%"},
             {"name": "夏普比率", "value": f"{sharpe_ratio:.2f}" if sharpe_ratio is not None else "N/A"},
             {"name": "索提诺比率", "value": f"{sortino_ratio:.2f}" if sortino_ratio is not None and sortino_ratio != float('inf') else "N/A"},
             {"name": "最大回撤", "value": f"{max_drawdown * 100:.2f}%，时段：{max_drawdown_period}"},
@@ -691,7 +691,7 @@ class AccountAnalyzer:
                         if avg_profit_loss_ratio is not None and avg_profit is not None and avg_loss is not None
                         else "N/A"
             },
-            {"name": "胜率", "value": f"{self.calculate_win_rate()*100:.2f}%" if self.calculate_win_rate() is not None else "N/A"},
+            {"name": "胜率", "value": f"{self.calc_win_rate()*100:.2f}%" if self.calc_win_rate() is not None else "N/A"},
             {"name": "凯利公式最优仓位", "value": f"{kelly*100:.2f}%" if kelly is not None and kelly > 0 else f"不建议投资（{kelly*100:.2f}%）" if kelly is not None else "N/A"},
             {"name": "半凯利仓位", "value": f"{half_kelly*100:.2f}%" if half_kelly is not None and half_kelly > 0 else "N/A"},
             {"name": "平均持仓时间（天）", "value": f"{avg_holding_period:.2f}" if avg_holding_period is not None else "N/A"},
