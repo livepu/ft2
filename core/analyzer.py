@@ -28,24 +28,6 @@ class AccountAnalyzer:
         '5y': relativedelta(years=5)
     }
 
-    FIELD_ZH = {
-        'date': '日期',
-        'assets': '资产',
-        'symbol': '标的',
-        'volume': '数量',
-        'price': '价格',
-        'side': '方向',
-        'fee': '手续费',
-        'created_at': '时间',
-        'profit': '盈亏',
-        'open_time': '开仓时间',
-        'open_price': '开仓价格',
-        'open_fee': '开仓手续费',
-        'close_time': '平仓时间',
-        'close_price': '平仓价格',
-        'close_fee': '平仓手续费',
-    }
-
     def __init__(self, account=None, external_daily_total_assets=None):
         """
         初始化账户分析器
@@ -612,30 +594,21 @@ class AccountAnalyzer:
 
         metrics = [
             {"name": "回测区间", "value": backtest_period},
-            {"name": "初始资金", "value": initial_cash},
-            {"name": "最终资产", "value": final_assets},
         ]
         for method_name, data in self._metrics.items():
             metrics.append({"name": data['name'], "value": data['value']})
-
-        daily_assets = [
-            {'date': d.strftime('%Y-%m-%d'), 'assets': v} 
-            for d, v in self._daily_total_assets.items()
-        ]
-        
-        trades = self._format_trades(self.account._trade_records)
-        top_profits = self._format_trades(self.get_largest_profit_trades(5))
-        top_losses = self._format_trades(self.get_largest_loss_trades(5))
 
         data = {
             'title': report_name,
             'createdAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'metrics': metrics,
-            'dailyAssets': daily_assets,
-            'trades': trades,
-            'topProfits': top_profits,
-            'topLosses': top_losses,
-            'fieldZh': self.FIELD_ZH,
+            'dailyAssets': [
+                {'date': d.strftime('%Y-%m-%d'), 'assets': v} 
+                for d, v in self._daily_total_assets.items()
+            ],
+            'trades': [self._to_dict(t) for t in self.account._trade_records],
+            'topProfits': [self._to_dict(t, exclude='original_trade') for t in self.get_largest_profit_trades(5)],
+            'topLosses': [self._to_dict(t, exclude='original_trade') for t in self.get_largest_loss_trades(5)],
         }
 
         current_file_path = Path(__file__).resolve()
@@ -654,39 +627,32 @@ class AccountAnalyzer:
             f.write(html_content)
         print(f"报告已生成至: {output_path}")
 
-    def _format_trades(self, trades: List) -> List:
-        """格式化交易记录为可JSON序列化的列表"""
-        result = []
-        for trade in trades:
-            if hasattr(trade, '__dict__'):
-                t = trade.__dict__
-            else:
-                t = trade
-            
-            formatted = {
-                'symbol': t.get('symbol'),
-                'volume': int(t.get('volume', 0)),
-                'price': float(t.get('price', 0)),
-                'side': '买入' if t.get('side') == 'buy' else '卖出',
-                'fee': float(t.get('fee', 0)),
-                'created_at': t['created_at'].strftime('%Y-%m-%d') if t.get('created_at') else None,
-            }
-            
-            if 'profit' in t:
-                formatted['profit'] = float(t['profit'])
-                formatted['open_time'] = t['open_time'].strftime('%Y-%m-%d') if t.get('open_time') else None
-                formatted['open_price'] = float(t.get('open_price', 0))
-                formatted['open_fee'] = float(t.get('open_fee', 0))
-                formatted['close_time'] = t['close_time'].strftime('%Y-%m-%d') if t.get('close_time') else None
-                formatted['close_price'] = float(t.get('close_price', 0))
-                formatted['close_fee'] = float(t.get('close_fee', 0))
-            
-            result.append(formatted)
-        return result
-
     # ------------------------------------------------------------------------
     # 私有方法
     # ------------------------------------------------------------------------
+
+    @staticmethod
+    def _to_dict(obj, exclude: str = None) -> dict:
+        """
+        将对象转换为可JSON序列化的字典
+        
+        Args:
+            obj: 对象或字典
+            exclude: 要排除的字段名
+            
+        Returns:
+            dict: 字典
+        """
+        if hasattr(obj, '__dict__'):
+            d = obj.__dict__
+        elif isinstance(obj, dict):
+            d = obj
+        else:
+            return obj
+        
+        if exclude:
+            return {k: v for k, v in d.items() if k != exclude}
+        return dict(d)
 
     def _compute_daily_total_assets(self, snapshots: List) -> Dict:
         """
