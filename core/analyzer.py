@@ -130,7 +130,7 @@ class AccountAnalyzer:
         if start_value == 0:
             raise ValueError("初始资产不能为零")
         value = (end_value - start_value) / start_value
-        self._metrics['calc_return_rate'] = {'name': '累计收益率', 'value': value, 'order': 10}
+        self._metrics['calc_return_rate'] = {'name': '累计收益率', 'value': value, 'order': 10, 'desc': '统计期间内的总收益率'}
         return value
 
     def calc_annualized_return(self, time_interval=None) -> float:
@@ -155,7 +155,7 @@ class AccountAnalyzer:
             raise ValueError("亏损超过100%，无法计算年化收益率")
         else:
             value = ((1 + interval_return) ** (365 / days)) - 1
-        self._metrics['calc_annualized_return'] = {'name': '年化收益率', 'value': value, 'order': 11}
+        self._metrics['calc_annualized_return'] = {'name': '年化收益率', 'value': value, 'order': 11, 'desc': '将收益率换算为年化基准'}
         return value
 
     # ------------------------------------------------------------------------
@@ -220,7 +220,8 @@ class AccountAnalyzer:
             'value': max_drawdown,
             'start': start_date,
             'end': end_date,
-            'order': 21
+            'order': 21,
+            'desc': '历史最大亏损幅度'
         }
         return max_drawdown, start_date, end_date
 
@@ -251,7 +252,7 @@ class AccountAnalyzer:
             index = 0
 
         var = -sorted_returns[index]
-        self._metrics['calc_var'] = {'name': 'VaR(95%)', 'value': var}
+        self._metrics['calc_var'] = {'name': 'VaR(95%)', 'value': var, 'order': 22, 'desc': '95%置信度下的最大可能损失'}
         return var
 
     def calc_cvar(self, confidence: float = 0.95, time_interval=None) -> float:
@@ -282,7 +283,7 @@ class AccountAnalyzer:
 
         tail_returns = sorted_returns[:index]
         cvar = -sum(tail_returns) / len(tail_returns)
-        self._metrics['calc_cvar'] = {'name': 'CVaR(95%)', 'value': cvar, 'order': 23}
+        self._metrics['calc_cvar'] = {'name': 'CVaR(95%)', 'value': cvar, 'order': 23, 'desc': '超过 VaR 阈值的平均损失'}
         return cvar
 
     def calc_ulcer_index(self, time_interval=None) -> float:
@@ -316,7 +317,7 @@ class AccountAnalyzer:
             squared_drawdowns.append(drawdown_pct ** 2)
 
         ulcer_index = math.sqrt(sum(squared_drawdowns) / len(squared_drawdowns))
-        self._metrics['calc_ulcer_index'] = {'name': 'Ulcer Index', 'value': ulcer_index}
+        self._metrics['calc_ulcer_index'] = {'name': 'Ulcer Index', 'value': ulcer_index, 'order': 24, 'desc': '衡量回撤深度和持续时间的综合指标'}
         return ulcer_index
 
     # ------------------------------------------------------------------------
@@ -341,7 +342,7 @@ class AccountAnalyzer:
             return None
 
         value = (annualized_return - risk_free_rate) / volatility
-        self._metrics['calc_sharpe_ratio'] = {'name': '夏普比率', 'value': value, 'order': 30}
+        self._metrics['calc_sharpe_ratio'] = {'name': '夏普比率', 'value': value, 'order': 30, 'desc': '每承担一单位风险获得的超额收益'}
         return value
 
     def calc_sortino_ratio(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
@@ -381,7 +382,7 @@ class AccountAnalyzer:
             return float('inf')
 
         value = (annualized_return - risk_free_rate) / annualized_downside_deviation
-        self._metrics['calc_sortino_ratio'] = {'name': '索提诺比率', 'value': value, 'order': 31}
+        self._metrics['calc_sortino_ratio'] = {'name': '索提诺比率', 'value': value, 'order': 31, 'desc': '只考虑下行风险的夏普比率改进版'}
         return value
 
     def calc_upi(self, risk_free_rate: float = 0.02, time_interval=None) -> float:
@@ -402,7 +403,7 @@ class AccountAnalyzer:
             return None
 
         value = (annualized_return - risk_free_rate) / (ulcer_index / 100)
-        self._metrics['calc_upi'] = {'name': 'UPI', 'value': value}
+        self._metrics['calc_upi'] = {'name': 'UPI', 'value': value, 'order': 32, 'desc': '用溃疡指数调整的风险收益比'}
         return value
 
     # ------------------------------------------------------------------------
@@ -420,7 +421,7 @@ class AccountAnalyzer:
             return None
         wins = sum(1 for t in self._trade_profits if t['profit'] > 0)
         value = wins / len(self._trade_profits)
-        self._metrics['calc_win_rate'] = {'name': '胜率', 'value': value, 'order': 40}
+        self._metrics['calc_win_rate'] = {'name': '胜率', 'value': value, 'order': 40, 'desc': '盈利交易次数占总交易次数的比例'}
         return value
 
     def calc_avg_profit(self, mode: str = 'amount') -> float:
@@ -492,7 +493,7 @@ class AccountAnalyzer:
             return None
 
         value = abs(avg_profit / avg_loss)
-        self._metrics['calc_avg_profit_loss_ratio'] = {'name': '平均盈亏比', 'value': value}
+        self._metrics['calc_avg_profit_loss_ratio'] = {'name': '平均盈亏比', 'value': value, 'order': 41, 'desc': '平均盈利与平均亏损的比值'}
         return value
 
     def calc_avg_holding_period(self) -> float:
@@ -535,7 +536,7 @@ class AccountAnalyzer:
         profit_loss_ratio = abs(avg_profit / avg_loss)
 
         kelly = win_rate - (1 - win_rate) / profit_loss_ratio
-        self._metrics['calc_kelly_criterion'] = {'name': '凯利公式最优仓位', 'value': kelly}
+        self._metrics['calc_kelly_criterion'] = {'name': '凯利公式最优仓位', 'value': kelly, 'order': 50, 'desc': '根据胜率和盈亏比计算的最优仓位比例'}
         return kelly
 
     def calc_kelly_fraction(self, fraction: float = 0.5, time_interval=None) -> float:
@@ -628,15 +629,17 @@ class AccountAnalyzer:
         backtest_period = f"{start_date.strftime('%Y-%m-%d')} 至 {end_date.strftime('%Y-%m-%d')}" if start_date and end_date else "N/A"
 
         metrics = [
-            {"name": "回测区间", "value": backtest_period, "order": 1},
-            {"name": "初始资金", "value": initial_cash, "order": 2},
-            {"name": "最终资产", "value": final_assets, "order": 3},
+            {"name": "开始日期", "value": start_date.strftime('%Y-%m-%d') if start_date else 'N/A', "order": 1, "desc": "回测起始日期，前一交易日收盘作为基准"},
+            {"name": "结束日期", "value": end_date.strftime('%Y-%m-%d') if end_date else 'N/A', "order": 2, "desc": "回测结束日期"},
+            {"name": "初始资金", "value": initial_cash, "order": 3, "desc": "回测开始时投入的资金"},
+            {"name": "最终资产", "value": final_assets, "order": 4, "desc": "回测结束时的总资产"},
         ]
         for method_name, data in self._metrics.items():
             metrics.append({
                 "name": data['name'], 
                 "value": data['value'],
-                "order": data.get('order', 99)
+                "order": data.get('order', 99),
+                "desc": data.get('desc', '')
             })
         
         metrics.sort(key=lambda x: x['order'])
