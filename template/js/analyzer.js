@@ -17,7 +17,7 @@ class AccountAnalyzer {
      * @param {Array} data - 资产数据，默认使用完整数据
      * @returns {number} 收益率
      */
-    calcReturnRate(data = this.dailyAssets) {
+    calc_return_rate(data = this.dailyAssets) {
         if (!data || data.length === 0) return 0;
         
         const startValue = parseFloat(data[0].assets);
@@ -32,10 +32,10 @@ class AccountAnalyzer {
      * @param {Array} data - 资产数据
      * @returns {number} 年化收益率
      */
-    calcAnnualizedReturn(data = this.dailyAssets) {
+    calc_annualized_return(data = this.dailyAssets) {
         if (!data || data.length === 0) return 0;
         
-        const totalReturn = this.calcReturnRate(data);
+        const totalReturn = this.calc_return_rate(data);
         const startDate = new Date(data[0].date);
         const endDate = new Date(data[data.length - 1].date);
         const days = (endDate - startDate) / (1000 * 60 * 60 * 24);
@@ -51,7 +51,7 @@ class AccountAnalyzer {
      * @param {Array} data - 资产数据
      * @returns {number} 年化波动率
      */
-    calcVolatility(data = this.dailyAssets) {
+    calc_volatility(data = this.dailyAssets) {
         if (!data || data.length < 2) return 0;
         
         const dailyReturns = this._calculateDailyReturns(data);
@@ -67,7 +67,7 @@ class AccountAnalyzer {
      * @param {Array} data - 资产数据
      * @returns {Object} {drawdown: 回撤比例，startDate: 开始日期，endDate: 结束日期}
      */
-    calcMaxDrawdown(data = this.dailyAssets) {
+    calc_max_drawdown(data = this.dailyAssets) {
         if (!data || data.length === 0) {
             return { drawdown: 0, startDate: null, endDate: null };
         }
@@ -108,10 +108,10 @@ class AccountAnalyzer {
      * @param {number} confidence - 置信水平，默认 0.95
      * @returns {number} VaR 值
      */
-    calcVar(data = this.dailyAssets, confidence = 0.95) {
+    calc_var(data = this.dailyAssets, confidence = 0.95) {
         if (!data || data.length < 2) return 0;
         
-        const dailyReturns = this._calculateDailyReturns(data);
+        const dailyReturns = this._calculate_daily_returns(data);
         const sortedReturns = [...dailyReturns].sort((a, b) => a - b);
         const index = Math.floor((1 - confidence) * sortedReturns.length);
         
@@ -124,10 +124,10 @@ class AccountAnalyzer {
      * @param {number} confidence - 置信水平，默认 0.95
      * @returns {number} CVaR 值
      */
-    calcCVar(data = this.dailyAssets, confidence = 0.95) {
+    calc_cvar(data = this.dailyAssets, confidence = 0.95) {
         if (!data || data.length < 2) return 0;
         
-        const dailyReturns = this._calculateDailyReturns(data);
+        const dailyReturns = this._calculate_daily_returns(data);
         const sortedReturns = [...dailyReturns].sort((a, b) => a - b);
         const index = Math.max(1, Math.floor((1 - confidence) * sortedReturns.length));
         const tailReturns = sortedReturns.slice(0, index);
@@ -141,9 +141,9 @@ class AccountAnalyzer {
      * @param {number} riskFreeRate - 无风险利率，默认 0.02
      * @returns {number} 夏普比率
      */
-    calcSharpeRatio(data = this.dailyAssets, riskFreeRate = 0.02) {
-        const annualizedReturn = this.calcAnnualizedReturn(data);
-        const volatility = this.calcVolatility(data);
+    calc_sharpe_ratio(data = this.dailyAssets, riskFreeRate = 0.02) {
+        const annualizedReturn = this.calc_annualized_return(data);
+        const volatility = this.calc_volatility(data);
         
         if (volatility === 0) return 0;
         return (annualizedReturn - riskFreeRate) / volatility;
@@ -155,11 +155,11 @@ class AccountAnalyzer {
      * @param {number} riskFreeRate - 无风险利率，默认 0.02
      * @returns {number} 索提诺比率
      */
-    calcSortinoRatio(data = this.dailyAssets, riskFreeRate = 0.02) {
-        const annualizedReturn = this.calcAnnualizedReturn(data);
+    calc_sortino_ratio(data = this.dailyAssets, riskFreeRate = 0.02) {
+        const annualizedReturn = this.calc_annualized_return(data);
         if (!data || data.length < 2) return 0;
         
-        const dailyReturns = this._calculateDailyReturns(data);
+        const dailyReturns = this._calculate_daily_returns(data);
         const negativeReturns = dailyReturns.filter(r => r < 0);
         
         if (negativeReturns.length === 0) return Infinity;
@@ -176,7 +176,7 @@ class AccountAnalyzer {
      * @param {Array} data - 资产数据
      * @returns {number} Ulcer Index
      */
-    calcUlcerIndex(data = this.dailyAssets) {
+    calc_ulcer_index(data = this.dailyAssets) {
         if (!data || data.length < 2) return 0;
         
         let peak = parseFloat(data[0].assets);
@@ -201,9 +201,9 @@ class AccountAnalyzer {
      * @param {number} riskFreeRate - 无风险利率，默认 0.02
      * @returns {number} UPI
      */
-    calcUPI(data = this.dailyAssets, riskFreeRate = 0.02) {
-        const annualizedReturn = this.calcAnnualizedReturn(data);
-        const ulcerIndex = this.calcUlcerIndex(data);
+    calc_upi(data = this.dailyAssets, riskFreeRate = 0.02) {
+        const annualizedReturn = this.calc_annualized_return(data);
+        const ulcerIndex = this.calc_ulcer_index(data);
         
         if (ulcerIndex === 0) return 0;
         return (annualizedReturn - riskFreeRate) / (ulcerIndex / 100);
@@ -213,7 +213,7 @@ class AccountAnalyzer {
      * 获取 ECharts 图表数据
      * @returns {Array} [{date: '2024-01-01', '策略收益': 0.15, '回撤': -0.08}, ...]
      */
-    getEchartsData() {
+    get_echarts_data() {
         if (!this.dailyAssets || this.dailyAssets.length === 0) return [];
         
         let peak = parseFloat(this.dailyAssets[0].assets);
@@ -242,7 +242,7 @@ class AccountAnalyzer {
      * @param {Array} data - 资产数据
      * @returns {Array} 日收益率数组
      */
-    _calculateDailyReturns(data) {
+    _calculate_daily_returns(data) {
         const returns = [];
         for (let i = 1; i < data.length; i++) {
             const prevValue = parseFloat(data[i - 1].assets);
