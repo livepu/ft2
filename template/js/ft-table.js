@@ -1,7 +1,9 @@
 /**
- * FT Table Component v1.2.20260309
+ * FT Table Component v1.3.20260313
  * 版本号说明：主版本。次版本.日期（YYYYMMDD）
  * 基于 alpine-table.js 重构，适配 Vue 3 组合式 API
+ * 
+ * v1.3 新增热力图功能（heatmap）
  * 
  * ============================================
  * 参数说明
@@ -11,6 +13,7 @@
  * cols         Array            列配置（原 columns）
  * pagination   Object|Boolean   分页配置，false 禁用
  * freeze       Object           冻结列配置 { left: 0, right: 0 }
+ * heatmap      Object|Boolean   热力图配置，false 禁用
  * resetPage    Boolean          数据变化时是否自动重置到第一页，默认 true
  * 
  * ============================================
@@ -21,9 +24,23 @@
  * sort         Boolean  是否可排序，false 禁用排序（默认 true）
  * width        Number   列宽度（可选）
  * slot         String   自定义插槽名称（可选，默认 cell-{field}）
+ * heatmap      Boolean/String/Object  热力图配置
+ * 
+ * heatmap 配置:
+ *   true                    独立色阶，按列归一化
+ *   'groupName'             分组色阶，同组共享范围
+ *   { colors: [...] }       自定义颜色（2色或3色）
+ *   { group: 'name' }       指定分组名
+ * 
+ * colors 说明:
+ *   2色: ['#e3f2fd', '#1565c0']  浅蓝→深蓝
+ *   3色: ['#f44336', '#fff', '#4caf50']  红→白→绿（类似 Excel 三色色阶）
  * 
  * 示例：
  * { field: 'name', title: '名称', sort: false, width: 120 }
+ * { field: 'change', title: '涨跌幅', heatmap: true }
+ * { field: 'c', title: 'C列', heatmap: 'group1' }
+ * { field: 'd', title: 'D列', heatmap: 'group1' }  // 与C列共享范围
  * 
  * ============================================
  * 使用示例
@@ -68,6 +85,20 @@
  *   { right: 1 }                        // 冻结右侧1列
  *   { left: 2, right: 1 }               // 同时冻结左右
  * 
+ * heatmap 配置:
+ *   { left: 2 }                         // 左侧2列不应用热力图
+ *   { right: 1 }                        // 右侧1列不应用热力图
+ *   { left: 2, right: 1 }               // 中间区域应用热力图
+ *   { excludeRows: [-1] }               // 排除最后一行（汇总行）
+ *   { columns: ['change', 'volume'] }   // 指定列热力图（优先于 left/right）
+ *   { colors: ['#e8f5e9', '#1b5e20'] }  // 自定义颜色（2色或3色）
+ *   { axis: 'column' }                  // 归一化方式：'column'按列 | 'row'按行 | 'table'全表
+ *   true                                // 启用默认热力图（全表）
+ * 
+ * colors 说明:
+ *   3色: ['#f44336', '#fff', '#4caf50']  红→白→绿（默认）
+ *   2色: ['#e3f2fd', '#1565c0']  浅蓝→深蓝
+ * 
  * ============================================
  * 模板结构
  * ============================================
@@ -101,6 +132,10 @@ const FtTable = {
     freeze: {
       type: Object,
       default: () => ({ left: 0, right: 0 })
+    },
+    heatmap: {
+      type: [Object, Boolean],
+      default: false
     },
     emptyText: {
       type: String,
@@ -195,6 +230,183 @@ const FtTable = {
     // 是否有冻结列
     const hasFreeze = computed(() => {
       return props.freeze && (props.freeze.left > 0 || props.freeze.right > 0);
+    });
+
+    // 是否启用热力图（全局或列级别）
+    const hasHeatmap = computed(() => {
+      if (props.heatmap === true || (props.heatmap && typeof props.heatmap === 'object')) {
+        return true;
+      }
+      return displayCols.value.some(col => col.heatmap);
+    });
+
+    // 解析列的热力图配置
+    const parseColHeatmap = (col) => {
+      if (!col.heatmap) return null;
+      
+      if (col.heatmap === true) {
+        return { enabled: true, group: col.field, colors: null };
+      }
+      
+      if (typeof col.heatmap === 'string') {
+        return { enabled: true, group: col.heatmap, colors: null };
+      }
+      
+      if (typeof col.heatmap === 'object') {
+        return {
+          enabled: true,
+          group: col.heatmap.group || col.field,
+          colors: col.heatmap.colors || null
+        };
+      }
+      
+      return null;
+    };
+
+    // 热力图配置（合并默认值）
+    const heatmapConfig = computed(() => {
+      const defaults = {
+        left: 0,
+        right: 0,
+        excludeRows: [],
+        columns: null,
+        colors: ['#f44336', '#fff', '#4caf50'],
+        axis: 'column'
+      };
+      
+      if (props.heatmap === true) {
+        return defaults;
+      }
+      
+      return { ...defaults, ...props.heatmap };
+    });
+
+    // 热力图范围缓存（支持分组）
+    const heatmapRanges = computed(() => {
+      const data = paginatedData.value;
+      const cols = displayCols.value;
+      
+      if (data.length === 0) return {};
+      
+      const ranges = {};
+      const groupValues = {};
+      
+      const hasGlobalHeatmap = props.heatmap === true || (props.heatmap && typeof props.heatmap === 'object');
+      const hasColHeatmap = cols.some(col => col.heatmap);
+      
+      const excludeRowsSet = new Set(
+        (heatmapConfig.value.excludeRows || []).map(idx => idx < 0 ? data.length + idx : idx)
+      );
+      const validRows = data.filter((_, idx) => !excludeRowsSet.has(idx));
+      
+      if (hasColHeatmap) {
+        cols.forEach(col => {
+          const colHeatmap = parseColHeatmap(col);
+          if (!colHeatmap) return;
+          
+          const groupName = colHeatmap.group;
+          
+          if (!groupValues[groupName]) {
+            groupValues[groupName] = [];
+          }
+          
+          validRows.forEach(row => {
+            const v = row[col.field];
+            if (typeof v === 'number' && !isNaN(v)) {
+              groupValues[groupName].push(v);
+            }
+          });
+        });
+        
+        Object.keys(groupValues).forEach(groupName => {
+          const values = groupValues[groupName];
+          if (values.length > 0) {
+            ranges[groupName] = {
+              min: Math.min(...values),
+              max: Math.max(...values)
+            };
+          }
+        });
+      }
+      
+      if (hasGlobalHeatmap) {
+        const config = heatmapConfig.value;
+        
+        if (config.columns && config.columns.length > 0) {
+          config.columns.forEach(field => {
+            const values = validRows
+              .map(row => row[field])
+              .filter(v => typeof v === 'number' && !isNaN(v));
+            
+            if (values.length > 0) {
+              ranges[field] = {
+                min: Math.min(...values),
+                max: Math.max(...values)
+              };
+            }
+          });
+        } else {
+          const left = config.left || 0;
+          const right = config.right || 0;
+          const heatmapCols = cols.slice(left, cols.length - right || undefined);
+          
+          if (config.axis === 'column') {
+            heatmapCols.forEach(col => {
+              if (col.heatmap) return;
+              
+              const values = validRows
+                .map(row => row[col.field])
+                .filter(v => typeof v === 'number' && !isNaN(v));
+              
+              if (values.length > 0) {
+                ranges[col.field] = {
+                  min: Math.min(...values),
+                  max: Math.max(...values)
+                };
+              }
+            });
+          } else if (config.axis === 'table') {
+            const allValues = [];
+            heatmapCols.forEach(col => {
+              if (col.heatmap) return;
+              validRows.forEach(row => {
+                const v = row[col.field];
+                if (typeof v === 'number' && !isNaN(v)) {
+                  allValues.push(v);
+                }
+              });
+            });
+            
+            if (allValues.length > 0) {
+              const globalRange = {
+                min: Math.min(...allValues),
+                max: Math.max(...allValues)
+              };
+              heatmapCols.forEach(col => {
+                if (!col.heatmap) {
+                  ranges[col.field] = globalRange;
+                }
+              });
+            }
+          } else if (config.axis === 'row') {
+            validRows.forEach((row, rowIdx) => {
+              const values = heatmapCols
+                .filter(col => !col.heatmap)
+                .map(col => row[col.field])
+                .filter(v => typeof v === 'number' && !isNaN(v));
+              
+              if (values.length > 0) {
+                ranges[`row_${rowIdx}`] = {
+                  min: Math.min(...values),
+                  max: Math.max(...values)
+                };
+              }
+            });
+          }
+        }
+      }
+      
+      return ranges;
     });
 
     // 分页选项
@@ -355,6 +567,116 @@ const FtTable = {
       return '';
     };
 
+    // 颜色插值计算（支持双色/三色）
+    const interpolateColor = (colors, ratio) => {
+      if (!colors || colors.length < 2) return '#ffffff';
+      
+      if (colors.length === 2) {
+        return interpolateTwoColors(colors[0], colors[1], ratio);
+      }
+      
+      if (ratio <= 0.5) {
+        return interpolateTwoColors(colors[0], colors[1], ratio * 2);
+      } else {
+        return interpolateTwoColors(colors[1], colors[2], (ratio - 0.5) * 2);
+      }
+    };
+
+    // 双色插值
+    const interpolateTwoColors = (color1, color2, ratio) => {
+      const hex1 = color1.replace('#', '');
+      const hex2 = color2.replace('#', '');
+      
+      const r1 = parseInt(hex1.substring(0, 2), 16);
+      const g1 = parseInt(hex1.substring(2, 4), 16);
+      const b1 = parseInt(hex1.substring(4, 6), 16);
+      
+      const r2 = parseInt(hex2.substring(0, 2), 16);
+      const g2 = parseInt(hex2.substring(2, 4), 16);
+      const b2 = parseInt(hex2.substring(4, 6), 16);
+      
+      const r = Math.round(r1 + (r2 - r1) * ratio);
+      const g = Math.round(g1 + (g2 - g1) * ratio);
+      const b = Math.round(b1 + (b2 - b1) * ratio);
+      
+      return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    };
+
+    // 判断单元格是否在热力图范围内
+    const isHeatmapCell = (col, colIndex, rowIndex) => {
+      if (!hasHeatmap.value) return false;
+      
+      const config = heatmapConfig.value;
+      const cols = displayCols.value;
+      const data = paginatedData.value;
+      
+      const excludeRowsSet = new Set(
+        (config.excludeRows || []).map(idx => idx < 0 ? data.length + idx : idx)
+      );
+      
+      if (excludeRowsSet.has(rowIndex)) return false;
+      
+      if (col.heatmap) return true;
+      
+      const hasGlobalHeatmap = props.heatmap === true || (props.heatmap && typeof props.heatmap === 'object');
+      if (!hasGlobalHeatmap) return false;
+      
+      if (config.columns && config.columns.length > 0) {
+        return config.columns.includes(col.field);
+      }
+      
+      const left = config.left || 0;
+      const right = config.right || 0;
+      
+      return colIndex >= left && colIndex < cols.length - right;
+    };
+
+    // 获取单元格热力图样式
+    const getHeatmapStyle = (value, col, colIndex, rowIndex) => {
+      if (!hasHeatmap.value) return {};
+      if (!isHeatmapCell(col, colIndex, rowIndex)) return {};
+      if (typeof value !== 'number' || isNaN(value)) return {};
+      
+      const config = heatmapConfig.value;
+      const ranges = heatmapRanges.value;
+      
+      let colors = config.colors || ['#f44336', '#fff', '#4caf50'];
+      let rangeKey = col.field;
+      
+      const colHeatmap = parseColHeatmap(col);
+      if (colHeatmap) {
+        if (colHeatmap.colors) {
+          colors = colHeatmap.colors;
+        }
+        rangeKey = colHeatmap.group;
+      }
+      
+      let range;
+      if (config.axis === 'row' && !colHeatmap) {
+        const data = paginatedData.value;
+        const excludeRowsSet = new Set(
+          (config.excludeRows || []).map(idx => idx < 0 ? data.length + idx : idx)
+        );
+        const validRowIdx = data.slice(0, rowIndex).filter((_, idx) => !excludeRowsSet.has(idx)).length;
+        range = ranges[`row_${validRowIdx}`];
+      } else {
+        range = ranges[rangeKey];
+      }
+      
+      if (!range) return {};
+      
+      const { min, max } = range;
+      if (min === max) {
+        const midColor = colors.length === 3 ? colors[1] : colors[1];
+        return { backgroundColor: midColor };
+      }
+      
+      const ratio = (value - min) / (max - min);
+      const bgColor = interpolateColor(colors, ratio);
+      
+      return { backgroundColor: bgColor };
+    };
+
     // ========== 生命周期 ==========
     
     onMounted(() => {
@@ -474,6 +796,10 @@ const FtTable = {
         span.sort-priority {
           font-size: 0.7em;
         }
+        /* 热力图单元格样式 */
+        .ft-table td.heatmap-cell {
+          transition: background-color 0.2s ease;
+        }
       `;
       document.head.appendChild(style);
     };
@@ -487,6 +813,7 @@ const FtTable = {
       totalRecords,
       pageSize,
       hasFreeze,
+      hasHeatmap,
       pageSizeOptions,
       visiblePages,
       handleSort,
@@ -497,6 +824,7 @@ const FtTable = {
       handlePageSizeChange,
       formatValue,
       getCellClass,
+      getHeatmapStyle,
       hasSlot,
       resetPage
     };
@@ -534,6 +862,7 @@ const FtTable = {
                 v-for="(col, colIndex) in displayCols" 
                 :key="col.field"
                 :class="[getFreezeClass(colIndex), getCellClass(row[col.field])]"
+                :style="getHeatmapStyle(row[col.field], col, colIndex, rowIndex)"
               >
                 <!-- 有插槽：调用插槽渲染 -->
                 <template v-if="col.slot && $slots[col.slot]">
