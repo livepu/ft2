@@ -227,10 +227,19 @@ body {
         right: auto;
         bottom: 20px;
         width: auto;
-        display: block;
+        max-width: calc(100% - 40px);
+        display: flex;
+        justify-content: flex-start;
         background: transparent;
         border: none;
         box-shadow: none;
+    }
+    .toc-panel.collapsed .toc-collapsed-trigger {
+        display: flex;
+        pointer-events: auto;
+    }
+    .toc-collapsed-trigger {
+        padding: 10px 16px;
     }
     .toc-list {
         max-height: none;

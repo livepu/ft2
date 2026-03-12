@@ -189,7 +189,11 @@ class AccountAnalyzer:
         """
         计算累计收益率
         
-        计算公式：(期末资产 - 期初资产) / 期初资产
+        计算公式：(期末资产 - 基准资产) / 基准资产
+        
+        基准日标准（与掘金量化、同花顺等一致）：
+            - 不传 time_range：基准日 = date[0]，计算区间 = date[1] 到 end
+            - 传入 time_range：基准日 = 区间起点的前一交易日，计算区间 = start 到 end
         
         Args:
             time_range: TimeRange 对象，指定统计区间。
@@ -200,24 +204,28 @@ class AccountAnalyzer:
                   数据不足时返回 None
             
         Raises:
-            ValueError: 当初始资产为零时抛出
+            ValueError: 当基准资产为零时抛出
             
         Example:
             >>> analyzer.calc_return_rate()  # 全部区间
             >>> analyzer.calc_return_rate(TimeRange(period='3m'))  # 最近 3 个月
             >>> analyzer.calc_return_rate(TimeRange(start=date(2024,1,1), end=date(2024,3,31)))
         """
-        sliced_data = self._slice_data_by_range(time_range)
+        # 获取包含基准日的数据
+        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
         if len(sliced_data) < 2:
             return None
 
         dates = sorted(sliced_data.keys())
-        start_value = sliced_data[dates[0]]
+        # 第一个日期是基准日
+        benchmark_value = sliced_data[dates[0]]
+        # 最后一个日期是终点
         end_value = sliced_data[dates[-1]]
         
-        if start_value == 0:
-            raise ValueError("初始资产不能为零")
-        value = (end_value - start_value) / start_value
+        if benchmark_value == 0:
+            raise ValueError("基准资产不能为零")
+        
+        value = (end_value - benchmark_value) / benchmark_value
         self._metrics['calc_return_rate'] = {'name': '累计收益率', 'value': value, 'order': 10, 'desc': '统计期间内的总收益率'}
         return value
 
@@ -228,6 +236,8 @@ class AccountAnalyzer:
         将统计期间的收益率换算为年化基准，便于不同期限收益的比较
         
         计算公式：(1 + 期间收益率) ^ (365 / 持仓天数) - 1
+        
+        基准日标准：与 calc_return_rate 一致
         
         Args:
             time_range: TimeRange 对象，指定统计区间
@@ -246,8 +256,10 @@ class AccountAnalyzer:
         if interval_return is None:
             return None
 
-        sliced_data = self._slice_data_by_range(time_range)
+        # 获取包含基准日的数据，计算实际持仓天数
+        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
         dates = sorted(sliced_data.keys())
+        # 持仓天数：从基准日到最后一天
         days = (dates[-1] - dates[0]).days
         
         if days == 0:
@@ -271,6 +283,8 @@ class AccountAnalyzer:
         
         计算公式：日收益率标准差 × √252（年化因子）
         
+        基准日标准：使用包含基准日的数据计算日收益率
+        
         Args:
             time_range: TimeRange 对象，指定统计区间
             
@@ -284,7 +298,8 @@ class AccountAnalyzer:
         Example:
             >>> analyzer.calc_volatility(TimeRange(period='6m'))
         """
-        sliced_data = self._slice_data_by_range(time_range)
+        # 获取包含基准日的数据
+        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
         if len(sliced_data) < 2:
             return None
 
@@ -307,6 +322,8 @@ class AccountAnalyzer:
         
         计算方法：遍历所有交易日，记录峰值，计算当前值相对峰值的下跌幅度
         
+        基准日标准：使用包含基准日的数据计算
+        
         Args:
             time_range: TimeRange 对象，指定统计区间
                        None 表示使用全部数据
@@ -325,8 +342,8 @@ class AccountAnalyzer:
             >>> # 计算最近 6 个月的最大回撤
             >>> drawdown, start, end = analyzer.calc_max_drawdown(TimeRange(period='6m'))
         """
-        # 使用 _slice_data_by_range 处理时间区间
-        sliced_data = self._slice_data_by_range(time_range)
+        # 使用 _slice_data_by_range 处理时间区间（包含基准日）
+        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
         if not sliced_data:
             return 0, None, None
 
@@ -365,6 +382,8 @@ class AccountAnalyzer:
         
         计算方法：历史模拟法，取日收益率分布的分位数
         
+        基准日标准：使用包含基准日的数据计算日收益率
+        
         Args:
             confidence: 置信水平，默认 0.95（95%）
                        表示 95% 的情况下损失不会超过 VaR 值
@@ -377,7 +396,8 @@ class AccountAnalyzer:
         Example:
             >>> analyzer.calc_var(confidence=0.95)  # 95% 置信度
         """
-        sliced_data = self._slice_data_by_range(time_range)
+        # 获取包含基准日的数据
+        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
         daily_returns = self._calculate_daily_returns(sliced_data)
 
         if len(daily_returns) < 2:
@@ -400,6 +420,8 @@ class AccountAnalyzer:
         
         计算方法：取收益率分布尾部（最差情况）的平均值
         
+        基准日标准：使用包含基准日的数据计算日收益率
+        
         Args:
             confidence: 置信水平，默认 0.95（95%）
                        计算最差的 5% 情况的平均损失
@@ -412,7 +434,8 @@ class AccountAnalyzer:
         Example:
             >>> analyzer.calc_cvar(confidence=0.95)  # 尾部 5% 的平均损失
         """
-        sliced_data = self._slice_data_by_range(time_range)
+        # 获取包含基准日的数据
+        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
         daily_returns = self._calculate_daily_returns(sliced_data)
 
         if len(daily_returns) < 2:
@@ -437,6 +460,8 @@ class AccountAnalyzer:
         
         计算方法：计算每个时点相对峰值的回撤百分比的平方平均再开方
         
+        基准日标准：使用包含基准日的数据计算
+        
         Args:
             time_range: TimeRange 对象，指定统计区间
             
@@ -447,7 +472,8 @@ class AccountAnalyzer:
         Example:
             >>> analyzer.calc_ulcer_index(TimeRange(period='1y'))
         """
-        sliced_data = self._slice_data_by_range(time_range)
+        # 获取包含基准日的数据
+        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
         dates = sorted(sliced_data.keys())
 
         if len(dates) < 2:
@@ -511,6 +537,8 @@ class AccountAnalyzer:
         
         计算公式：(年化收益率 - 无风险利率) / 下行标准差
         
+        基准日标准：使用包含基准日的数据计算日收益率
+        
         Args:
             risk_free_rate: 无风险利率，默认 0.02（2%）
             time_range: TimeRange 对象，指定统计区间
@@ -528,7 +556,8 @@ class AccountAnalyzer:
         if annualized_return is None:
             return None
 
-        sliced_data = self._slice_data_by_range(time_range)
+        # 获取包含基准日的数据
+        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
         daily_returns = self._calculate_daily_returns(sliced_data)
 
         if len(daily_returns) < 2:
@@ -592,6 +621,8 @@ class AccountAnalyzer:
         
         计算公式：盈利交易次数 / 总交易次数
         
+        基准日标准：根据 time_range 确定的区间过滤交易记录
+        
         Args:
             time_range: TimeRange 对象，指定统计区间
                        None 表示使用全部交易记录
@@ -609,12 +640,13 @@ class AccountAnalyzer:
         
         # 如果指定了时间区间，需要过滤交易记录
         if time_range is not None:
-            sliced_data = self._slice_data_by_range(time_range)
+            # 获取包含基准日的数据，确定实际计算区间
+            sliced_data = self._slice_data_by_range(time_range, include_benchmark=False)
             if not sliced_data:
                 return None
-            # 过滤出在时间区间内平仓的交易
             start_date = min(sliced_data.keys())
             end_date = max(sliced_data.keys())
+            # 过滤出在时间区间内平仓的交易
             filtered_trades = [
                 t for t in self._trade_profits
                 if start_date <= t['close_time'].date() <= end_date
@@ -635,6 +667,8 @@ class AccountAnalyzer:
         计算平均盈利
         
         统计所有盈利交易的平均值，可用于计算盈亏比
+        
+        基准日标准：根据 time_range 确定的区间过滤交易记录
         
         Args:
             mode: 计算模式
@@ -658,7 +692,8 @@ class AccountAnalyzer:
 
         # 如果指定了时间区间，需要过滤交易记录
         if time_range is not None:
-            sliced_data = self._slice_data_by_range(time_range)
+            # 获取包含基准日的数据，确定实际计算区间
+            sliced_data = self._slice_data_by_range(time_range, include_benchmark=False)
             if not sliced_data:
                 return None
             start_date = min(sliced_data.keys())
@@ -688,6 +723,8 @@ class AccountAnalyzer:
         
         统计所有亏损交易的平均值，可用于计算盈亏比
         
+        基准日标准：根据 time_range 确定的区间过滤交易记录
+        
         Args:
             mode: 计算模式
                   - 'amount': 金额模式，计算平均亏损金额
@@ -709,7 +746,8 @@ class AccountAnalyzer:
 
         # 如果指定了时间区间，需要过滤交易记录
         if time_range is not None:
-            sliced_data = self._slice_data_by_range(time_range)
+            # 获取包含基准日的数据，确定实际计算区间
+            sliced_data = self._slice_data_by_range(time_range, include_benchmark=False)
             if not sliced_data:
                 return None
             start_date = min(sliced_data.keys())
@@ -775,6 +813,8 @@ class AccountAnalyzer:
         
         计算公式：总持仓天数 / 交易次数
         
+        基准日标准：根据 time_range 确定的区间过滤交易记录
+        
         Args:
             time_range: TimeRange 对象，指定统计区间
                        None 表示使用全部交易记录
@@ -792,7 +832,8 @@ class AccountAnalyzer:
         
         # 如果指定了时间区间，需要过滤交易记录
         if time_range is not None:
-            sliced_data = self._slice_data_by_range(time_range)
+            # 获取包含基准日的数据，确定实际计算区间
+            sliced_data = self._slice_data_by_range(time_range, include_benchmark=False)
             if not sliced_data:
                 return None
             start_date = min(sliced_data.keys())
@@ -1118,14 +1159,16 @@ class AccountAnalyzer:
             for snapshot_date, snaps in daily_snapshots.items()
         }
 
-    def _slice_data_by_range(self, time_range: TimeRange = None) -> Dict[date, float]:
+    def _slice_data_by_range(self, time_range: TimeRange = None, include_benchmark: bool = False) -> Dict[date, float]:
         """
         根据时间区间截取数据
         
         核心功能：
         1. 支持三种方式指定区间：直接设置 start/end、使用预设 period、使用全部数据
-        2. 处理基准日逻辑：如果开始日早于第一个交易日，使用 date[1] 作为开始日
-        3. 返回截取后的资产数据字典，供其他 calc_ 方法使用
+        2. 处理基准日逻辑：
+           - 不传 time_range 时：使用固定的第一个交易日为基准日（date[0]），从 date[1] 开始计算
+           - 传入 time_range 时：使用区间起点的前一个交易日为基准日（类似 JS 版本）
+        3. 可选择是否包含基准日数据（用于计算收益率）
         
         Args:
             time_range: TimeRange 对象，包含以下配置：
@@ -1133,24 +1176,39 @@ class AccountAnalyzer:
                        - end: 结束日期，None 表示使用数据结束日
                        - period: 时间周期标识，可选值：
                                 '1m', '3m', '6m', '1y', '2y', '3y', '5y', 'all'
+            include_benchmark: 是否包含基准日数据
+                              - True: 返回包含基准日的完整数据（用于计算）
+                              - False: 只返回计算区间的数据（用于展示）
             
         Returns:
             Dict[date, float]: 截取后的资产数据 {日期：资产净值}
             
-        基准日逻辑说明：
-            - 回测开始日的前一交易日作为基准日（即 date[0]）
-            - 如果 time_range.start 早于基准日的下一交易日（date[1]），
-              使用 date[1] 作为实际开始日
-            - 这样可以确保有足够的历史数据计算收益率
+        基准日逻辑说明（向 JS 版本看齐）：
+            场景 1：不传 time_range（使用全部数据）
+                - 基准日：date[0]（第一个交易日）
+                - 计算起点：date[1]（第二个交易日）
+                - 用途：生成固定报告，从成立来统计
+            
+            场景 2：传入 time_range（自定义区间）
+                - 基准日：区间起点的前一个交易日
+                - 计算起点：区间的实际起点
+                - 用途：动态区间统计，确保第一天就有实际收益率
+                - 示例：用户选择 2024-01-03 至 2024-03-31
+                  基准日：2024-01-02（起点的前一日）
+                  计算：2024-01-03 的收益率 = (01-03 净值 - 01-02 净值) / 01-02 净值
+            
+            为什么这样设计？
+                - 如果区间从 date[0] 开始，无法找到前一个交易日，所以使用 date[0] 作为基准
+                - 如果区间从 date[N] 开始（N>0），使用 date[N-1] 作为基准，确保 date[N] 有实际收益率
+                - 这与 JS 版本的逻辑完全一致，支持动态区间切换
             
         Example:
-            >>> # 使用预设周期
-            >>> data = analyzer._slice_data_by_range(TimeRange(period='3m'))
+            >>> # 只返回计算区间（用于展示）
+            >>> data = analyzer._slice_data_by_range(TimeRange(period='3m'), include_benchmark=False)
             >>> 
-            >>> # 使用自定义日期范围
-            >>> data = analyzer._slice_data_by_range(
-            ...     TimeRange(start=date(2024,1,1), end=date(2024,3,31))
-            ... )
+            >>> # 返回包含基准日的数据（用于计算收益率）
+            >>> data_with_base = analyzer._slice_data_by_range(TimeRange(period='3m'), include_benchmark=True)
+            >>> start_value = data_with_base[benchmark_date]  # 基准日的值
         """
         if not self._daily_assets:
             return {}
@@ -1159,13 +1217,18 @@ class AccountAnalyzer:
         if len(dates) < 2:
             return self._daily_assets.copy()
         
-        benchmark_date = dates[0]
-        first_trading_date = dates[1]
+        # 全部数据的基准日和第一个交易日
+        all_benchmark_date = dates[0]
+        all_first_trading_date = dates[1]
         
+        # 确定区间的起止日期和基准日
         if time_range is None:
-            start_date = first_trading_date
+            # 不传参数：使用全部数据，从 date[1] 开始
+            benchmark_date = all_benchmark_date
+            start_date = all_first_trading_date
             end_date = dates[-1]
         elif time_range.period:
+            # 使用预设周期
             periods = {
                 '1m': relativedelta(months=1),
                 '3m': relativedelta(months=3),
@@ -1178,28 +1241,66 @@ class AccountAnalyzer:
             }
             
             if time_range.period == 'all':
-                start_date = first_trading_date
+                benchmark_date = all_benchmark_date
+                start_date = all_first_trading_date
                 end_date = dates[-1]
             else:
                 delta = periods.get(time_range.period)
                 if delta is None:
-                    start_date = first_trading_date
+                    benchmark_date = all_benchmark_date
+                    start_date = all_first_trading_date
                     end_date = dates[-1]
                 else:
+                    # 从结束日往前推 delta，找到最接近的交易日
                     calculated_start = dates[-1] - delta
-                    start_date = max(d for d in dates if d <= calculated_start) if any(d <= calculated_start for d in dates) else first_trading_date
+                    # 找到 <= calculated_start 的最大日期
+                    valid_dates = [d for d in dates if d <= calculated_start]
+                    raw_start_date = max(valid_dates) if valid_dates else all_first_trading_date
+                    
+                    # 确定基准日：起点的前一个交易日
+                    if raw_start_date == all_first_trading_date:
+                        benchmark_date = all_benchmark_date
+                        start_date = all_first_trading_date
+                    else:
+                        # 找到 raw_start_date 的前一个交易日
+                        prev_dates = [d for d in dates if d < raw_start_date]
+                        benchmark_date = max(prev_dates) if prev_dates else all_benchmark_date
+                        start_date = raw_start_date
+                    
                     end_date = dates[-1]
         else:
-            start_date = time_range.start if time_range.start else first_trading_date
+            # 使用自定义 start/end
+            raw_start_date = time_range.start if time_range.start else all_first_trading_date
+            
+            # 确保不早于 all_first_trading_date
+            if raw_start_date < all_first_trading_date:
+                benchmark_date = all_benchmark_date
+                start_date = all_first_trading_date
+            else:
+                # 找到 raw_start_date 的前一个交易日作为基准日
+                prev_dates = [d for d in dates if d < raw_start_date]
+                if prev_dates:
+                    benchmark_date = max(prev_dates)
+                    start_date = raw_start_date
+                else:
+                    benchmark_date = all_benchmark_date
+                    start_date = all_first_trading_date
+            
             end_date = time_range.end if time_range.end else dates[-1]
         
-        if start_date < first_trading_date:
-            start_date = first_trading_date
-        
-        sliced_data = {
-            d: v for d, v in self._daily_assets.items()
-            if start_date <= d <= end_date
-        }
+        # 截取数据
+        if include_benchmark:
+            # 包含基准日：从 benchmark_date 到 end_date
+            sliced_data = {
+                d: v for d, v in self._daily_assets.items()
+                if benchmark_date <= d <= end_date
+            }
+        else:
+            # 不包含基准日：从 start_date 到 end_date
+            sliced_data = {
+                d: v for d, v in self._daily_assets.items()
+                if start_date <= d <= end_date
+            }
         
         return sliced_data
 
