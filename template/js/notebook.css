@@ -223,23 +223,31 @@ body {
         flex-direction: column;
     }
     .toc-panel.collapsed {
+        position: fixed;
         left: 20px;
         right: auto;
         bottom: 20px;
         width: auto;
         max-width: calc(100% - 40px);
-        display: flex;
-        justify-content: flex-start;
         background: transparent;
         border: none;
         box-shadow: none;
+        z-index: 9999;
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
     }
     .toc-panel.collapsed .toc-collapsed-trigger {
+        display: -webkit-box;
+        display: -webkit-flex;
         display: flex;
+        -webkit-pointer-events: auto;
         pointer-events: auto;
+        -webkit-tap-highlight-color: transparent;
     }
     .toc-collapsed-trigger {
-        padding: 10px 16px;
+        padding: 12px 20px;
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
     }
     .toc-list {
         max-height: none;
