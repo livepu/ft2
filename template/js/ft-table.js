@@ -968,8 +968,8 @@ const FtTable = {
         </div>
       </div>
       
-      <!-- 分页 -->
-      <div v-if="pageConfig !== false" class="ft-table-pagination">
+      <!-- 分页：数据量超过每页条数时显示 -->
+      <div v-if="pageConfig !== false && totalRecords > pageSize" class="ft-table-pagination">
         <!-- 首页 -->
         <button 
           @click="handlePageChange(1)"
