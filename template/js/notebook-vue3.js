@@ -82,10 +82,19 @@ const CellRenderer = {
             if (cell.options?.pagination !== false) {
                 const dataLength = cell.content?.length || 0;
                 if (dataLength > 10 || cell.options?.pagination) {
-                    opts.pagination = cell.options?.pagination || {
-                        pageSize: 10,
-                        pageSizeOptions: [10, 20, 50, 100]
-                    };
+                    const paginationOpt = cell.options?.pagination;
+                    if (paginationOpt && typeof paginationOpt === 'object') {
+                        // 兼容新旧格式：新格式 {size, options}，旧格式 {pageSize, pageSizeOptions}
+                        opts.pagination = {
+                            pageSize: paginationOpt.size || paginationOpt.pageSize || 10,
+                            pageSizeOptions: paginationOpt.options || paginationOpt.pageSizeOptions || [10, 20, 50, 100]
+                        };
+                    } else {
+                        opts.pagination = paginationOpt || {
+                            pageSize: 10,
+                            pageSizeOptions: [10, 20, 50, 100]
+                        };
+                    }
                 }
             }
             return opts;

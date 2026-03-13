@@ -1,17 +1,20 @@
 /**
- * FT Table Component v1.3.20260313-1
+ * FT Table Component v1.5.20260313-1
  * 版本号说明：主版本。次版本。日期（YYYYMMDD）-修订号
  * 基于 alpine-table.js 重构，适配 Vue 3 组合式 API
  * 
  * v1.3 新增热力图功能（heatmap）
  * v1.3.20260313-1 优化：热力图单元格禁用正负颜色类，避免字体颜色与背景色冲突
+ * v1.4 重构分页参数：新增 page 参数，pagination 降级为兼容
+ * v1.5 新版 page 参数优先，pagination 后期移除
  * 
  * ============================================
  * 参数说明
  * ============================================
  * data         Array            表格数据源（必需）
  * cols         Array            列配置（必需）
- * pagination   Object|Boolean   分页配置，false 禁用（默认 false）
+ * page         Object|Boolean   新版分页配置（推荐），false 禁用（默认 false）
+ * pagination   Object|Boolean   旧版分页配置（兼容），后期移除
  * freeze       Object           冻结列配置 { left: 0, right: 0 }
  * heatmap      Object           热力图配置（列级别或全局）
  * resetPage    Boolean          数据变化时自动重置到第一页（默认 true）
@@ -65,21 +68,25 @@
  * ];
  * 
  * // 3. 模板使用
- * <ft-table 
+ * &lt;ft-table 
  *   :data="tableData" 
  *   :cols="cols"
- *   :pagination="{ pageSize: 20 }"
+ *   :page="{ size: 20 }"
  *   :freeze="{ left: 2 }"
- * ></ft-table>
+ * &gt;&lt;/ft-table&gt;
  * 
  * ============================================
  * 参数详解
  * ============================================
  * 
- * pagination 配置:
- *   { pageSize: 20 }                    // 启用分页，每页 20 条
- *   { pageSize: 20, pageSizeOptions: [10, 20, 50, 100] }  // 自定义每页条数选项
- *   false                               // 禁用分页
+ * page 配置（新版，推荐）:
+ *   { size: 20 }                      // 启用分页，每页 20 条
+ *   { size: 20, options: [10, 20, 50, 100] }  // 自定义每页条数选项
+ *   false                             // 禁用分页
+ * 
+ * pagination 配置（旧版，兼容，后期移除）:
+ *   { pageSize: 20 }                  // 启用分页，每页 20 条
+ *   { pageSize: 20, pageSizeOptions: [10, 20, 50, 100] }
  * 
  * freeze 配置:
  *   { left: 2 }                         // 冻结左侧 2 列
@@ -176,6 +183,10 @@ const FtTable = {
       type: Array,
       default: () => []
     },
+    page: {
+      type: [Object, Boolean],
+      default: false
+    },
     pagination: {
       type: [Object, Boolean],
       default: false
@@ -202,8 +213,11 @@ const FtTable = {
     const { ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
     
     // ========== 响应式数据 ==========
+    // 兼容旧版：page 优先，pagination 降级
+    const pageConfig = computed(() => props.page || props.pagination);
+    
     const currentPage = ref(1);
-    const pageSize = ref(props.pagination?.pageSize || 20);
+    const pageSize = ref(pageConfig.value?.size || pageConfig.value?.pageSize || 20);
     const multiSort = ref([]);
     const tableContainer = ref(null);
     const resizeObserver = ref(null);
@@ -230,14 +244,14 @@ const FtTable = {
 
     // 分页后的数据
     const paginatedData = computed(() => {
-      if (!props.pagination) return sortedData.value;
+      if (!pageConfig.value) return sortedData.value;
       const start = (currentPage.value - 1) * pageSize.value;
       return sortedData.value.slice(start, start + pageSize.value);
     });
 
     // 总页数
     const totalPages = computed(() => {
-      if (!props.pagination) return 1;
+      if (!pageConfig.value) return 1;
       return Math.ceil(props.data.length / pageSize.value) || 1;
     });
 
@@ -456,7 +470,7 @@ const FtTable = {
 
     // 分页选项
     const pageSizeOptions = computed(() => {
-      return props.pagination?.pageSizeOptions || [10, 20, 50, 100];
+      return pageConfig.value?.options || pageConfig.value?.pageSizeOptions || [10, 20, 50, 100];
     });
 
     // 生成显示的页码数组（首页 上一页 1 2 3 4 5 末页）
@@ -877,6 +891,7 @@ const FtTable = {
       totalPages,
       totalRecords,
       pageSize,
+      pageConfig,
       hasFreeze,
       hasHeatmap,
       pageSizeOptions,
@@ -950,7 +965,7 @@ const FtTable = {
       </div>
       
       <!-- 分页 -->
-      <div v-if="pagination !== false" class="ft-table-pagination">
+      <div v-if="pageConfig !== false" class="ft-table-pagination">
         <!-- 首页 -->
         <button 
           @click="handlePageChange(1)"

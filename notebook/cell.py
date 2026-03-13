@@ -226,15 +226,7 @@ class CellBuilder:
         opts = {"columns": columns} if columns else {}
         
         if options:
-            freeze = options.get('freeze')
-            if freeze is not None:
-                if isinstance(freeze, int):
-                    opts["freeze"] = {"left": freeze, "right": 0}
-                else:
-                    opts["freeze"] = freeze
-            
-            if 'page' in options:
-                opts["page"] = options["page"]
+            opts.update(options)
         
         return Cell(CellType.TABLE, data, options=opts)
     
