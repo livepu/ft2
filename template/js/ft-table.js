@@ -33,8 +33,8 @@
  *   { group: 'name', colors: [...] }  分组色阶 + 自定义颜色
  * 
  * colors 说明:
- *   2色: ['#e3f2fd', '#1565c0']  浅蓝→深蓝
- *   3色: ['#f44336', '#fff', '#4caf50']  红→白→绿（默认）
+ *   2 色：['#e3f2fd', '#1565c0']  浅蓝→深蓝
+ *   3 色：['#2196f3', '#fff', '#f44336']  蓝→白→红（默认，A 股配色：红涨蓝跌）
  * 
  * 示例：
  * { field: 'name', title: '名称', sort: false, width: 120 }
@@ -268,7 +268,7 @@ const FtTable = {
         exclude: [],
         excludeRows: [],
         columns: null,
-        colors: ['#f44336', '#fff', '#4caf50'],
+        colors: ['#2196f3', '#fff', '#f44336'],
         axis: 'column'
       };
       
