@@ -232,7 +232,7 @@ body {
         background: transparent;
         border: none;
         box-shadow: none;
-        z-index: 9999;
+        z-index: 1002;
         -webkit-transform: translateZ(0);
         transform: translateZ(0);
     }
@@ -930,7 +930,7 @@ body {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    z-index: 1000;
+    z-index: 1003;
     font-size: 14px;
 }
 
@@ -1124,5 +1124,12 @@ body {
 @media print {
     .color-picker-panel {
         display: none;
+    }
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+    .color-picker-panel {
+        z-index: 1003 !important;
     }
 }

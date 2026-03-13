@@ -4,13 +4,51 @@ from dateutil.relativedelta import relativedelta
 import math
 import os
 from datetime import datetime, date
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Tuple, Any, Optional, Union
 from dataclasses import dataclass
 import json
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
 import inspect
+from functools import wraps
 
+
+# ============================================================================
+# 指标装饰器
+# ============================================================================
+
+def metric(name: str = None, desc: str = '', type: str = 'float', order: int = 99):
+    """
+    指标装饰器，用于标记分析方法
+    
+    Args:
+        name: 指标中文名称，默认使用函数名
+        desc: 指标描述
+        type: 数据类型，默认 'float'，可选 'int', 'dict', 'list' 等
+        order: 排序号，用于报告中的顺序
+    
+    Usage:
+        @metric(name='累计收益率', desc='统计期间内的总收益率', type='float', order=10)
+        def return_rate(self):
+            ...
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            return func(self, *args, **kwargs)
+        
+        wrapper._is_metric = True
+        wrapper._metric_name = name or func.__name__
+        wrapper._metric_desc = desc
+        wrapper._metric_type = type
+        wrapper._metric_order = order
+        return wrapper
+    return decorator
+
+
+# ============================================================================
+# 时间区间配置
+# ============================================================================
 
 @dataclass
 class TimeRange:
@@ -101,6 +139,8 @@ class AccountAnalyzer:
         """
         self.account = account
         self._metrics = {}
+        self.risk_free_rate = 0.02
+        self._current_range = None
         
         if daily_assets is not None:
             if isinstance(daily_assets, dict):
@@ -180,6 +220,221 @@ class AccountAnalyzer:
             >>> print(metrics['calc_return_rate']['value'])
         """
         return self._metrics.copy()
+
+    # ------------------------------------------------------------------------
+    # 链式调用方法（支持 @metric 装饰器）
+    # ------------------------------------------------------------------------
+
+    _periods_map = {
+        '1m': relativedelta(months=1),
+        '3m': relativedelta(months=3),
+        '6m': relativedelta(months=6),
+        '1y': relativedelta(years=1),
+        '2y': relativedelta(years=2),
+        '3y': relativedelta(years=3),
+        '5y': relativedelta(years=5),
+        'all': None
+    }
+
+    def range(self, period_or_start, end=None):
+        """
+        设置分析区间（支持链式调用）
+        
+        Args:
+            period_or_start: 
+                - str: 周期字符串，如 '1m', '3m', '6m', '1y', 'all'
+                - date: 自定义开始日期
+            end: 结束日期（当 period_or_start 为 date 时使用）
+        
+        Returns:
+            self: 返回自身以支持链式调用
+        
+        Example:
+            >>> analyzer.range('3m').return_rate()
+            >>> analyzer.range(date(2024,1,1), date(2024,6,30)).return_rate()
+        """
+        if isinstance(period_or_start, str):
+            self._current_range = TimeRange(period=period_or_start)
+        else:
+            self._current_range = TimeRange(start=period_or_start, end=end)
+        return self
+
+    def _get_benchmark_and_range(self, time_range: TimeRange = None):
+        """根据区间获取基准日和计算区间"""
+        dates = sorted(self._daily_assets.keys())
+        if len(dates) < 2:
+            return dates[0], dates[0], dates[-1] if dates else (None, None, None)
+        
+        all_benchmark = dates[0]
+        all_start = dates[1]
+        
+        if time_range is None:
+            return all_benchmark, all_start, dates[-1]
+        
+        if time_range.period:
+            if time_range.period == 'all':
+                return all_benchmark, all_start, dates[-1]
+            
+            delta = self._periods_map.get(time_range.period)
+            if delta is None:
+                return all_benchmark, all_start, dates[-1]
+            
+            calculated_start = dates[-1] - delta
+            valid_dates = [d for d in dates if d <= calculated_start]
+            raw_start = max(valid_dates) if valid_dates else all_start
+            
+            if raw_start == all_start:
+                return all_benchmark, all_start, dates[-1]
+            
+            prev_dates = [d for d in dates if d < raw_start]
+            benchmark = max(prev_dates) if prev_dates else all_benchmark
+            return benchmark, raw_start, dates[-1]
+        else:
+            raw_start = time_range.start or all_start
+            if raw_start < all_start:
+                raw_start = all_start
+            
+            prev_dates = [d for d in dates if d < raw_start]
+            if prev_dates:
+                benchmark = max(prev_dates)
+                return benchmark, raw_start, time_range.end or dates[-1]
+            else:
+                return all_benchmark, all_start, time_range.end or dates[-1]
+
+    @metric(name='累计收益率', desc='统计期间内的总收益率', type='float', order=10)
+    def return_rate(self) -> Optional[float]:
+        """计算累计收益率（链式调用版本）"""
+        if not self._daily_assets:
+            return None
+        
+        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        
+        sliced_data = {
+            d: v for d, v in self._daily_assets.items()
+            if benchmark_date <= d <= end_date
+        }
+        
+        if len(sliced_data) < 2:
+            return None
+        
+        dates = sorted(sliced_data.keys())
+        benchmark_value = sliced_data[dates[0]]
+        end_value = sliced_data[dates[-1]]
+        
+        if benchmark_value == 0:
+            return None
+        
+        return (end_value - benchmark_value) / benchmark_value
+
+    @metric(name='年化收益率', desc='将收益率换算为年化基准', type='float', order=11)
+    def annualized_return(self) -> Optional[float]:
+        """计算年化收益率"""
+        interval_return = self.return_rate()
+        if interval_return is None:
+            return None
+        
+        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        
+        sliced_data = {
+            d: v for d, v in self._daily_assets.items()
+            if benchmark_date <= d <= end_date
+        }
+        
+        dates = sorted(sliced_data.keys())
+        days = (dates[-1] - dates[0]).days
+        
+        if days == 0:
+            return 0
+        if interval_return <= -1:
+            return None
+        
+        return ((1 + interval_return) ** (365 / days)) - 1
+
+    @metric(name='年化波动率', desc='衡量资产价格的波动程度', type='float', order=20)
+    def volatility(self) -> Optional[float]:
+        """计算年化波动率"""
+        if not self._daily_assets:
+            return None
+        
+        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        
+        sliced_data = {
+            d: v for d, v in self._daily_assets.items()
+            if benchmark_date <= d <= end_date
+        }
+        
+        if len(sliced_data) < 2:
+            return None
+        
+        daily_returns = []
+        dates = sorted(sliced_data.keys())
+        for i in range(1, len(dates)):
+            prev = sliced_data[dates[i - 1]]
+            curr = sliced_data[dates[i]]
+            if prev != 0:
+                daily_returns.append((curr - prev) / prev)
+        
+        if len(daily_returns) < 2:
+            return None
+        
+        mean_return = sum(daily_returns) / len(daily_returns)
+        variance = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns)
+        daily_volatility = math.sqrt(variance)
+        
+        return daily_volatility * math.sqrt(252)
+
+    @metric(name='夏普比率', desc='每承担一单位风险获得的超额收益', type='float', order=30)
+    def sharpe_ratio(self) -> Optional[float]:
+        """计算夏普比率"""
+        annualized = self.annualized_return()
+        vol = self.volatility()
+        
+        if annualized is None or vol is None or vol == 0:
+            return None
+        
+        return (annualized - self.risk_free_rate) / vol
+
+    def _collect_metrics(self) -> Dict:
+        """收集所有 @metric 装饰器标记的方法"""
+        metrics = {}
+        for name in dir(self):
+            if name.startswith('_'):
+                continue
+            attr = getattr(self, name, None)
+            if callable(attr) and hasattr(attr, '_is_metric'):
+                try:
+                    value = attr()
+                    metrics[attr._metric_name] = {
+                        'name': attr._metric_name,
+                        'value': value,
+                        'desc': attr._metric_desc,
+                        'type': attr._metric_type,
+                        'order': attr._metric_order,
+                        'method': name
+                    }
+                except:
+                    pass
+        return metrics
+
+    def metrics(self) -> Dict:
+        """获取当前区间的所有指标"""
+        return self._collect_metrics()
+
+    def returns(self, periods: str = None) -> Dict:
+        """批量计算多区间收益率"""
+        if periods is None:
+            return {'default': self.return_rate()}
+        
+        period_list = [p.strip() for p in periods.split(',')]
+        result = {}
+        
+        for p in period_list:
+            original_range = self._current_range
+            self._current_range = TimeRange(period=p)
+            result[p] = self.return_rate()
+            self._current_range = original_range
+        
+        return result
 
     # ------------------------------------------------------------------------
     # 收益指标
@@ -1421,6 +1676,37 @@ class AccountAnalyzer:
 
         return processed_trades
 
+    def _get_caller_dir(self) -> str:
+        """
+        获取调用者所在目录
+        
+        使用 inspect 模块获取调用当前方法的代码所在的目录
+        用于确定 HTML 报告的输出路径基准
+        
+        Returns:
+            str: 调用者脚本的绝对目录路径
+            
+        Example:
+            # 如果在 d:\\project\\backtest\\main.py 中调用
+            # analyzer._get_caller_dir() 返回 "d:\\project\\backtest"
+        """
+        frame = inspect.currentframe()
+        try:
+            caller_frame = None
+            for frame_info in inspect.stack():
+                if frame_info.filename != __file__:
+                    caller_frame = frame_info
+                    break
+
+            if caller_frame:
+                return os.path.dirname(os.path.abspath(caller_frame.filename))
+            else:
+                return os.path.dirname(os.path.abspath(__file__))
+        finally:
+            del frame
+
+        return processed_trades
+    
     def _get_caller_dir(self) -> str:
         """
         获取调用者所在目录
