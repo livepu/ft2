@@ -27,20 +27,20 @@
  * heatmap      Boolean/String/Object  热力图配置
  * 
  * heatmap 配置:
- *   true                    独立色阶，按列归一化
- *   'groupName'             分组色阶，同组共享范围
- *   { colors: [...] }       自定义颜色（2色或3色）
- *   { group: 'name' }       指定分组名
+ *   {}                          独立色阶，按列归一化，使用默认颜色
+ *   { colors: [...] }           独立色阶 + 自定义颜色
+ *   { group: 'name' }           分组色阶 + 默认颜色
+ *   { group: 'name', colors: [...] }  分组色阶 + 自定义颜色
  * 
  * colors 说明:
  *   2色: ['#e3f2fd', '#1565c0']  浅蓝→深蓝
- *   3色: ['#f44336', '#fff', '#4caf50']  红→白→绿（类似 Excel 三色色阶）
+ *   3色: ['#f44336', '#fff', '#4caf50']  红→白→绿（默认）
  * 
  * 示例：
  * { field: 'name', title: '名称', sort: false, width: 120 }
- * { field: 'change', title: '涨跌幅', heatmap: true }
- * { field: 'c', title: 'C列', heatmap: 'group1' }
- * { field: 'd', title: 'D列', heatmap: 'group1' }  // 与C列共享范围
+ * { field: 'change', title: '涨跌幅', heatmap: {} }
+ * { field: 'c', title: 'C列', heatmap: { group: 'g1' } }
+ * { field: 'd', title: 'D列', heatmap: { group: 'g1' } }  // 与C列共享范围
  * 
  * ============================================
  * 使用示例
@@ -86,17 +86,18 @@
  *   { left: 2, right: 1 }               // 同时冻结左右
  * 
  * heatmap 配置:
- *   { left: 2 }                         // 左侧2列不应用热力图
- *   { right: 1 }                        // 右侧1列不应用热力图
- *   { left: 2, right: 1 }               // 中间区域应用热力图
+ *   { start: 2, end: 5 }               // 第2-5列应用热力图（1-based，包含end）
+ *   { start: 2 }                        // 第2列到最后一列
+ *   { start: 2, end: -2 }               // 第2列到倒数第2列
+ *   { start: 2, exclude: [5, 6] }       // 第2列，排除第5、6列
  *   { excludeRows: [-1] }               // 排除最后一行（汇总行）
- *   { columns: ['change', 'volume'] }   // 指定列热力图（优先于 left/right）
+ *   { columns: ['change', 'volume'] }   // 指定列热力图（优先于 start/end）
  *   { colors: ['#e8f5e9', '#1b5e20'] }  // 自定义颜色（2色或3色）
- *   { axis: 'column' }                  // 归一化方式：'column'按列 | 'row'按行 | 'table'全表
+ *   { axis: 'column' }                  // 归一化方式：'column'按列 | 'table'全表
  *   true                                // 启用默认热力图（全表）
  * 
  * colors 说明:
- *   3色: ['#f44336', '#fff', '#4caf50']  红→白→绿（默认）
+ *   3色: ['#f43646ff', '#fff', '#4caf50']  红→白→绿（默认）
  *   2色: ['#e3f2fd', '#1565c0']  浅蓝→深蓝
  * 
  * ============================================
@@ -234,7 +235,7 @@ const FtTable = {
 
     // 是否启用热力图（全局或列级别）
     const hasHeatmap = computed(() => {
-      if (props.heatmap === true || (props.heatmap && typeof props.heatmap === 'object')) {
+      if (props.heatmap && typeof props.heatmap === 'object') {
         return true;
       }
       return displayCols.value.some(col => col.heatmap);
@@ -243,14 +244,6 @@ const FtTable = {
     // 解析列的热力图配置
     const parseColHeatmap = (col) => {
       if (!col.heatmap) return null;
-      
-      if (col.heatmap === true) {
-        return { enabled: true, group: col.field, colors: null };
-      }
-      
-      if (typeof col.heatmap === 'string') {
-        return { enabled: true, group: col.heatmap, colors: null };
-      }
       
       if (typeof col.heatmap === 'object') {
         return {
@@ -265,18 +258,19 @@ const FtTable = {
 
     // 热力图配置（合并默认值）
     const heatmapConfig = computed(() => {
+      if (!props.heatmap || props.heatmap === true) {
+        return null;
+      }
+      
       const defaults = {
-        left: 0,
-        right: 0,
+        start: 1,
+        end: -1,
+        exclude: [],
         excludeRows: [],
         columns: null,
         colors: ['#f44336', '#fff', '#4caf50'],
         axis: 'column'
       };
-      
-      if (props.heatmap === true) {
-        return defaults;
-      }
       
       return { ...defaults, ...props.heatmap };
     });
@@ -291,11 +285,15 @@ const FtTable = {
       const ranges = {};
       const groupValues = {};
       
-      const hasGlobalHeatmap = props.heatmap === true || (props.heatmap && typeof props.heatmap === 'object');
+      const hasGlobalHeatmap = props.heatmap && typeof props.heatmap === 'object';
       const hasColHeatmap = cols.some(col => col.heatmap);
       
+      if (!hasGlobalHeatmap && !hasColHeatmap) {
+        return ranges;
+      }
+      
       const excludeRowsSet = new Set(
-        (heatmapConfig.value.excludeRows || []).map(idx => idx < 0 ? data.length + idx : idx)
+        (heatmapConfig.value?.excludeRows || []).map(idx => idx < 0 ? data.length + idx : idx)
       );
       const validRows = data.filter((_, idx) => !excludeRowsSet.has(idx));
       
@@ -346,9 +344,20 @@ const FtTable = {
             }
           });
         } else {
-          const left = config.left || 0;
-          const right = config.right || 0;
-          const heatmapCols = cols.slice(left, cols.length - right || undefined);
+          const config = heatmapConfig.value;
+          const totalCols = cols.length;
+          const start = config.start > 0 ? config.start - 1 : totalCols + config.start;
+          const end = config.end > 0 ? config.end - 1 : totalCols + config.end;
+          const excludeSet = new Set((config.exclude || []).map(v => {
+            return v > 0 ? v - 1 : totalCols + v;
+          }));
+          
+          const heatmapCols = [];
+          for (let i = start; i <= end; i++) {
+            if (i >= 0 && i < totalCols && !excludeSet.has(i)) {
+              heatmapCols.push(cols[i]);
+            }
+          }
           
           if (config.axis === 'column') {
             heatmapCols.forEach(col => {
@@ -388,20 +397,6 @@ const FtTable = {
                 }
               });
             }
-          } else if (config.axis === 'row') {
-            validRows.forEach((row, rowIdx) => {
-              const values = heatmapCols
-                .filter(col => !col.heatmap)
-                .map(col => row[col.field])
-                .filter(v => typeof v === 'number' && !isNaN(v));
-              
-              if (values.length > 0) {
-                ranges[`row_${rowIdx}`] = {
-                  min: Math.min(...values),
-                  max: Math.max(...values)
-                };
-              }
-            });
           }
         }
       }
@@ -584,8 +579,17 @@ const FtTable = {
 
     // 双色插值
     const interpolateTwoColors = (color1, color2, ratio) => {
-      const hex1 = color1.replace('#', '');
-      const hex2 = color2.replace('#', '');
+      // 处理 3 位简写颜色 (#fff → #ffffff)
+      const expandHex = (hex) => {
+        hex = hex.replace('#', '');
+        if (hex.length === 3) {
+          return hex.split('').map(c => c + c).join('');
+        }
+        return hex;
+      };
+      
+      const hex1 = expandHex(color1);
+      const hex2 = expandHex(color2);
       
       const r1 = parseInt(hex1.substring(0, 2), 16);
       const g1 = parseInt(hex1.substring(2, 4), 16);
@@ -606,7 +610,14 @@ const FtTable = {
     const isHeatmapCell = (col, colIndex, rowIndex) => {
       if (!hasHeatmap.value) return false;
       
+      if (col.heatmap) return true;
+      
+      const hasGlobalHeatmap = props.heatmap && typeof props.heatmap === 'object';
+      if (!hasGlobalHeatmap) return false;
+      
       const config = heatmapConfig.value;
+      if (!config) return false;
+      
       const cols = displayCols.value;
       const data = paginatedData.value;
       
@@ -616,19 +627,21 @@ const FtTable = {
       
       if (excludeRowsSet.has(rowIndex)) return false;
       
-      if (col.heatmap) return true;
-      
-      const hasGlobalHeatmap = props.heatmap === true || (props.heatmap && typeof props.heatmap === 'object');
-      if (!hasGlobalHeatmap) return false;
-      
       if (config.columns && config.columns.length > 0) {
         return config.columns.includes(col.field);
       }
       
-      const left = config.left || 0;
-      const right = config.right || 0;
+      const totalCols = cols.length;
+      const start = config.start > 0 ? config.start - 1 : totalCols + config.start;
+      const end = config.end > 0 ? config.end - 1 : totalCols + config.end;
+      const excludeSet = new Set((config.exclude || []).map(v => {
+        return v > 0 ? v - 1 : totalCols + v;
+      }));
       
-      return colIndex >= left && colIndex < cols.length - right;
+      if (colIndex < start || colIndex > end) return false;
+      if (excludeSet.has(colIndex)) return false;
+      
+      return true;
     };
 
     // 获取单元格热力图样式
@@ -640,7 +653,7 @@ const FtTable = {
       const config = heatmapConfig.value;
       const ranges = heatmapRanges.value;
       
-      let colors = config.colors || ['#f44336', '#fff', '#4caf50'];
+      let colors = config?.colors || ['#f44336', '#fff', '#4caf50'];
       let rangeKey = col.field;
       
       const colHeatmap = parseColHeatmap(col);
@@ -651,30 +664,26 @@ const FtTable = {
         rangeKey = colHeatmap.group;
       }
       
-      let range;
-      if (config.axis === 'row' && !colHeatmap) {
-        const data = paginatedData.value;
-        const excludeRowsSet = new Set(
-          (config.excludeRows || []).map(idx => idx < 0 ? data.length + idx : idx)
-        );
-        const validRowIdx = data.slice(0, rowIndex).filter((_, idx) => !excludeRowsSet.has(idx)).length;
-        range = ranges[`row_${validRowIdx}`];
-      } else {
-        range = ranges[rangeKey];
-      }
+      const range = ranges[rangeKey];
       
       if (!range) return {};
       
       const { min, max } = range;
       if (min === max) {
         const midColor = colors.length === 3 ? colors[1] : colors[1];
-        return { backgroundColor: midColor };
+        return { 
+          'background-color': midColor,
+          '--heatmap-bg': midColor
+        };
       }
       
       const ratio = (value - min) / (max - min);
       const bgColor = interpolateColor(colors, ratio);
       
-      return { backgroundColor: bgColor };
+      return { 
+        'background-color': bgColor,
+        '--heatmap-bg': bgColor
+      };
     };
 
     // ========== 生命周期 ==========
@@ -796,9 +805,9 @@ const FtTable = {
         span.sort-priority {
           font-size: 0.7em;
         }
-        /* 热力图单元格样式 */
+        /* 热力图单元格样式 - 确保背景色优先级最高 */
         .ft-table td.heatmap-cell {
-          transition: background-color 0.2s ease;
+          background-color: var(--heatmap-bg) !important;
         }
       `;
       document.head.appendChild(style);
@@ -824,6 +833,7 @@ const FtTable = {
       handlePageSizeChange,
       formatValue,
       getCellClass,
+      isHeatmapCell,
       getHeatmapStyle,
       hasSlot,
       resetPage
@@ -861,7 +871,7 @@ const FtTable = {
               <td 
                 v-for="(col, colIndex) in displayCols" 
                 :key="col.field"
-                :class="[getFreezeClass(colIndex), getCellClass(row[col.field])]"
+                :class="[getFreezeClass(colIndex), getCellClass(row[col.field]), { 'heatmap-cell': isHeatmapCell(col, colIndex, rowIndex) }]"
                 :style="getHeatmapStyle(row[col.field], col, colIndex, rowIndex)"
               >
                 <!-- 有插槽：调用插槽渲染 -->
