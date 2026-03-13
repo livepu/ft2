@@ -96,6 +96,56 @@
  *   { axis: 'column' }                  // 归一化方式：'column'按列 | 'table'全表
  *   { excludeRows: [-1] }               // 排除最后一行（汇总行）
  * 
+ * heatmap 全局参数详解:
+ *   start        Number    起始列索引（1-based，默认 1）
+ *                - 正数: 从左到右第 N 列，如 2 表示第 2 列
+ *                - 负数: 从右到左计算，如 -1 表示最后一列
+ *   end          Number    结束列索引（1-based，默认 -1 表示最后一列）
+ *                - 正数: 从左到右第 N 列
+ *                - 负数: 从右到左计算，如 -2 表示倒数第 2 列
+ *   exclude      Array     排除的列索引数组（1-based，支持负数）
+ *                - [5, 6] 排除第 5、6 列
+ *                - [-1]   排除最后一列
+ *   columns      Array     直接指定应用热力图的列名（优先于 start/end）
+ *                - ['change', 'volume'] 仅对这两列应用热力图
+ *                - 优先级: columns > start/end > 默认全表
+ *   colors       Array     自定义颜色（2 色或 3 色）
+ *                - 2 色: ['#e3f2fd', '#1565c0'] 浅蓝→深蓝（低→高）
+ *                - 3 色: ['#2196f3', '#fff', '#f44336'] 蓝→白→红（低→中→高）
+ *                - 默认: ['#2196f3', '#fff', '#f44336'] A 股配色（蓝跌 白中立 红涨）
+ *   axis         String    归一化方式（决定颜色渐变的范围）
+ *                - 'column': 每列独立归一化（默认，每列独立色阶）
+ *                - 'table':  全表统一归一化（所有列共享同一色阶）
+ *   excludeRows  Array     排除参与热力图计算的行索引（支持负数）
+ *                - [-1]     排除最后一行（常用于汇总行/合计行不参与计算）
+ *                - [0]      排除第一行
+ *                - [-1, -2] 排除最后两行
+ *                - 注意: 仅排除计算，不排除渲染
+ * 
+ * 使用示例:
+ *   // 示例 1: 对第 3-10 列应用热力图，排除第 5、6 列
+ *   { start: 3, end: 10, exclude: [5, 6] }
+ *   
+ *   // 示例 2: 对指定列应用热力图，统一色阶（便于跨列比较）
+ *   { columns: ['open', 'high', 'low', 'close'], axis: 'table' }
+ *   
+ *   // 示例 3: 使用自定义双色（绿色渐变）
+ *   { start: 2, colors: ['#c8e6c9', '#1b5e20'] }
+ *   
+ *   // 示例 4: 排除汇总行（最后一行不参与归一化计算）
+ *   { columns: ['amount'], excludeRows: [-1] }
+ *   
+ *   // 示例 5: 综合配置
+ *   { 
+ *     start: 2, 
+ *     exclude: [3], 
+ *     colors: ['#2196f3', '#fff', '#f44336'],
+ *     axis: 'column',
+ *     excludeRows: [-1]
+ *   }
+ * 
+ * 列级别热力图优先级高于全局热力图
+ * 
  * colors 说明（全局）:
  *   3 色：['#2196f3', '#fff', '#f44336']  蓝→白→红（默认，A 股配色）
  *   2 色：['#e3f2fd', '#1565c0']  浅蓝→深蓝
@@ -613,6 +663,8 @@ const FtTable = {
     // 判断单元格是否在热力图范围内
     const isHeatmapCell = (col, colIndex, rowIndex) => {
       if (!hasHeatmap.value) return false;
+      
+      if (isFreezeCol(colIndex)) return false;
       
       if (col.heatmap) return true;
       
