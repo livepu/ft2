@@ -77,7 +77,8 @@ const CellRenderer = {
         const getTableOptions = (cell) => {
             const opts = {};
             if (cell.options?.freeze) opts.freeze = cell.options.freeze;
-            // 默认开启分页：数据超过10条时自动分页，也可通过 options.pagination 自定义
+            if (cell.options?.heatmap) opts.heatmap = cell.options.heatmap;
+            // 默认开启分页：数据超过 10 条时自动分页，也可通过 options.pagination 自定义
             if (cell.options?.pagination !== false) {
                 const dataLength = cell.content?.length || 0;
                 if (dataLength > 10 || cell.options?.pagination) {
