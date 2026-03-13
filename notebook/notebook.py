@@ -169,18 +169,18 @@ class Notebook:
         可选参数 (**options):
             freeze: 冻结列配置
                 - dict: {'left': n, 'right': m}
-            page: 分页配置（对应 ft-table.js 的 page 参数）
+            page: 分页配置（对应 ft-table.js 的 page 参数，默认启用分页）
+                - 不传参数: 默认分页，每页 10 条
                 - False: 禁用分页
                 - {'size': 20}: 每页 20 条
                 - {'size': 20, 'options': [10, 20, 50, 100]}: 自定义选项
-                - 注意: 需显式传入，默认不启用分页
             heatmap: 热力图配置（列级别或全局）
                 - 全局: {'start': 2, 'end': 5, 'axis': 'column', 'colors': [...]}
                 - 列级别: 在 columns 数组中每列单独配置
                 - 详细说明见 ft-table.js 注释
         
         Examples:
-            nb.table(data)
+            nb.table(data)                      # 默认分页，每页 10 条
             nb.table(data, columns=['code', 'name'], title='基金列表')
             nb.table(df, title='数据表')
             nb.table(data, freeze={'left': 2})

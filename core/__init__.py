@@ -11,11 +11,11 @@ ft2.core - 核心回测模块
 from .engine import engine, Engine
 from .storage import context, Context, _Cache
 from .account import account, AccountManager, PositionSnapshot, AccountSnapshot, TradeRecord
-from .analyzer import AccountAnalyzer
+from .analyzer import AccountAnalyzer, TimeRange, metric
 
 __all__ = [
     'engine', 'Engine',
     'context', 'Context', '_Cache',
     'account', 'AccountManager', 'PositionSnapshot', 'AccountSnapshot', 'TradeRecord',
-    'AccountAnalyzer',
+    'AccountAnalyzer', 'Analyzer', 'TimeRange', 'metric',
 ]

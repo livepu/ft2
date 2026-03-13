@@ -79,10 +79,11 @@
  * 参数详解
  * ============================================
  * 
- * page 配置（新版，推荐）:
- *   { size: 20 }                      // 启用分页，每页 20 条
+ * page 配置（新版，推荐，默认启用分页）:
+ *   不传参数                    // 默认分页，每页 10 条
+ *   { size: 20 }               // 启用分页，每页 20 条
  *   { size: 20, options: [10, 20, 50, 100] }  // 自定义每页条数选项
- *   false                             // 禁用分页
+ *   false                      // 禁用分页
  * 
  * pagination 配置（旧版，兼容，后期移除）:
  *   { pageSize: 20 }                  // 启用分页，每页 20 条
@@ -185,7 +186,7 @@ const FtTable = {
     },
     page: {
       type: [Object, Boolean],
-      default: false
+      default: () => ({ size: 10, options: [10, 20, 50, 100] })
     },
     pagination: {
       type: [Object, Boolean],
@@ -213,11 +214,14 @@ const FtTable = {
     const { ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
     
     // ========== 响应式数据 ==========
-    // 兼容旧版：page 优先，pagination 降级
-    const pageConfig = computed(() => props.page || props.pagination);
+    // page 参数默认启用分页，设为 false 禁用
+    const pageConfig = computed(() => {
+      if (props.page === false) return false;
+      return props.page || props.pagination;
+    });
     
     const currentPage = ref(1);
-    const pageSize = ref(pageConfig.value?.size || pageConfig.value?.pageSize || 20);
+    const pageSize = ref(pageConfig.value?.size || pageConfig.value?.pageSize || 10);
     const multiSort = ref([]);
     const tableContainer = ref(null);
     const resizeObserver = ref(null);

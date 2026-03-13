@@ -78,25 +78,14 @@ const CellRenderer = {
             const opts = {};
             if (cell.options?.freeze) opts.freeze = cell.options.freeze;
             if (cell.options?.heatmap) opts.heatmap = cell.options.heatmap;
-            // 默认开启分页：数据超过 10 条时自动分页，也可通过 options.pagination 自定义
-            if (cell.options?.pagination !== false) {
-                const dataLength = cell.content?.length || 0;
-                if (dataLength > 10 || cell.options?.pagination) {
-                    const paginationOpt = cell.options?.pagination;
-                    if (paginationOpt && typeof paginationOpt === 'object') {
-                        // 兼容新旧格式：新格式 {size, options}，旧格式 {pageSize, pageSizeOptions}
-                        opts.pagination = {
-                            pageSize: paginationOpt.size || paginationOpt.pageSize || 10,
-                            pageSizeOptions: paginationOpt.options || paginationOpt.pageSizeOptions || [10, 20, 50, 100]
-                        };
-                    } else {
-                        opts.pagination = paginationOpt || {
-                            pageSize: 10,
-                            pageSizeOptions: [10, 20, 50, 100]
-                        };
-                    }
-                }
+            
+            // page 参数：默认启用分页，false 禁用
+            if (cell.options?.page !== undefined) {
+                opts.page = cell.options.page;
+            } else if (cell.options?.pagination !== undefined) {
+                opts.pagination = cell.options.pagination;
             }
+            
             return opts;
         };
 
