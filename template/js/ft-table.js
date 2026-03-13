@@ -1,9 +1,10 @@
 /**
- * FT Table Component v1.3.20260313
- * 版本号说明：主版本。次版本。日期（YYYYMMDD）
+ * FT Table Component v1.3.20260313-1
+ * 版本号说明：主版本。次版本。日期（YYYYMMDD）-修订号
  * 基于 alpine-table.js 重构，适配 Vue 3 组合式 API
  * 
  * v1.3 新增热力图功能（heatmap）
+ * v1.3.20260313-1 优化：热力图单元格禁用正负颜色类，避免字体颜色与背景色冲突
  * 
  * ============================================
  * 参数说明
@@ -554,7 +555,11 @@ const FtTable = {
     };
 
     // 获取单元格样式类
-    const getCellClass = (value) => {
+    const getCellClass = (value, col, colIndex, rowIndex) => {
+      // 如果在热力图范围内，不应用正负颜色类（避免与热力图背景色冲突）
+      if (isHeatmapCell(col, colIndex, rowIndex)) {
+        return '';
+      }
       if (typeof value === 'number') {
         return value >= 0 ? 'positive' : 'negative';
       }
@@ -870,7 +875,7 @@ const FtTable = {
               <td 
                 v-for="(col, colIndex) in displayCols" 
                 :key="col.field"
-                :class="[getFreezeClass(colIndex), getCellClass(row[col.field]), { 'heatmap-cell': isHeatmapCell(col, colIndex, rowIndex) }]"
+                :class="[getFreezeClass(colIndex), getCellClass(row[col.field], col, colIndex, rowIndex), { 'heatmap-cell': isHeatmapCell(col, colIndex, rowIndex) }]"
                 :style="getHeatmapStyle(row[col.field], col, colIndex, rowIndex)"
               >
                 <!-- 有插槽：调用插槽渲染 -->
