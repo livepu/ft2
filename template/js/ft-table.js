@@ -1,6 +1,6 @@
 /**
  * FT Table Component v1.3.20260313
- * 版本号说明：主版本。次版本.日期（YYYYMMDD）
+ * 版本号说明：主版本。次版本。日期（YYYYMMDD）
  * 基于 alpine-table.js 重构，适配 Vue 3 组合式 API
  * 
  * v1.3 新增热力图功能（heatmap）
@@ -8,25 +8,24 @@
  * ============================================
  * 参数说明
  * ============================================
- * id           String           表格标识（暂未使用）
- * data         Array            表格数据源（原 dataSource）
- * cols         Array            列配置（原 columns）
- * pagination   Object|Boolean   分页配置，false 禁用
+ * data         Array            表格数据源（必需）
+ * cols         Array            列配置（必需）
+ * pagination   Object|Boolean   分页配置，false 禁用（默认 false）
  * freeze       Object           冻结列配置 { left: 0, right: 0 }
- * heatmap      Object|Boolean   热力图配置，false 禁用
- * resetPage    Boolean          数据变化时是否自动重置到第一页，默认 true
+ * heatmap      Object           热力图配置（列级别或全局）
+ * resetPage    Boolean          数据变化时自动重置到第一页（默认 true）
  * 
  * ============================================
  * 列配置（cols）详解
  * ============================================
  * field        String   字段名（必需）
  * title        String   列标题（必需）
- * sort         Boolean  是否可排序，false 禁用排序（默认 true）
+ * sort         Boolean  是否可排序，false 禁用（默认 true）
  * width        Number   列宽度（可选）
  * slot         String   自定义插槽名称（可选，默认 cell-{field}）
- * heatmap      Boolean/String/Object  热力图配置
+ * heatmap      Object   列级别热力图配置（可选）
  * 
- * heatmap 配置:
+ * heatmap 配置（列级别）:
  *   {}                          独立色阶，按列归一化，使用默认颜色
  *   { colors: [...] }           独立色阶 + 自定义颜色
  *   { group: 'name' }           分组色阶 + 默认颜色
@@ -36,11 +35,12 @@
  *   2 色：['#e3f2fd', '#1565c0']  浅蓝→深蓝
  *   3 色：['#2196f3', '#fff', '#f44336']  蓝→白→红（默认，A 股配色：红涨蓝跌）
  * 
- * 示例：
+ * 列配置示例:
  * { field: 'name', title: '名称', sort: false, width: 120 }
  * { field: 'change', title: '涨跌幅', heatmap: {} }
- * { field: 'c', title: 'C列', heatmap: { group: 'g1' } }
- * { field: 'd', title: 'D列', heatmap: { group: 'g1' } }  // 与C列共享范围
+ * { field: 'c1', title: 'C 列', heatmap: { group: 'g1' } }
+ * { field: 'c2', title: 'D 列', heatmap: { group: 'g1' } }  // 与 C 列共享范围
+ * { field: 'score', title: '分数', heatmap: { colors: ['#e8f5e9', '#1b5e20'] } }
  * 
  * ============================================
  * 使用示例
@@ -53,10 +53,10 @@
  * ];
  * 
  * // 2. 定义列（支持两种格式）
- * // 格式A：字符串数组
+ * // 格式 A：字符串数组
  * const cols1 = ["代码", "名称", "价格"];
  * 
- * // 格式B：对象数组
+ * // 格式 B：对象数组
  * const cols2 = [
  *   { field: "code", title: "代码" },
  *   { field: "name", title: "名称" },
@@ -76,29 +76,28 @@
  * ============================================
  * 
  * pagination 配置:
- *   { pageSize: 20 }                    // 启用分页，每页20条
+ *   { pageSize: 20 }                    // 启用分页，每页 20 条
  *   { pageSize: 20, pageSizeOptions: [10, 20, 50, 100] }  // 自定义每页条数选项
  *   false                               // 禁用分页
  * 
  * freeze 配置:
- *   { left: 2 }                         // 冻结左侧2列
- *   { right: 1 }                        // 冻结右侧1列
+ *   { left: 2 }                         // 冻结左侧 2 列
+ *   { right: 1 }                        // 冻结右侧 1 列
  *   { left: 2, right: 1 }               // 同时冻结左右
  * 
- * heatmap 配置:
- *   { start: 2, end: 5 }               // 第2-5列应用热力图（1-based，包含end）
- *   { start: 2 }                        // 第2列到最后一列
- *   { start: 2, end: -2 }               // 第2列到倒数第2列
- *   { start: 2, exclude: [5, 6] }       // 第2列，排除第5、6列
- *   { excludeRows: [-1] }               // 排除最后一行（汇总行）
- *   { columns: ['change', 'volume'] }   // 指定列热力图（优先于 start/end）
- *   { colors: ['#e8f5e9', '#1b5e20'] }  // 自定义颜色（2色或3色）
+ * heatmap 配置（全局）:
+ *   { start: 2 }                        // 从第 2 列开始应用热力图
+ *   { start: 2, end: 5 }                // 第 2-5 列（1-based，包含 end）
+ *   { start: 2, end: -2 }               // 第 2 列到倒数第 2 列
+ *   { start: 2, exclude: [5, 6] }       // 第 2 列开始，排除第 5、6 列
+ *   { columns: ['change', 'volume'] }   // 指定列名（优先于 start/end）
+ *   { colors: ['#e8f5e9', '#1b5e20'] }  // 自定义颜色（2 色或 3 色）
  *   { axis: 'column' }                  // 归一化方式：'column'按列 | 'table'全表
- *   true                                // 启用默认热力图（全表）
+ *   { excludeRows: [-1] }               // 排除最后一行（汇总行）
  * 
- * colors 说明:
- *   3色: ['#f43646ff', '#fff', '#4caf50']  红→白→绿（默认）
- *   2色: ['#e3f2fd', '#1565c0']  浅蓝→深蓝
+ * colors 说明（全局）:
+ *   3 色：['#2196f3', '#fff', '#f44336']  蓝→白→红（默认，A 股配色）
+ *   2 色：['#e3f2fd', '#1565c0']  浅蓝→深蓝
  * 
  * ============================================
  * 模板结构
@@ -413,14 +412,14 @@ const FtTable = {
     const visiblePages = computed(() => {
       const total = totalPages.value;
       const current = currentPage.value;
-      const maxVisible = 5; // 显示5个页码
+      const maxVisible = 5; // 显示 5 个页码
       
       if (total <= maxVisible) {
-        // 总页数少于5个，全部显示
+        // 总页数少于 5 个，全部显示
         return Array.from({ length: total }, (_, i) => i + 1);
       }
       
-      // 固定显示5个页码，当前页居中（如果可能）
+      // 固定显示 5 个页码，当前页居中（如果可能）
       let start = Math.max(1, current - Math.floor(maxVisible / 2));
       let end = start + maxVisible - 1;
       
@@ -653,7 +652,7 @@ const FtTable = {
       const config = heatmapConfig.value;
       const ranges = heatmapRanges.value;
       
-      let colors = config?.colors || ['#f44336', '#fff', '#4caf50'];
+      let colors = config?.colors || ['#2196f3', '#fff', '#f44336'];
       let rangeKey = col.field;
       
       const colHeatmap = parseColHeatmap(col);
