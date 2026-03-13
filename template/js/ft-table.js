@@ -1,176 +1,7 @@
 /**
  * FT Table Component v1.5.20260313-1
  * 版本号说明：主版本。次版本。日期（YYYYMMDD）-修订号
- * 基于 alpine-table.js 重构，适配 Vue 3 组合式 API
- * 
- * v1.3 新增热力图功能（heatmap）
- * v1.3.20260313-1 优化：热力图单元格禁用正负颜色类，避免字体颜色与背景色冲突
- * v1.4 重构分页参数：新增 page 参数，pagination 降级为兼容
- * v1.5 新版 page 参数优先，pagination 后期移除
- * 
- * ============================================
- * 参数说明
- * ============================================
- * data         Array            表格数据源（必需）
- * cols         Array            列配置（必需）
- * page         Object|Boolean   新版分页配置（推荐），false 禁用（默认 false）
- * pagination   Object|Boolean   旧版分页配置（兼容），后期移除
- * freeze       Object           冻结列配置 { left: 0, right: 0 }
- * heatmap      Object           热力图配置（列级别或全局）
- * resetPage    Boolean          数据变化时自动重置到第一页（默认 true）
- * 
- * ============================================
- * 列配置（cols）详解
- * ============================================
- * field        String   字段名（必需）
- * title        String   列标题（必需）
- * sort         Boolean  是否可排序，false 禁用（默认 true）
- * width        Number   列宽度（可选）
- * slot         String   自定义插槽名称（可选，默认 cell-{field}）
- * heatmap      Object   列级别热力图配置（可选）
- * 
- * heatmap 配置（列级别）:
- *   {}                          独立色阶，按列归一化，使用默认颜色
- *   { colors: [...] }           独立色阶 + 自定义颜色
- *   { group: 'name' }           分组色阶 + 默认颜色
- *   { group: 'name', colors: [...] }  分组色阶 + 自定义颜色
- * 
- * colors 说明:
- *   2 色：['#e3f2fd', '#1565c0']  浅蓝→深蓝
- *   3 色：['#2196f3', '#fff', '#f44336']  蓝→白→红（默认，A 股配色：红涨蓝跌）
- * 
- * 列配置示例:
- * { field: 'name', title: '名称', sort: false, width: 120 }
- * { field: 'change', title: '涨跌幅', heatmap: {} }
- * { field: 'c1', title: 'C 列', heatmap: { group: 'g1' } }
- * { field: 'c2', title: 'D 列', heatmap: { group: 'g1' } }  // 与 C 列共享范围
- * { field: 'score', title: '分数', heatmap: { colors: ['#e8f5e9', '#1b5e20'] } }
- * 
- * ============================================
- * 使用示例
- * ============================================
- * 
- * // 1. 定义数据
- * const tableData = [
- *   { code: "001", name: "苹果", price: 5.80 },
- *   { code: "002", name: "香蕉", price: 3.20 }
- * ];
- * 
- * // 2. 定义列（支持两种格式）
- * // 格式 A：字符串数组
- * const cols1 = ["代码", "名称", "价格"];
- * 
- * // 格式 B：对象数组
- * const cols2 = [
- *   { field: "code", title: "代码" },
- *   { field: "name", title: "名称" },
- *   { field: "price", title: "价格", sort: false }
- * ];
- * 
- * // 3. 模板使用
- * &lt;ft-table 
- *   :data="tableData" 
- *   :cols="cols"
- *   :page="{ size: 20 }"
- *   :freeze="{ left: 2 }"
- * &gt;&lt;/ft-table&gt;
- * 
- * ============================================
- * 参数详解
- * ============================================
- * 
- * page 配置（新版，推荐，默认启用分页）:
- *   不传参数                    // 默认分页，每页 10 条
- *   { size: 20 }               // 启用分页，每页 20 条
- *   { size: 20, options: [10, 20, 50, 100] }  // 自定义每页条数选项
- *   false                      // 禁用分页
- * 
- * pagination 配置（旧版，兼容，后期移除）:
- *   { pageSize: 20 }                  // 启用分页，每页 20 条
- *   { pageSize: 20, pageSizeOptions: [10, 20, 50, 100] }
- * 
- * freeze 配置:
- *   { left: 2 }                         // 冻结左侧 2 列
- *   { right: 1 }                        // 冻结右侧 1 列
- *   { left: 2, right: 1 }               // 同时冻结左右
- * 
- * heatmap 配置（全局）:
- *   { start: 2 }                        // 从第 2 列开始应用热力图
- *   { start: 2, end: 5 }                // 第 2-5 列（1-based，包含 end）
- *   { start: 2, end: -2 }               // 第 2 列到倒数第 2 列
- *   { start: 2, exclude: [5, 6] }       // 第 2 列开始，排除第 5、6 列
- *   { columns: ['change', 'volume'] }   // 指定列名（优先于 start/end）
- *   { colors: ['#e8f5e9', '#1b5e20'] }  // 自定义颜色（2 色或 3 色）
- *   { axis: 'column' }                  // 归一化方式：'column'按列 | 'table'全表
- *   { excludeRows: [-1] }               // 排除最后一行（汇总行）
- * 
- * heatmap 全局参数详解:
- *   start        Number    起始列索引（1-based，默认 1）
- *                - 正数: 从左到右第 N 列，如 2 表示第 2 列
- *                - 负数: 从右到左计算，如 -1 表示最后一列
- *   end          Number    结束列索引（1-based，默认 -1 表示最后一列）
- *                - 正数: 从左到右第 N 列
- *                - 负数: 从右到左计算，如 -2 表示倒数第 2 列
- *   exclude      Array     排除的列索引数组（1-based，支持负数）
- *                - [5, 6] 排除第 5、6 列
- *                - [-1]   排除最后一列
- *   columns      Array     直接指定应用热力图的列名（优先于 start/end）
- *                - ['change', 'volume'] 仅对这两列应用热力图
- *                - 优先级: columns > start/end > 默认全表
- *   colors       Array     自定义颜色（2 色或 3 色）
- *                - 2 色: ['#e3f2fd', '#1565c0'] 浅蓝→深蓝（低→高）
- *                - 3 色: ['#2196f3', '#fff', '#f44336'] 蓝→白→红（低→中→高）
- *                - 默认: ['#2196f3', '#fff', '#f44336'] A 股配色（蓝跌 白中立 红涨）
- *   axis         String    归一化方式（决定颜色渐变的范围）
- *                - 'column': 每列独立归一化（默认，每列独立色阶）
- *                - 'table':  全表统一归一化（所有列共享同一色阶）
- *   excludeRows  Array     排除参与热力图计算的行索引（支持负数）
- *                - [-1]     排除最后一行（常用于汇总行/合计行不参与计算）
- *                - [0]      排除第一行
- *                - [-1, -2] 排除最后两行
- *                - 注意: 仅排除计算，不排除渲染
- * 
- * 使用示例:
- *   // 示例 1: 对第 3-10 列应用热力图，排除第 5、6 列
- *   { start: 3, end: 10, exclude: [5, 6] }
- *   
- *   // 示例 2: 对指定列应用热力图，统一色阶（便于跨列比较）
- *   { columns: ['open', 'high', 'low', 'close'], axis: 'table' }
- *   
- *   // 示例 3: 使用自定义双色（绿色渐变）
- *   { start: 2, colors: ['#c8e6c9', '#1b5e20'] }
- *   
- *   // 示例 4: 排除汇总行（最后一行不参与归一化计算）
- *   { columns: ['amount'], excludeRows: [-1] }
- *   
- *   // 示例 5: 综合配置
- *   { 
- *     start: 2, 
- *     exclude: [3], 
- *     colors: ['#2196f3', '#fff', '#f44336'],
- *     axis: 'column',
- *     excludeRows: [-1]
- *   }
- * 
- * 列级别热力图优先级高于全局热力图
- * 
- * colors 说明（全局）:
- *   3 色：['#2196f3', '#fff', '#f44336']  蓝→白→红（默认，A 股配色）
- *   2 色：['#e3f2fd', '#1565c0']  浅蓝→深蓝
- * 
- * ============================================
- * 模板结构
- * ============================================
- * <div class="ft-table-wrapper">
- *   <div class="ft-table-container">
- *     <table class="ft-table">
- *       <thead><tr><th>列标题</th></tr></thead>
- *       <tbody><tr><td>单元格</td></tr></tbody>
- *     </table>
- *   </div>
- *   <div class="ft-table-pagination">分页器</div>
- * </div>
- */
+ * */
 
 const FtTable = {
   name: 'FtTable',
@@ -299,6 +130,12 @@ const FtTable = {
     // 是否有冻结列
     const hasFreeze = computed(() => {
       return props.freeze && (props.freeze.left > 0 || props.freeze.right > 0);
+    });
+
+    // 是否有横向滚动条
+    const hasHorizontalScroll = computed(() => {
+      if (!tableContainer.value) return false;
+      return tableContainer.value.scrollWidth > tableContainer.value.clientWidth;
     });
 
     // 是否启用热力图（全局或列级别）
@@ -613,6 +450,62 @@ const FtTable = {
       currentPage.value = 1;
     };
 
+    // 悬停3秒显示滚动按钮
+    const showScrollButtons = ref(false);
+    const scrollButtonPos = ref({ x: 0, y: 0 });
+    let hoverTimer = null;
+    let hideTimer = null;
+    const isButtonHovered = ref(false);
+
+    const handleTableMouseMove = (e) => {
+      if (!showScrollButtons.value) {
+        scrollButtonPos.value = { x: e.clientX, y: e.clientY };
+      }
+    };
+
+    const handleTableMouseEnter = () => {
+      if (!hasHorizontalScroll.value) return;
+      if (hoverTimer) clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => {
+        showScrollButtons.value = true;
+      }, 2000);
+    };
+
+    const handleTableMouseLeave = () => {
+      if (hoverTimer) {
+        clearTimeout(hoverTimer);
+        hoverTimer = null;
+      }
+      if (showScrollButtons.value) {
+        if (hideTimer) clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => {
+          showScrollButtons.value = false;
+        }, 500);
+      }
+    };
+
+    const handleButtonMouseEnter = () => {
+      isButtonHovered.value = true;
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+    };
+
+    const handleButtonMouseLeave = () => {
+      isButtonHovered.value = false;
+    };
+
+    const scrollTable = (direction) => {
+      if (!tableContainer.value) return;
+      const scrollAmount = 200;
+      if (direction === 'left') {
+        tableContainer.value.scrollLeft -= scrollAmount;
+      } else {
+        tableContainer.value.scrollLeft += scrollAmount;
+      }
+    };
+
     // 格式化单元格值
     const formatValue = (value) => {
       if (value === null || value === undefined) return '';
@@ -883,6 +776,40 @@ const FtTable = {
         .ft-table td.heatmap-cell {
           background-color: var(--heatmap-bg) !important;
         }
+        /* 悬停滚动按钮 */
+        .ft-table-wrapper {
+          position: relative;
+        }
+        .ft-table-scroll-float {
+          position: fixed;
+          z-index: 1000;
+          display: flex;
+          gap: 8px;
+          pointer-events: none;
+          opacity: 0;
+          transition: opacity 0.3s;
+        }
+        .ft-table-scroll-float.visible {
+          opacity: 1;
+        }
+        .ft-table-scroll-float button {
+          pointer-events: auto;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: rgba(64, 64, 64, 0.85);
+          color: white;
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        .ft-table-scroll-float button:hover {
+          background: rgba(0, 0, 0, 0.9);
+        }
       `;
       document.head.appendChild(style);
     };
@@ -897,9 +824,18 @@ const FtTable = {
       pageSize,
       pageConfig,
       hasFreeze,
+      hasHorizontalScroll,
       hasHeatmap,
       pageSizeOptions,
       visiblePages,
+      showScrollButtons,
+      scrollButtonPos,
+      handleButtonMouseEnter,
+      handleButtonMouseLeave,
+      handleTableMouseMove,
+      handleTableMouseEnter,
+      handleTableMouseLeave,
+      scrollTable,
       handleSort,
       getSortIndicator,
       isFreezeCol,
@@ -921,6 +857,9 @@ const FtTable = {
         ref="tableContainer"
         class="ft-table-container"
         :class="{ 'ft-table-freeze': hasFreeze }"
+        @mouseenter="handleTableMouseEnter"
+        @mouseleave="handleTableMouseLeave"
+        @mousemove="handleTableMouseMove"
       >
         <table class="ft-table">
           <thead>
@@ -966,6 +905,19 @@ const FtTable = {
         <div v-if="paginatedData.length === 0" class="ft-table-empty">
           {{ emptyText }}
         </div>
+      </div>
+      
+      <!-- 悬停3秒后显示的滚动按钮（仅当有横向滚动时显示） -->
+      <div 
+        v-if="hasHorizontalScroll"
+        class="ft-table-scroll-float" 
+        :class="{ visible: showScrollButtons }"
+        :style="{ left: scrollButtonPos.x + 'px', top: scrollButtonPos.y + 'px' }"
+        @mouseenter="handleButtonMouseEnter"
+        @mouseleave="handleButtonMouseLeave"
+      >
+        <button @click="scrollTable('left')">◀</button>
+        <button @click="scrollTable('right')">▶</button>
       </div>
       
       <!-- 分页：数据量超过每页条数时显示 -->
