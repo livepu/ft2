@@ -123,19 +123,21 @@ body {
     flex-direction: column;
 }
 
-/* TOC 收起状态 - 左下角浮动按钮 */
-.toc-panel.collapsed {
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    right: auto;
-    top: auto;
-    width: auto;
-    max-height: none;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    z-index: 1000;
+/* 桌面端：TOC 收起状态 - 左下角浮动按钮 */
+@media (min-width: 769px) {
+    .toc-panel.collapsed {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        right: auto;
+        top: auto;
+        width: auto;
+        max-height: none;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        z-index: 1000;
+    }
 }
 
 .toc-collapsed-trigger {
@@ -181,6 +183,26 @@ body {
     user-select: none;
 }
 
+/* 移动端右侧竖排目录按钮 - 桌面端隐藏 */
+.mobile-toc-trigger {
+    display: none;
+}
+
+.mobile-toc-trigger:hover {
+    background: #e9d5ff;
+    box-shadow: -2px 0 12px rgba(107, 33, 168, 0.2);
+}
+
+.mobile-trigger-text {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 14px;
+    font-weight: 600;
+    color: #6b21a8;
+    letter-spacing: 4px;
+    white-space: nowrap;
+}
+
 /* 小屏幕适配 - 目录面板优化 */
 @media (max-width: 1100px) {
     /* 中等屏幕：缩小目录宽度 */
@@ -207,32 +229,59 @@ body {
         padding: 10px;
     }
     
-    /* 移动端抽屉样式 */
-    .toc-panel.mobile-drawer {
-        position: fixed;
-        top: 0;
-        right: -100%;
-        width: 85%;
-        max-width: 320px;
-        height: 100vh;
-        margin: 0;
-        border-radius: 0;
-        box-shadow: -2px 0 12px rgba(0,0,0,0.15);
-        transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        z-index: 1002;
+    /* 移动端：隐藏桌面端的目录面板和收起按钮 */
+    .toc-panel {
+        display: none !important;
     }
     
+    .toc-collapsed-trigger {
+        display: none !important;
+    }
+    
+    /* 移动端右侧菜单样式 - 默认在屏幕外 */
+    .toc-panel.mobile-drawer {
+        display: flex !important;
+        position: fixed !important;
+        top: 20px !important;
+        right: -240px !important;
+        width: 200px !important;
+        max-height: calc(100vh - 40px) !important;
+        margin: 0 !important;
+        border-radius: 8px 0 0 8px !important;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08) !important;
+        transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        z-index: 1002 !important;
+        align-self: auto !important;
+        background: #fff !important;
+        border: 1px solid #e5e5e5 !important;
+    }
+    
+    /* 展开状态：滑入屏幕 */
+    .toc-panel.mobile-drawer:not(.collapsed) {
+        right: 0 !important;
+    }
+    
+    /* 收起状态：强制在屏幕外，防止闪现 */
     .toc-panel.mobile-drawer.collapsed {
+        right: -240px !important;
+    }
+    
+    /* 移动端右侧竖排目录按钮 - 移动端显示 */
+    .mobile-toc-trigger {
+        display: block !important;
+        position: fixed;
         right: 0;
-        background: transparent;
-        border: none;
-        box-shadow: none;
-        width: auto;
-        height: auto;
-        bottom: 20px;
-        left: auto;
-        top: auto;
-        max-width: calc(100% - 40px);
+        top: 50%;
+        transform: translateY(-50%);
+        background: #f3e8ff;
+        border: 1px solid #e9d5ff;
+        border-left: none;
+        border-radius: 8px 0 0 8px;
+        padding: 20px 8px;
+        cursor: pointer;
+        z-index: 1001;
+        box-shadow: -2px 0 8px rgba(107, 33, 168, 0.15);
+        transition: all 0.2s ease;
     }
     
     /* 遮罩层 */
@@ -257,16 +306,17 @@ body {
     }
     
     .toc-drawer-header {
-        padding: 16px 20px;
-        font-size: 16px;
+        padding: 12px 16px;
+        font-size: 14px;
         font-weight: 600;
         color: #6b21a8;
         border-bottom: 1px solid #e5e5e5;
-        background: linear-gradient(90deg, #f3e8ff 0%, #fff 100%);
+        background: #fafafa;
         display: flex;
         justify-content: space-between;
         align-items: center;
         flex-shrink: 0;
+        user-select: none;
     }
     
     .toc-drawer-close {
