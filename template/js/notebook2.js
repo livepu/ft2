@@ -1034,7 +1034,11 @@ function createNotebookApp() {
             };
             
             // 配色选择面板
-            const toggleColorPicker = () => {
+            const toggleColorPicker = (event) => {
+                if (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
                 showColorPicker.value = !showColorPicker.value;
             };
             
@@ -1076,7 +1080,11 @@ function createNotebookApp() {
             });
 
             // 切换目录收起状态
-            const toggleToc = () => {
+            const toggleToc = (event) => {
+                if (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
                 tocCollapsed.value = !tocCollapsed.value;
             };
 
