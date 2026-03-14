@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }}</title>
-    <link rel="stylesheet" href="https://gitee.com/liveup_admin/ft2/raw/master/template/js/notebook.css">
+    <link rel="stylesheet" href="https://gitee.com/liveup_admin/ft2/raw/master/template/js/notebook2.css">
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/vue.global.prod.js"></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/ft-table.js"></script>
     <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/echarts.min.js"></script>
@@ -41,44 +41,83 @@
             </div>
             
             <!-- TOC 目录面板 -->
-            <aside class="toc-panel" v-if="tocItems.length > 0" :class="{ collapsed: tocCollapsed, 'mobile-view': isMobileView }">
-                <!-- 展开状态 -->
-                <template v-if="!tocCollapsed">
-                    <div class="toc-header" @click="isMobileView && toggleToc()">
-                        <span>📑 目录</span>
-                        <span class="toc-toggle-icon" v-if="isMobileView">▼</span>
-                    </div>
-                    <ul class="toc-list">
-                        <li 
-                            v-for="(item, index) in tocItems" 
-                            :key="index"
-                            class="toc-item"
-                            :class="{ selected: isSelected(item.index) }"
-                            @click="scrollToSection(item.index)">
-                            <input 
-                                type="checkbox" 
-                                :checked="isSelected(item.index)"
-                                @click.stop="toggleSelection(item.index)">
-                            <span>{{ item.title }}</span>
-                        </li>
-                    </ul>
-                    <div class="toc-actions">
-                        <button @click="selectAll">全选</button>
-                        <button @click="clearSelection">清空</button>
-                        <button @click="captureScreenshot" :disabled="selectedCount === 0">截图选中</button>
-                    </div>
-                    <div class="toc-footer">
-                        <button @click="captureAll" class="full-btn">📋 全页截图</button>
+            <aside class="toc-panel" v-if="tocItems.length > 0" :class="{ collapsed: tocCollapsed, 'mobile-drawer': isMobileView }">
+                <!-- 移动端抽屉模式 -->
+                <template v-if="isMobileView">
+                    <!-- 遮罩层 -->
+                    <div class="toc-drawer-overlay" v-if="!tocCollapsed" @click="toggleToc"></div>
+                    <div class="toc-drawer-content">
+                        <div class="toc-drawer-header">
+                            <span>📑 目录</span>
+                            <button class="toc-drawer-close" @click="toggleToc">✕</button>
+                        </div>
+                        <ul class="toc-list">
+                            <li 
+                                v-for="(item, index) in tocItems" 
+                                :key="index"
+                                class="toc-item"
+                                :class="{ selected: isSelected(item.index) }"
+                                @click="scrollToSection(item.index)">
+                                <input 
+                                    type="checkbox" 
+                                    :checked="isSelected(item.index)"
+                                    @click.stop="toggleSelection(item.index)">
+                                <span>{{ item.title }}</span>
+                            </li>
+                        </ul>
+                        <div class="toc-actions">
+                            <button @click="selectAll">全选</button>
+                            <button @click="clearSelection">清空</button>
+                            <button @click="captureScreenshot" :disabled="selectedCount === 0">截图选中</button>
+                        </div>
+                        <div class="toc-footer">
+                            <button @click="captureAll" class="full-btn">📋 全页截图</button>
+                        </div>
                     </div>
                 </template>
-                <!-- 收起状态 - 底部浮动按钮 -->
+                <!-- 桌面端正常显示 -->
                 <template v-else>
-                    <div class="toc-collapsed-trigger" @click="toggleToc">
-                        <span class="trigger-icon">📑</span>
-                        <span class="trigger-text">目录</span>
-                    </div>
+                    <template v-if="!tocCollapsed">
+                        <div class="toc-header">
+                            <span>📑 目录</span>
+                        </div>
+                        <ul class="toc-list">
+                            <li 
+                                v-for="(item, index) in tocItems" 
+                                :key="index"
+                                class="toc-item"
+                                :class="{ selected: isSelected(item.index) }"
+                                @click="scrollToSection(item.index)">
+                                <input 
+                                    type="checkbox" 
+                                    :checked="isSelected(item.index)"
+                                    @click.stop="toggleSelection(item.index)">
+                                <span>{{ item.title }}</span>
+                            </li>
+                        </ul>
+                        <div class="toc-actions">
+                            <button @click="selectAll">全选</button>
+                            <button @click="clearSelection">清空</button>
+                            <button @click="captureScreenshot" :disabled="selectedCount === 0">截图选中</button>
+                        </div>
+                        <div class="toc-footer">
+                            <button @click="captureAll" class="full-btn">📋 全页截图</button>
+                        </div>
+                    </template>
+                    <!-- 收起状态 - 左下角浮动按钮 -->
+                    <template v-else>
+                        <div class="toc-collapsed-trigger" @click="toggleToc">
+                            <span class="trigger-icon">📑</span>
+                            <span class="trigger-text">目录</span>
+                        </div>
+                    </template>
                 </template>
             </aside>
+            
+            <!-- 移动端右侧竖排目录按钮 -->
+            <div class="mobile-toc-trigger" v-if="isMobileView" @click="toggleToc">
+                <span class="mobile-trigger-text">目录</span>
+            </div>
         </div>
             
             <!-- 配色选择面板 -->
@@ -165,7 +204,7 @@
     <script id="notebook-data" type="application/json">{{ data_json | safe }}</script>
     
     <!-- Notebook Vue3 JS -->
-    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/notebook-vue3.js"></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/notebook2.js"></script>
     <script>
         // 从 Jinja2 注入的数据创建配置
         const dataElement = document.getElementById('notebook-data');
