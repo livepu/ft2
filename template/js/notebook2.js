@@ -726,32 +726,29 @@ function createNotebookApp() {
             const toastType = ref('info');
             let toastTimer = null;
             
-            // 配色选择面板
-            const showColorPicker = ref(false);
-            
-            // 目录收起状态（小屏幕/底部固定时）
-            const tocCollapsed = ref(true);
-            
-            // 模板引用 - 用于绑定原生触摸事件
-            const mobileTocTrigger = ref(null);
-            const colorPickerTrigger = ref(null);
-            const tocDrawerOverlay = ref(null);
-            const tocDrawerClose = ref(null);
-            const colorPickerPopup = ref(null);
-            const colorPickerPopupHeader = ref(null);
-            
-            // 是否移动端视图（≤768px）
-            const isMobileView = ref(false);
+            // 新版菜单状态 - 简化管理
+            const menuCollapsed = ref(false);     // 目录菜单收窄状态（手动）
+            const isNarrow = ref(false);          // 是否窄屏（自动检测）
+            const showColorPicker = ref(false);   // 配色抽屉开关
             
             // 检测屏幕宽度
             const checkScreenWidth = () => {
-                isMobileView.value = window.innerWidth <= 768;
-                console.log('Screen width:', window.innerWidth, 'isMobileView:', isMobileView.value);
-                // 桌面端自动展开目录，移动端自动收起
-                if (!isMobileView.value) {
-                    tocCollapsed.value = false;
+                const newIsNarrow = window.innerWidth <= 1200;  // 1200px 以下自动收窄
+                // 当从窄屏变回宽屏时，强制展开菜单
+                if (!newIsNarrow && isNarrow.value) {
+                    menuCollapsed.value = false;
+                }
+                isNarrow.value = newIsNarrow;
+                console.log('Screen width:', window.innerWidth, 'isNarrow:', isNarrow.value);
+            };
+            
+            // 展开菜单（窄屏时点击首字展开）
+            const expandMenu = () => {
+                if (isNarrow.value) {
+                    // 窄屏时临时展开
+                    isNarrow.value = false;
                 } else {
-                    tocCollapsed.value = true;
+                    menuCollapsed.value = false;
                 }
             };
             
@@ -841,6 +838,7 @@ function createNotebookApp() {
 
             // 滚动到章节
             const scrollToSection = (index) => {
+                tocOpen.value = false; // 点击后关闭抽屉
                 if (index === -1) {
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 } else {
@@ -1041,12 +1039,8 @@ function createNotebookApp() {
                 }
             };
             
-            // 配色选择面板
-            const toggleColorPicker = (event) => {
-                if (event) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                }
+            // 切换配色抽屉
+            const toggleColorPicker = () => {
                 showColorPicker.value = !showColorPicker.value;
             };
             
@@ -1070,61 +1064,10 @@ function createNotebookApp() {
                 window.dispatchEvent(new CustomEvent('colorSchemeChanged'));
             };
 
-            // 绑定原生触摸事件（微信浏览器兼容性处理）
-            const bindNativeTouchEvents = () => {
-                const bindTouch = (elementRef, handler) => {
-                    if (!elementRef || !elementRef.value) return;
-                    
-                    const handleTouch = (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handler(e);
-                    };
-                    
-                    elementRef.value.addEventListener('touchstart', handleTouch, { passive: false });
-                    elementRef.value.addEventListener('touchend', handleTouch, { passive: false });
-                    elementRef.value.addEventListener('click', handleTouch);
-                };
-                
-                // 等待nextTick确保DOM已渲染
-                nextTick(() => {
-                    // 目录按钮
-                    bindTouch(mobileTocTrigger, toggleToc);
-                    // 配色器按钮
-                    bindTouch(colorPickerTrigger, toggleColorPicker);
-                    // 目录遮罩层
-                    bindTouch(tocDrawerOverlay, toggleToc);
-                    // 目录关闭按钮
-                    bindTouch(tocDrawerClose, toggleToc);
-                    // 配色器关闭按钮
-                    bindTouch(colorPickerPopupHeader, toggleColorPicker);
-                });
-            };
-
-            // 监听视图变化，重新绑定触摸事件
-            const watchMobileView = () => {
-                if (isMobileView.value) {
-                    nextTick(() => bindNativeTouchEvents());
-                }
-            };
-            
-            const watchColorPicker = () => {
-                nextTick(() => bindNativeTouchEvents());
-            };
-
             onMounted(() => {
                 console.log('Notebook Vue3 应用已加载');
                 // 初始化屏幕宽度检测
                 checkScreenWidth();
-                // 移动端默认收起目录
-                if (isMobileView.value) {
-                    tocCollapsed.value = true;
-                }
-                // 绑定原生触摸事件（关键：微信浏览器兼容性）
-                nextTick(() => bindNativeTouchEvents());
-                // 监听视图变化
-                watch(isMobileView, watchMobileView);
-                watch(showColorPicker, watchColorPicker);
                 // 监听窗口大小变化
                 window.addEventListener('resize', checkScreenWidth);
             });
@@ -1133,15 +1076,6 @@ function createNotebookApp() {
                 // 移除resize监听
                 window.removeEventListener('resize', checkScreenWidth);
             });
-
-            // 切换目录收起状态
-            const toggleToc = (event) => {
-                if (event) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                }
-                tocCollapsed.value = !tocCollapsed.value;
-            };
 
             return {
                 title,
@@ -1159,23 +1093,16 @@ function createNotebookApp() {
                 scrollToSection,
                 captureScreenshot,
                 captureAll,
-                // 配色管理
+                // 新版菜单状态
+                menuCollapsed,
+                isNarrow,
+                expandMenu,
                 showColorPicker,
-                colorPalettes,
                 toggleColorPicker,
+                // 配色管理
+                colorPalettes,
                 setColorPalette,
-                updateChartColors,
-                // 目录收起
-                tocCollapsed,
-                toggleToc,
-                isMobileView,
-                // 模板引用 - 用于绑定原生触摸事件
-                mobileTocTrigger,
-                colorPickerTrigger,
-                tocDrawerOverlay,
-                tocDrawerClose,
-                colorPickerPopup,
-                colorPickerPopupHeader
+                updateChartColors
             };
         }
     });
