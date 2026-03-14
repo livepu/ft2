@@ -1,0 +1,1730 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>综合测试报告</title>
+    <link rel="stylesheet" href="template/js/notebook2.css">
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/vue.global.prod.js"></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/ft-table.js"></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/echarts.min.js"></script>
+    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/snapdom.min.js"></script>
+</head>
+<body>
+    
+    <div id="app">
+        <!-- Toast 提示容器 -->
+        <div class="toast-container" v-if="toastMessage">
+            <div class="toast" :class="toastType">{{ toastMessage }}</div>
+        </div>
+        
+        <!-- 整体居中 wrapper -->
+        <div class="notebook-wrapper">
+            <!-- ========== 左侧浮动目录菜单 ========== -->
+            <nav class="toc-float-menu" :class="{ expanded: menuExpanded }" v-if="tocItems.length > 0">
+                <!-- 宽屏状态 - 完整显示 -->
+                <div class="menu-wide">
+                    <div class="menu-header">
+                        <span>📑 目录</span>
+                        <button v-if="isNarrow" class="collapse-btn" @click="toggleMenu" title="收起">✕</button>
+                    </div>
+                    <ul class="menu-list">
+                        <li v-for="(item, index) in tocItems" :key="index" 
+                            class="menu-item" 
+                            :class="{ selected: isSelected(item.index) }"
+                            @click="scrollToSection(item.index)">
+                            <input type="checkbox" :checked="isSelected(item.index)" 
+                                   @click.stop="toggleSelection(item.index)">
+                            <span class="menu-title">{{ item.title }}</span>
+                        </li>
+                    </ul>
+                    <div class="menu-footer">
+                        <button @click="selectAll">全选</button>
+                        <button @click="clearSelection">清空</button>
+                    </div>
+                </div>
+                
+                <!-- 窄屏状态 - 显示首字，点击展开 -->
+                <div class="menu-narrow" @click="toggleMenu" title="展开目录">
+                    <div class="collapsed-header">📑</div>
+                    <ul class="collapsed-list">
+                        <li v-for="(item, index) in tocItems" :key="index" 
+                            class="collapsed-item"
+                            :class="{ selected: isSelected(item.index) }"
+                            @click.stop="scrollToSection(item.index)"
+                            :title="item.title">
+                            {{ item.title.charAt(0) }}
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+            
+            <!-- 主体容器 -->
+            <div class="notebook-container">
+                <!-- 头部 -->
+                <div class="notebook-header">
+                    <h1>{{ title }}</h1>
+                    <div class="meta">
+                        <span>📅 {{ createdAt }}</span>
+                    </div>
+                </div>
+                
+                <!-- 内容区域 -->
+                <cell-renderer 
+                    v-for="(cell, index) in cells" 
+                    :key="index"
+                    :cell="cell"
+                    :cell-id="index"
+                    :level="0">
+                </cell-renderer>
+            </div>
+            
+        </div>
+        
+        <!-- 这里保留原来的菜单代码用于参考，实际使用上面的 -->
+        <nav class="toc-float-menu-old" :class="{ collapsed: menuCollapsed }" v-if="tocItems.length > 0" style="display: none;">
+            <!-- 展开状态 -->
+            <template v-if="!menuCollapsed">
+                <div class="menu-header">
+                    <span>📑 目录</span>
+                    <button class="collapse-btn" @click="menuCollapsed = true" title="收窄">◀</button>
+                </div>
+                <ul class="menu-list">
+                    <li v-for="(item, index) in tocItems" :key="index" 
+                        class="menu-item" 
+                        :class="{ selected: isSelected(item.index) }"
+                        @click="scrollToSection(item.index)">
+                        <input type="checkbox" :checked="isSelected(item.index)" 
+                               @click.stop="toggleSelection(item.index)">
+                        <span class="menu-title">{{ item.title }}</span>
+                    </li>
+                </ul>
+                <div class="menu-footer">
+                    <button @click="selectAll">全选</button>
+                    <button @click="clearSelection">清空</button>
+                </div>
+            </template>
+            
+            <!-- 收窄状态 - 显示首字 -->
+            <template v-else>
+                <div class="menu-collapsed" @click="menuCollapsed = false" title="展开目录">
+                    <div class="collapsed-header">📑</div>
+                    <ul class="collapsed-list">
+                        <li v-for="(item, index) in tocItems" :key="index" 
+                            class="collapsed-item"
+                            :class="{ selected: isSelected(item.index) }"
+                            @click.stop="scrollToSection(item.index)"
+                            :title="item.title">
+                            {{ item.title.charAt(0) }}
+                        </li>
+                    </ul>
+                </div>
+            </template>
+        </nav>
+        
+        <!-- 配色按钮 - 固定在右下角 -->
+        <div class="color-float-btn" @click="toggleColorPicker" :class="{ active: showColorPicker }" title="配色">
+            <span>🎨</span>
+        </div>
+        
+        <!-- ========== 配色器抽屉 ========== -->
+        <div class="drawer-overlay" v-if="showColorPicker" @click="showColorPicker = false"></div>
+        <aside class="color-drawer" :class="{ open: showColorPicker }">
+            <div class="drawer-header">
+                <span>🎨 配色方案</span>
+                <button class="close-btn" @click="showColorPicker = false">✕</button>
+            </div>
+            <div class="drawer-body">
+                <div class="palette-group">
+                    <h5>全局配色</h5>
+                    <div class="palette-options">
+                        <button v-for="(palette, key) in colorPalettes.palettes" :key="key"
+                                class="palette-btn"
+                                :class="{ active: colorPalettes.global === key }"
+                                @click="setColorPalette('global', key)">
+                            <span class="palette-name">{{ palette.name }}</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+    
+
+    <!-- Notebook 数据注入（Jinja2 渲染） -->
+    <script id="notebook-data" type="application/json">{
+  "title": "综合测试报告",
+  "createdAt": "2026-03-14 16:02:29",
+  "children": [
+    {
+      "type": "title",
+      "content": "策略回测报告",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "divider",
+      "content": null
+    },
+    {
+      "type": "markdown",
+      "content": "\n**策略类型**: 趋势跟踪 | **回测区间**: 2024-01 至 2024-05 | **初始资金**: 1,000,000\n    "
+    },
+    {
+      "type": "metrics",
+      "content": [
+        {
+          "name": "总收益",
+          "value": "45.6%",
+          "desc": "累计收益"
+        },
+        {
+          "name": "夏普",
+          "value": "1.85",
+          "desc": "风险调整"
+        },
+        {
+          "name": "最大回撤",
+          "value": "-12.3%",
+          "desc": "2024-03"
+        },
+        {
+          "name": "胜率",
+          "value": "58%",
+          "desc": "盈利占比"
+        }
+      ],
+      "options": {
+        "columns": 4
+      }
+    },
+    {
+      "type": "divider",
+      "content": null
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "text",
+          "content": "净值曲线与基准对比：",
+          "options": {
+            "style": "normal"
+          }
+        },
+        {
+          "type": "chart",
+          "content": {
+            "charts": {
+              "animation": true,
+              "animationThreshold": 2000,
+              "animationDuration": 1000,
+              "animationEasing": "cubicOut",
+              "animationDelay": 0,
+              "animationDurationUpdate": 300,
+              "animationEasingUpdate": "cubicOut",
+              "animationDelayUpdate": 0,
+              "aria": {
+                "enabled": false
+              },
+              "series": [
+                {
+                  "type": "line",
+                  "name": "策略",
+                  "connectNulls": false,
+                  "xAxisIndex": 0,
+                  "symbolSize": 4,
+                  "showSymbol": true,
+                  "smooth": false,
+                  "clip": true,
+                  "step": false,
+                  "stackStrategy": "samesign",
+                  "data": [
+                    [
+                      "2024-01",
+                      1.0
+                    ],
+                    [
+                      "2024-02",
+                      1.05
+                    ],
+                    [
+                      "2024-03",
+                      1.12
+                    ],
+                    [
+                      "2024-04",
+                      1.08
+                    ],
+                    [
+                      "2024-05",
+                      1.15
+                    ]
+                  ],
+                  "hoverAnimation": true,
+                  "label": {
+                    "show": true,
+                    "margin": 8,
+                    "richInheritPlainLabel": true,
+                    "valueAnimation": false
+                  },
+                  "logBase": 10,
+                  "seriesLayoutBy": "column",
+                  "lineStyle": {
+                    "show": false
+                  },
+                  "areaStyle": {
+                    "opacity": 0
+                  },
+                  "zlevel": 0,
+                  "z": 0
+                },
+                {
+                  "type": "line",
+                  "name": "基准",
+                  "connectNulls": false,
+                  "xAxisIndex": 0,
+                  "symbolSize": 4,
+                  "showSymbol": true,
+                  "smooth": false,
+                  "clip": true,
+                  "step": false,
+                  "stackStrategy": "samesign",
+                  "data": [
+                    [
+                      "2024-01",
+                      1.0
+                    ],
+                    [
+                      "2024-02",
+                      1.02
+                    ],
+                    [
+                      "2024-03",
+                      1.04
+                    ],
+                    [
+                      "2024-04",
+                      1.06
+                    ],
+                    [
+                      "2024-05",
+                      1.08
+                    ]
+                  ],
+                  "hoverAnimation": true,
+                  "label": {
+                    "show": true,
+                    "margin": 8,
+                    "richInheritPlainLabel": true,
+                    "valueAnimation": false
+                  },
+                  "logBase": 10,
+                  "seriesLayoutBy": "column",
+                  "lineStyle": {
+                    "show": false
+                  },
+                  "areaStyle": {
+                    "opacity": 0
+                  },
+                  "zlevel": 0,
+                  "z": 0
+                }
+              ],
+              "legend": [
+                {
+                  "data": [
+                    "策略",
+                    "基准"
+                  ],
+                  "selected": {}
+                }
+              ],
+              "tooltip": {
+                "show": true,
+                "trigger": "item",
+                "triggerOn": "mousemove|click",
+                "axisPointer": {
+                  "type": "line"
+                },
+                "showContent": true,
+                "alwaysShowContent": false,
+                "showDelay": 0,
+                "hideDelay": 100,
+                "enterable": false,
+                "confine": false,
+                "appendToBody": false,
+                "transitionDuration": 0.4,
+                "displayTransition": true,
+                "textStyle": {
+                  "fontSize": 14,
+                  "richInheritPlainLabel": true
+                },
+                "borderWidth": 0,
+                "padding": 5,
+                "order": "seriesAsc"
+              },
+              "xAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "data": [
+                    "2024-01",
+                    "2024-02",
+                    "2024-03",
+                    "2024-04",
+                    "2024-05"
+                  ]
+                }
+              ],
+              "yAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0
+                }
+              ]
+            },
+            "width": "100%",
+            "height": "300px"
+          },
+          "title": "净值曲线"
+        },
+        {
+          "type": "section",
+          "children": [
+            {
+              "type": "chart",
+              "content": {
+                "charts": {
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "aria": {
+                    "enabled": false
+                  },
+                  "series": [
+                    {
+                      "type": "bar",
+                      "name": "月收益%",
+                      "legendHoverLink": true,
+                      "data": [
+                        5,
+                        -2,
+                        8,
+                        3,
+                        6
+                      ],
+                      "realtimeSort": false,
+                      "showBackground": false,
+                      "stackStrategy": "samesign",
+                      "cursor": "pointer",
+                      "barMinHeight": 0,
+                      "barCategoryGap": "20%",
+                      "barGap": "30%",
+                      "large": false,
+                      "largeThreshold": 400,
+                      "seriesLayoutBy": "column",
+                      "datasetIndex": 0,
+                      "clip": true,
+                      "zlevel": 0,
+                      "z": 2,
+                      "label": {
+                        "show": true,
+                        "margin": 8,
+                        "richInheritPlainLabel": true,
+                        "valueAnimation": false
+                      }
+                    }
+                  ],
+                  "legend": [
+                    {
+                      "data": [
+                        "月收益%"
+                      ],
+                      "selected": {}
+                    }
+                  ],
+                  "tooltip": {
+                    "show": true,
+                    "trigger": "item",
+                    "triggerOn": "mousemove|click",
+                    "axisPointer": {
+                      "type": "line"
+                    },
+                    "showContent": true,
+                    "alwaysShowContent": false,
+                    "showDelay": 0,
+                    "hideDelay": 100,
+                    "enterable": false,
+                    "confine": false,
+                    "appendToBody": false,
+                    "transitionDuration": 0.4,
+                    "displayTransition": true,
+                    "textStyle": {
+                      "fontSize": 14,
+                      "richInheritPlainLabel": true
+                    },
+                    "borderWidth": 0,
+                    "padding": 5,
+                    "order": "seriesAsc"
+                  },
+                  "xAxis": [
+                    {
+                      "show": true,
+                      "scale": false,
+                      "nameLocation": "end",
+                      "nameGap": 15,
+                      "nameTruncate": {},
+                      "nameMoveOverlap": true,
+                      "inverse": false,
+                      "offset": 0,
+                      "splitNumber": 5,
+                      "minInterval": 0,
+                      "silent": false,
+                      "triggerEvent": false,
+                      "splitLine": {
+                        "show": true,
+                        "lineStyle": {
+                          "show": false
+                        }
+                      },
+                      "animation": true,
+                      "animationThreshold": 2000,
+                      "animationDuration": 1000,
+                      "animationEasing": "cubicOut",
+                      "animationDelay": 0,
+                      "animationDurationUpdate": 300,
+                      "animationEasingUpdate": "cubicOut",
+                      "animationDelayUpdate": 0,
+                      "data": [
+                        "1月",
+                        "2月",
+                        "3月",
+                        "4月",
+                        "5月"
+                      ]
+                    }
+                  ],
+                  "yAxis": [
+                    {
+                      "show": true,
+                      "scale": false,
+                      "nameLocation": "end",
+                      "nameGap": 15,
+                      "nameTruncate": {},
+                      "nameMoveOverlap": true,
+                      "inverse": false,
+                      "offset": 0,
+                      "splitNumber": 5,
+                      "minInterval": 0,
+                      "silent": false,
+                      "triggerEvent": false,
+                      "splitLine": {
+                        "show": true,
+                        "lineStyle": {
+                          "show": false
+                        }
+                      },
+                      "animation": true,
+                      "animationThreshold": 2000,
+                      "animationDuration": 1000,
+                      "animationEasing": "cubicOut",
+                      "animationDelay": 0,
+                      "animationDurationUpdate": 300,
+                      "animationEasingUpdate": "cubicOut",
+                      "animationDelayUpdate": 0
+                    }
+                  ]
+                },
+                "width": "100%",
+                "height": "400px"
+              },
+              "title": "月度收益"
+            },
+            {
+              "type": "chart",
+              "content": {
+                "charts": {
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "aria": {
+                    "enabled": false
+                  },
+                  "series": [
+                    {
+                      "type": "pie",
+                      "colorBy": "data",
+                      "legendHoverLink": true,
+                      "selectedMode": false,
+                      "selectedOffset": 10,
+                      "clockwise": true,
+                      "startAngle": 90,
+                      "minAngle": 0,
+                      "minShowLabelAngle": 0,
+                      "avoidLabelOverlap": true,
+                      "stillShowZeroSum": true,
+                      "percentPrecision": 2,
+                      "showEmptyCircle": true,
+                      "emptyCircleStyle": {
+                        "color": "lightgray",
+                        "borderColor": "#000",
+                        "borderWidth": 0,
+                        "borderType": "solid",
+                        "borderDashOffset": 0,
+                        "borderCap": "butt",
+                        "borderJoin": "bevel",
+                        "borderMiterLimit": 10,
+                        "opacity": 1
+                      },
+                      "data": [
+                        {
+                          "name": "股票",
+                          "value": 60
+                        },
+                        {
+                          "name": "债券",
+                          "value": 25
+                        },
+                        {
+                          "name": "现金",
+                          "value": 15
+                        }
+                      ],
+                      "radius": [
+                        "0%",
+                        "75%"
+                      ],
+                      "center": [
+                        "50%",
+                        "50%"
+                      ],
+                      "label": {
+                        "show": true,
+                        "margin": 8,
+                        "richInheritPlainLabel": true,
+                        "valueAnimation": false
+                      },
+                      "labelLine": {
+                        "show": true,
+                        "showAbove": false,
+                        "length": 15,
+                        "length2": 15,
+                        "smooth": false,
+                        "minTurnAngle": 90,
+                        "maxSurfaceAngle": 90
+                      }
+                    }
+                  ],
+                  "legend": [
+                    {
+                      "data": [
+                        "股票",
+                        "债券",
+                        "现金"
+                      ],
+                      "selected": {}
+                    }
+                  ],
+                  "tooltip": {
+                    "show": true,
+                    "trigger": "item",
+                    "triggerOn": "mousemove|click",
+                    "axisPointer": {
+                      "type": "line"
+                    },
+                    "showContent": true,
+                    "alwaysShowContent": false,
+                    "showDelay": 0,
+                    "hideDelay": 100,
+                    "enterable": false,
+                    "confine": false,
+                    "appendToBody": false,
+                    "transitionDuration": 0.4,
+                    "displayTransition": true,
+                    "textStyle": {
+                      "fontSize": 14,
+                      "richInheritPlainLabel": true
+                    },
+                    "borderWidth": 0,
+                    "padding": 5,
+                    "order": "seriesAsc"
+                  }
+                },
+                "width": "100%",
+                "height": "250px"
+              },
+              "title": "资产配置"
+            }
+          ],
+          "title": "月度分析",
+          "options": {
+            "level": 2
+          }
+        }
+      ],
+      "title": "收益分析",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "text",
+      "content": "【自由内容】以下是风险分析部分，可直接阅读或点击目录跳转。",
+      "options": {
+        "style": "normal"
+      }
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "chart",
+          "content": {
+            "charts": {
+              "animation": true,
+              "animationThreshold": 2000,
+              "animationDuration": 1000,
+              "animationEasing": "cubicOut",
+              "animationDelay": 0,
+              "animationDurationUpdate": 300,
+              "animationEasingUpdate": "cubicOut",
+              "animationDelayUpdate": 0,
+              "aria": {
+                "enabled": false
+              },
+              "series": [
+                {
+                  "type": "line",
+                  "name": "回撤%",
+                  "connectNulls": false,
+                  "xAxisIndex": 0,
+                  "symbolSize": 4,
+                  "showSymbol": true,
+                  "smooth": false,
+                  "clip": true,
+                  "step": false,
+                  "stackStrategy": "samesign",
+                  "data": [
+                    [
+                      "2024-01",
+                      0
+                    ],
+                    [
+                      "2024-02",
+                      -2
+                    ],
+                    [
+                      "2024-03",
+                      -5
+                    ],
+                    [
+                      "2024-04",
+                      -3
+                    ],
+                    [
+                      "2024-05",
+                      -1
+                    ]
+                  ],
+                  "hoverAnimation": true,
+                  "label": {
+                    "show": true,
+                    "margin": 8,
+                    "richInheritPlainLabel": true,
+                    "valueAnimation": false
+                  },
+                  "logBase": 10,
+                  "seriesLayoutBy": "column",
+                  "lineStyle": {
+                    "show": false
+                  },
+                  "areaStyle": {
+                    "opacity": 0.3
+                  },
+                  "zlevel": 0,
+                  "z": 0
+                }
+              ],
+              "legend": [
+                {
+                  "data": [
+                    "回撤%"
+                  ],
+                  "selected": {}
+                }
+              ],
+              "tooltip": {
+                "show": true,
+                "trigger": "item",
+                "triggerOn": "mousemove|click",
+                "axisPointer": {
+                  "type": "line"
+                },
+                "showContent": true,
+                "alwaysShowContent": false,
+                "showDelay": 0,
+                "hideDelay": 100,
+                "enterable": false,
+                "confine": false,
+                "appendToBody": false,
+                "transitionDuration": 0.4,
+                "displayTransition": true,
+                "textStyle": {
+                  "fontSize": 14,
+                  "richInheritPlainLabel": true
+                },
+                "borderWidth": 0,
+                "padding": 5,
+                "order": "seriesAsc"
+              },
+              "xAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "data": [
+                    "2024-01",
+                    "2024-02",
+                    "2024-03",
+                    "2024-04",
+                    "2024-05"
+                  ]
+                }
+              ],
+              "yAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0
+                }
+              ]
+            },
+            "width": "100%",
+            "height": 250
+          },
+          "title": "回撤曲线"
+        },
+        {
+          "type": "chart",
+          "content": {
+            "charts": {
+              "animation": true,
+              "animationThreshold": 2000,
+              "animationDuration": 1000,
+              "animationEasing": "cubicOut",
+              "animationDelay": 0,
+              "animationDurationUpdate": 300,
+              "animationEasingUpdate": "cubicOut",
+              "animationDelayUpdate": 0,
+              "aria": {
+                "enabled": false
+              },
+              "series": [
+                {
+                  "type": "heatmap",
+                  "coordinateSystem": "cartesian2d",
+                  "data": [
+                    [
+                      0,
+                      0,
+                      0.02
+                    ],
+                    [
+                      1,
+                      0,
+                      -0.01
+                    ],
+                    [
+                      2,
+                      0,
+                      0.03
+                    ],
+                    [
+                      3,
+                      0,
+                      0.01
+                    ],
+                    [
+                      4,
+                      0,
+                      -0.02
+                    ],
+                    [
+                      5,
+                      0,
+                      0.04
+                    ],
+                    [
+                      0,
+                      1,
+                      0.05
+                    ],
+                    [
+                      1,
+                      1,
+                      -0.02
+                    ],
+                    [
+                      2,
+                      1,
+                      0.08
+                    ],
+                    [
+                      3,
+                      1,
+                      0.03
+                    ],
+                    [
+                      4,
+                      1,
+                      0.06
+                    ],
+                    [
+                      5,
+                      1,
+                      -0.01
+                    ]
+                  ],
+                  "label": {
+                    "show": true,
+                    "margin": 8,
+                    "richInheritPlainLabel": true,
+                    "valueAnimation": false
+                  },
+                  "selectedMode": false,
+                  "zlevel": 0,
+                  "z": 2
+                }
+              ],
+              "legend": [
+                {
+                  "data": [
+                    ""
+                  ],
+                  "selected": {},
+                  "show": true,
+                  "padding": 5,
+                  "itemGap": 10,
+                  "itemWidth": 25,
+                  "itemHeight": 14,
+                  "backgroundColor": "transparent",
+                  "borderColor": "#ccc",
+                  "borderRadius": 0,
+                  "pageButtonItemGap": 5,
+                  "pageButtonPosition": "end",
+                  "pageFormatter": "{current}/{total}",
+                  "pageIconColor": "#2f4554",
+                  "pageIconInactiveColor": "#aaa",
+                  "pageIconSize": 15,
+                  "animationDurationUpdate": 800,
+                  "selector": false,
+                  "selectorPosition": "auto",
+                  "selectorItemGap": 7,
+                  "selectorButtonGap": 10,
+                  "triggerEvent": false
+                }
+              ],
+              "tooltip": {
+                "show": true,
+                "trigger": "item",
+                "triggerOn": "mousemove|click",
+                "axisPointer": {
+                  "type": "line"
+                },
+                "showContent": true,
+                "alwaysShowContent": false,
+                "showDelay": 0,
+                "hideDelay": 100,
+                "enterable": false,
+                "confine": false,
+                "appendToBody": false,
+                "transitionDuration": 0.4,
+                "displayTransition": true,
+                "textStyle": {
+                  "fontSize": 14,
+                  "richInheritPlainLabel": true
+                },
+                "borderWidth": 0,
+                "padding": 5,
+                "order": "seriesAsc"
+              },
+              "xAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "data": [
+                    "01",
+                    "02",
+                    "03",
+                    "04",
+                    "05",
+                    "06"
+                  ]
+                }
+              ],
+              "yAxis": [
+                {
+                  "show": true,
+                  "scale": false,
+                  "nameLocation": "end",
+                  "nameGap": 15,
+                  "nameTruncate": {},
+                  "nameMoveOverlap": true,
+                  "inverse": false,
+                  "offset": 0,
+                  "splitNumber": 5,
+                  "minInterval": 0,
+                  "silent": false,
+                  "triggerEvent": false,
+                  "splitLine": {
+                    "show": true,
+                    "lineStyle": {
+                      "show": false
+                    }
+                  },
+                  "animation": true,
+                  "animationThreshold": 2000,
+                  "animationDuration": 1000,
+                  "animationEasing": "cubicOut",
+                  "animationDelay": 0,
+                  "animationDurationUpdate": 300,
+                  "animationEasingUpdate": "cubicOut",
+                  "animationDelayUpdate": 0,
+                  "data": [
+                    "2023",
+                    "2024"
+                  ]
+                }
+              ],
+              "title": [
+                {
+                  "show": true,
+                  "target": "blank",
+                  "subtarget": "blank",
+                  "padding": 5,
+                  "itemGap": 10,
+                  "textAlign": "auto",
+                  "textVerticalAlign": "auto",
+                  "triggerEvent": false
+                }
+              ],
+              "visualMap": {
+                "show": true,
+                "type": "continuous",
+                "min": 0,
+                "max": 100,
+                "inRange": {
+                  "color": [
+                    "#50a3ba",
+                    "#eac763",
+                    "#d94e5d"
+                  ]
+                },
+                "calculable": true,
+                "inverse": false,
+                "splitNumber": 5,
+                "hoverLink": true,
+                "orient": "horizontal",
+                "padding": 5,
+                "showLabel": true,
+                "itemWidth": 20,
+                "itemHeight": 140,
+                "borderWidth": 0
+              }
+            },
+            "width": "100%",
+            "height": "400px"
+          },
+          "title": "月度收益热力图"
+        },
+        {
+          "type": "section",
+          "children": [
+            {
+              "type": "markdown",
+              "content": "\n**VaR(95%)**: 2.5%  \n**CVaR(95%)**: 3.8%  \n**下行波动率**: 8.2%\n            "
+            }
+          ],
+          "title": "风险评估",
+          "options": {
+            "level": 2,
+            "collapsed": true
+          }
+        }
+      ],
+      "title": "风险分析",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "html",
+      "content": "\n    <div style=\"background: linear-gradient(90deg, #f3f4f6 0%, #fff 100%); padding: 12px 16px; border-radius: 6px; margin: 12px 0;\">\n        <strong>💡 【自由内容提示】</strong> 持仓明细如下，详细数据可点击 Section 查看。\n    </div>\n    "
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "table",
+          "content": [
+            {
+              "代码": "600000",
+              "名称": "浦发银行",
+              "数量": 10000,
+              "成本": 10.5,
+              "现价": 11.2,
+              "盈亏": "+6.7%"
+            },
+            {
+              "代码": "000001",
+              "名称": "平安银行",
+              "数量": 5000,
+              "成本": 15.2,
+              "现价": 16.8,
+              "盈亏": "+10.5%"
+            },
+            {
+              "代码": "000002",
+              "名称": "万科A",
+              "数量": 8000,
+              "成本": 8.3,
+              "现价": 7.5,
+              "盈亏": "-9.6%"
+            }
+          ],
+          "title": "持仓列表",
+          "options": {
+            "columns": [
+              {
+                "field": "代码",
+                "title": "代码"
+              },
+              {
+                "field": "名称",
+                "title": "名称"
+              },
+              {
+                "field": "数量",
+                "title": "数量"
+              },
+              {
+                "field": "成本",
+                "title": "成本"
+              },
+              {
+                "field": "现价",
+                "title": "现价"
+              },
+              {
+                "field": "盈亏",
+                "title": "盈亏"
+              }
+            ]
+          }
+        }
+      ],
+      "title": "持仓明细",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "text",
+          "content": "多列表格，冻结左侧2列：",
+          "options": {
+            "style": "normal"
+          }
+        },
+        {
+          "type": "table",
+          "content": [
+            {
+              "股票代码": "600000",
+              "股票名称": "股票0名称",
+              "收盘价": 10.0,
+              "涨跌幅": "-10%",
+              "成交量": 1000000,
+              "成交额": 10000000,
+              "振幅": "0.0%",
+              "换手率": "0.0%",
+              "市盈率": 20.0,
+              "市净率": 2.0,
+              "总市值": 1000000000,
+              "流通市值": 800000000
+            },
+            {
+              "股票代码": "600001",
+              "股票名称": "股票1名称",
+              "收盘价": 10.5,
+              "涨跌幅": "-9%",
+              "成交量": 1100000,
+              "成交额": 11000000,
+              "振幅": "0.5%",
+              "换手率": "0.3%",
+              "市盈率": 20.5,
+              "市净率": 2.1,
+              "总市值": 1010000000,
+              "流通市值": 808000000
+            },
+            {
+              "股票代码": "600002",
+              "股票名称": "股票2名称",
+              "收盘价": 11.0,
+              "涨跌幅": "-8%",
+              "成交量": 1200000,
+              "成交额": 12000000,
+              "振幅": "1.0%",
+              "换手率": "0.6%",
+              "市盈率": 21.0,
+              "市净率": 2.2,
+              "总市值": 1020000000,
+              "流通市值": 816000000
+            },
+            {
+              "股票代码": "600003",
+              "股票名称": "股票3名称",
+              "收盘价": 11.5,
+              "涨跌幅": "-7%",
+              "成交量": 1300000,
+              "成交额": 13000000,
+              "振幅": "1.5%",
+              "换手率": "0.8999999999999999%",
+              "市盈率": 21.5,
+              "市净率": 2.3,
+              "总市值": 1030000000,
+              "流通市值": 824000000
+            },
+            {
+              "股票代码": "600004",
+              "股票名称": "股票4名称",
+              "收盘价": 12.0,
+              "涨跌幅": "-6%",
+              "成交量": 1400000,
+              "成交额": 14000000,
+              "振幅": "2.0%",
+              "换手率": "1.2%",
+              "市盈率": 22.0,
+              "市净率": 2.4,
+              "总市值": 1040000000,
+              "流通市值": 832000000
+            },
+            {
+              "股票代码": "600005",
+              "股票名称": "股票5名称",
+              "收盘价": 12.5,
+              "涨跌幅": "-5%",
+              "成交量": 1500000,
+              "成交额": 15000000,
+              "振幅": "2.5%",
+              "换手率": "1.5%",
+              "市盈率": 22.5,
+              "市净率": 2.5,
+              "总市值": 1050000000,
+              "流通市值": 840000000
+            },
+            {
+              "股票代码": "600006",
+              "股票名称": "股票6名称",
+              "收盘价": 13.0,
+              "涨跌幅": "-4%",
+              "成交量": 1600000,
+              "成交额": 16000000,
+              "振幅": "3.0%",
+              "换手率": "1.7999999999999998%",
+              "市盈率": 23.0,
+              "市净率": 2.6,
+              "总市值": 1060000000,
+              "流通市值": 848000000
+            },
+            {
+              "股票代码": "600007",
+              "股票名称": "股票7名称",
+              "收盘价": 13.5,
+              "涨跌幅": "-3%",
+              "成交量": 1700000,
+              "成交额": 17000000,
+              "振幅": "3.5%",
+              "换手率": "2.1%",
+              "市盈率": 23.5,
+              "市净率": 2.7,
+              "总市值": 1070000000,
+              "流通市值": 856000000
+            },
+            {
+              "股票代码": "600008",
+              "股票名称": "股票8名称",
+              "收盘价": 14.0,
+              "涨跌幅": "-2%",
+              "成交量": 1800000,
+              "成交额": 18000000,
+              "振幅": "4.0%",
+              "换手率": "2.4%",
+              "市盈率": 24.0,
+              "市净率": 2.8,
+              "总市值": 1080000000,
+              "流通市值": 864000000
+            },
+            {
+              "股票代码": "600009",
+              "股票名称": "股票9名称",
+              "收盘价": 14.5,
+              "涨跌幅": "-1%",
+              "成交量": 1900000,
+              "成交额": 19000000,
+              "振幅": "4.5%",
+              "换手率": "2.6999999999999997%",
+              "市盈率": 24.5,
+              "市净率": 2.9,
+              "总市值": 1090000000,
+              "流通市值": 872000000
+            },
+            {
+              "股票代码": "600010",
+              "股票名称": "股票10名称",
+              "收盘价": 15.0,
+              "涨跌幅": "0%",
+              "成交量": 2000000,
+              "成交额": 20000000,
+              "振幅": "5.0%",
+              "换手率": "3.0%",
+              "市盈率": 25.0,
+              "市净率": 3.0,
+              "总市值": 1100000000,
+              "流通市值": 880000000
+            },
+            {
+              "股票代码": "600011",
+              "股票名称": "股票11名称",
+              "收盘价": 15.5,
+              "涨跌幅": "1%",
+              "成交量": 2100000,
+              "成交额": 21000000,
+              "振幅": "5.5%",
+              "换手率": "3.3%",
+              "市盈率": 25.5,
+              "市净率": 3.1,
+              "总市值": 1110000000,
+              "流通市值": 888000000
+            },
+            {
+              "股票代码": "600012",
+              "股票名称": "股票12名称",
+              "收盘价": 16.0,
+              "涨跌幅": "2%",
+              "成交量": 2200000,
+              "成交额": 22000000,
+              "振幅": "6.0%",
+              "换手率": "3.5999999999999996%",
+              "市盈率": 26.0,
+              "市净率": 3.2,
+              "总市值": 1120000000,
+              "流通市值": 896000000
+            },
+            {
+              "股票代码": "600013",
+              "股票名称": "股票13名称",
+              "收盘价": 16.5,
+              "涨跌幅": "3%",
+              "成交量": 2300000,
+              "成交额": 23000000,
+              "振幅": "6.5%",
+              "换手率": "3.9%",
+              "市盈率": 26.5,
+              "市净率": 3.3,
+              "总市值": 1130000000,
+              "流通市值": 904000000
+            },
+            {
+              "股票代码": "600014",
+              "股票名称": "股票14名称",
+              "收盘价": 17.0,
+              "涨跌幅": "4%",
+              "成交量": 2400000,
+              "成交额": 24000000,
+              "振幅": "7.0%",
+              "换手率": "4.2%",
+              "市盈率": 27.0,
+              "市净率": 3.4,
+              "总市值": 1140000000,
+              "流通市值": 912000000
+            },
+            {
+              "股票代码": "600015",
+              "股票名称": "股票15名称",
+              "收盘价": 17.5,
+              "涨跌幅": "5%",
+              "成交量": 2500000,
+              "成交额": 25000000,
+              "振幅": "7.5%",
+              "换手率": "4.5%",
+              "市盈率": 27.5,
+              "市净率": 3.5,
+              "总市值": 1150000000,
+              "流通市值": 920000000
+            },
+            {
+              "股票代码": "600016",
+              "股票名称": "股票16名称",
+              "收盘价": 18.0,
+              "涨跌幅": "6%",
+              "成交量": 2600000,
+              "成交额": 26000000,
+              "振幅": "8.0%",
+              "换手率": "4.8%",
+              "市盈率": 28.0,
+              "市净率": 3.6,
+              "总市值": 1160000000,
+              "流通市值": 928000000
+            },
+            {
+              "股票代码": "600017",
+              "股票名称": "股票17名称",
+              "收盘价": 18.5,
+              "涨跌幅": "7%",
+              "成交量": 2700000,
+              "成交额": 27000000,
+              "振幅": "8.5%",
+              "换手率": "5.1%",
+              "市盈率": 28.5,
+              "市净率": 3.7,
+              "总市值": 1170000000,
+              "流通市值": 936000000
+            },
+            {
+              "股票代码": "600018",
+              "股票名称": "股票18名称",
+              "收盘价": 19.0,
+              "涨跌幅": "8%",
+              "成交量": 2800000,
+              "成交额": 28000000,
+              "振幅": "9.0%",
+              "换手率": "5.3999999999999995%",
+              "市盈率": 29.0,
+              "市净率": 3.8,
+              "总市值": 1180000000,
+              "流通市值": 944000000
+            },
+            {
+              "股票代码": "600019",
+              "股票名称": "股票19名称",
+              "收盘价": 19.5,
+              "涨跌幅": "9%",
+              "成交量": 2900000,
+              "成交额": 29000000,
+              "振幅": "9.5%",
+              "换手率": "5.7%",
+              "市盈率": 29.5,
+              "市净率": 3.9,
+              "总市值": 1190000000,
+              "流通市值": 952000000
+            }
+          ],
+          "title": "股票行情（冻结左侧2列，共12列）",
+          "options": {
+            "columns": [
+              {
+                "field": "股票代码",
+                "title": "股票代码"
+              },
+              {
+                "field": "股票名称",
+                "title": "股票名称"
+              },
+              {
+                "field": "收盘价",
+                "title": "收盘价"
+              },
+              {
+                "field": "涨跌幅",
+                "title": "涨跌幅"
+              },
+              {
+                "field": "成交量",
+                "title": "成交量"
+              },
+              {
+                "field": "成交额",
+                "title": "成交额"
+              },
+              {
+                "field": "振幅",
+                "title": "振幅"
+              },
+              {
+                "field": "换手率",
+                "title": "换手率"
+              },
+              {
+                "field": "市盈率",
+                "title": "市盈率"
+              },
+              {
+                "field": "市净率",
+                "title": "市净率"
+              },
+              {
+                "field": "总市值",
+                "title": "总市值"
+              },
+              {
+                "field": "流通市值",
+                "title": "流通市值"
+              }
+            ],
+            "freeze": {
+              "left": 2,
+              "right": 0
+            }
+          }
+        }
+      ],
+      "title": "股票行情",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "divider",
+      "content": null
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "table",
+          "content": [
+            {
+              "日期": "2024-01-05",
+              "方向": "买入",
+              "代码": "600000",
+              "价格": 10.5,
+              "数量": 1000
+            },
+            {
+              "日期": "2024-02-10",
+              "方向": "卖出",
+              "代码": "600000",
+              "价格": 11.2,
+              "数量": 1000
+            },
+            {
+              "日期": "2024-02-15",
+              "方向": "买入",
+              "代码": "000001",
+              "价格": 15.0,
+              "数量": 500
+            },
+            {
+              "日期": "2024-03-20",
+              "方向": "卖出",
+              "代码": "000001",
+              "价格": 16.8,
+              "数量": 500
+            }
+          ],
+          "title": "历史交易",
+          "options": {
+            "columns": [
+              {
+                "field": "日期",
+                "title": "日期"
+              },
+              {
+                "field": "方向",
+                "title": "方向"
+              },
+              {
+                "field": "代码",
+                "title": "代码"
+              },
+              {
+                "field": "价格",
+                "title": "价格"
+              },
+              {
+                "field": "数量",
+                "title": "数量"
+              }
+            ]
+          }
+        }
+      ],
+      "title": "历史记录",
+      "options": {
+        "level": 1,
+        "collapsed": true
+      }
+    },
+    {
+      "type": "section",
+      "children": [
+        {
+          "type": "code",
+          "content": {
+            "code": "# 策略核心逻辑\ndef on_bar(bar):\n    if bar.close > ma20:\n        buy(symbol=bar.symbol, quantity=100)\n    elif bar.close < ma20:\n        sell(symbol=bar.symbol, quantity=100)\n",
+            "language": "python",
+            "output": "策略初始化完成\n回测结束"
+          }
+        }
+      ],
+      "title": "策略代码",
+      "options": {
+        "level": 1
+      }
+    },
+    {
+      "type": "html",
+      "content": "\n<div style=\"background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 6px; margin-top: 20px;\">\n    <strong>⚠️ 【自由内容】风险提示</strong>\n    <p style=\"margin: 8px 0 0 0; color: #856404;\">\n        本报告仅供参考，不构成投资建议。历史业绩不代表未来表现。\n    </p>\n</div>\n    "
+    }
+  ]
+}</script>
+    
+    <!-- Notebook Vue3 JS -->
+    <script src="template/js/notebook2.js"></script>
+    <script>
+        // 从 Jinja2 注入的数据创建配置
+        const dataElement = document.getElementById('notebook-data');
+        window.notebookConfig = dataElement ? JSON.parse(dataElement.textContent) : {
+            title: '未命名 Notebook',
+            createdAt: new Date().toLocaleString(),
+            cells: []
+        };
+        
+        // 创建并挂载应用
+        createNotebookApp().mount('#app');
+    </script>
+</body>
+</html>

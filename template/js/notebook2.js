@@ -727,28 +727,24 @@ function createNotebookApp() {
             let toastTimer = null;
             
             // 新版菜单状态 - 简化管理
-            const menuCollapsed = ref(false);     // 目录菜单收窄状态（手动）
+            const menuExpanded = ref(false);      // 窄屏时菜单展开状态
             const isNarrow = ref(false);          // 是否窄屏（自动检测）
             const showColorPicker = ref(false);   // 配色抽屉开关
             
             // 检测屏幕宽度
             const checkScreenWidth = () => {
-                const newIsNarrow = window.innerWidth <= 1200;  // 1200px 以下自动收窄
-                // 当从窄屏变回宽屏时，强制展开菜单
-                if (!newIsNarrow && isNarrow.value) {
-                    menuCollapsed.value = false;
+                isNarrow.value = window.innerWidth <= 768;  // 768px 以下为小屏幕
+                // 当从窄屏变回宽屏时，自动收起展开状态
+                if (!isNarrow.value) {
+                    menuExpanded.value = false;
                 }
-                isNarrow.value = newIsNarrow;
                 console.log('Screen width:', window.innerWidth, 'isNarrow:', isNarrow.value);
             };
             
-            // 展开菜单（窄屏时点击首字展开）
-            const expandMenu = () => {
+            // 切换菜单展开状态（窄屏时使用）
+            const toggleMenu = () => {
                 if (isNarrow.value) {
-                    // 窄屏时临时展开
-                    isNarrow.value = false;
-                } else {
-                    menuCollapsed.value = false;
+                    menuExpanded.value = !menuExpanded.value;
                 }
             };
             
@@ -1094,9 +1090,9 @@ function createNotebookApp() {
                 captureScreenshot,
                 captureAll,
                 // 新版菜单状态
-                menuCollapsed,
+                menuExpanded,
                 isNarrow,
-                expandMenu,
+                toggleMenu,
                 showColorPicker,
                 toggleColorPicker,
                 // 配色管理
