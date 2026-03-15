@@ -698,7 +698,6 @@ const CellRenderer = {
 function createNotebookApp() {
     // 从全局获取 FtTable 组件（由 ft-table.js 暴露到 window）
     const FtTableComponent = typeof window !== 'undefined' ? window.FtTable : null;
-    console.log('FtTableComponent:', FtTableComponent);
     
     return createApp({
         components: {
@@ -740,7 +739,6 @@ function createNotebookApp() {
                 const width = window.innerWidth;
                 const wasNarrow = isNarrow.value;
                 isNarrow.value = width <= 1200;
-                console.log('Screen width:', width, 'isNarrow:', isNarrow.value);
                 
                 // 宽屏时强制展开（空间足够），窄屏时保持用户设置
                 if (!isNarrow.value) {
@@ -753,7 +751,7 @@ function createNotebookApp() {
             };
             
             // 配色方案
-            const colorPalettes = Vue.reactive(window.colorPalettes || {
+            const defaultPalettes = {
                 global: 'warmToCool',
                 types: {
                     line: 'warmToCool',
@@ -782,8 +780,13 @@ function createNotebookApp() {
                         colors: ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
                     }
                 }
-            });
-            window.colorPalettes = colorPalettes;
+            };
+            
+            // 如果 window.colorPalettes 不存在，创建并赋值
+            if (!window.colorPalettes) {
+                window.colorPalettes = Vue.reactive(defaultPalettes);
+            }
+            const colorPalettes = window.colorPalettes;
             
             const showToast = (message, type = 'info', duration = 3000) => {
                 toastMessage.value = message;
@@ -1064,7 +1067,6 @@ function createNotebookApp() {
             };
 
             onMounted(() => {
-                console.log('Notebook Vue3 应用已加载');
                 // 初始化屏幕宽度检测
                 checkScreenWidth();
                 // 监听窗口大小变化
