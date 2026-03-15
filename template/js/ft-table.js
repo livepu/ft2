@@ -451,21 +451,60 @@ const FtTable = {
     };
 
     // ========== 滚动按钮显示/隐藏逻辑 ==========
-    // 显示条件：鼠标在表格内悬停 HOVER_DELAY（2秒）
-    // 隐藏条件：按钮显示后，鼠标移动超过 MOVE_THRESHOLD（25px）且不在按钮上，HIDE_DELAY（1.5秒）后消失
-    // 保持显示：鼠标在按钮上时清除消失计时，按钮保持显示
-    // 消失后重新显示：按钮消失后，鼠标移动超过阈值会重新触发显示计时
+    // 状态机：waiting(等待显示) → visible(显示) → hiding(等待消失) → waiting
+    // 优点：状态转换时自动清除所有计时器，显示和隐藏不会同时进行
     //
     // 配置常量
     const showScrollButtons = ref(false);      // 按钮显示状态
-    const scrollButtonPos = ref({ x: 0, y: 0 }); // 按钮位置（fixed 定位）
-    let hoverTimer = null;                      // 显示计时器（悬停后显示按钮）
-    let hideTimer = null;                        // 隐藏计时器（移动后隐藏按钮）
-    const isButtonHovered = ref(false);         // 鼠标是否在按钮上
-    let lastMousePos = { x: 0, y: 0 };           // 上次鼠标位置（用于计算移动距离）
-    const MOVE_THRESHOLD = 25;                   // 移动阈值（像素），超过才触发逻辑
-    const HOVER_DELAY = 2000;                    // 悬停显示延迟（毫秒）
-    const HIDE_DELAY = 1500;                     // 隐藏延迟（毫秒）
+    const scrollButtonPos = ref({ x: 0, y: 0 }); // 按钮位置（fixed 定位），显示后不再改变
+    let buttonTimer = null;                    // 单一计时器（显示或隐藏共用）
+    let btnState = 'waiting';                  // 按钮状态：waiting | visible | hiding
+    let isOnButton = false;                   // 鼠标是否在按钮上
+    let lastMousePos = { x: 0, y: 0 };         // 上次鼠标位置
+    const HOVER_DELAY = 2000;                  // 悬停显示延迟（毫秒）
+    const HIDE_DELAY = 1500;                   // 隐藏延迟（毫秒）
+    const MOVE_THRESHOLD = 25;                 // 移动阈值（像素）
+
+    // 显示按钮
+    const showButtons = () => {
+      if (btnState !== 'waiting') return;
+      btnState = 'visible';
+      showScrollButtons.value = true;
+      if (buttonTimer) clearTimeout(buttonTimer);
+      buttonTimer = null;
+    };
+
+    // 保持显示（取消隐藏，恢复显示）
+    const keepButtons = () => {
+      if (btnState !== 'hiding') return;
+      btnState = 'visible';
+      if (buttonTimer) clearTimeout(buttonTimer);
+      buttonTimer = null;
+    };
+
+    // 隐藏按钮（延迟隐藏）
+    const hideButtons = () => {
+      if (btnState !== 'visible') return;
+      if (isOnButton) return;  // 鼠标在按钮上时不隐藏
+      btnState = 'hiding';
+      if (buttonTimer) clearTimeout(buttonTimer);
+      buttonTimer = setTimeout(() => {
+        showScrollButtons.value = false;
+        btnState = 'waiting';
+        buttonTimer = null;
+      }, HIDE_DELAY);
+    };
+
+    // 鼠标进入表格：启动显示计时
+    const handleTableMouseEnter = (e) => {
+      if (!hasHorizontalScroll.value) return;
+      lastMousePos = { x: e.clientX, y: e.clientY };
+      if (btnState === 'waiting') {
+        scrollButtonPos.value = { x: e.clientX, y: e.clientY };
+        if (buttonTimer) clearTimeout(buttonTimer);
+        buttonTimer = setTimeout(showButtons, HOVER_DELAY);
+      }
+    };
 
     // 鼠标在表格内移动
     const handleTableMouseMove = (e) => {
@@ -474,77 +513,42 @@ const FtTable = {
       const dy = e.clientY - lastMousePos.y;
       const moved = Math.sqrt(dx * dx + dy * dy) > MOVE_THRESHOLD;
 
-      // 按钮未显示：移动超过阈值时，重置显示计时器
-      if (!showScrollButtons.value) {
-        if (moved) {
-          lastMousePos = { x: e.clientX, y: e.clientY };
-          scrollButtonPos.value = { x: e.clientX, y: e.clientY };
-          if (hoverTimer) clearTimeout(hoverTimer);
-          hoverTimer = setTimeout(() => {
-            showScrollButtons.value = true;
-            hoverTimer = null;
-          }, HOVER_DELAY);
-        }
-      } else {
-        // 按钮已显示：移动超过阈值且不在按钮上时，触发隐藏计时器
-        if (moved && !isButtonHovered.value) {
-          if (hideTimer) clearTimeout(hideTimer);
-          hideTimer = setTimeout(() => {
-            showScrollButtons.value = false;
-            hideTimer = null;
-          }, HIDE_DELAY);
-        }
+      // waiting 状态：更新位置，启动显示计时
+      if (btnState === 'waiting') {
+        scrollButtonPos.value = { x: e.clientX, y: e.clientY };
+        if (buttonTimer) clearTimeout(buttonTimer);
+        buttonTimer = setTimeout(showButtons, HOVER_DELAY);
+      }
+      // visible 状态：移动超过阈值且不在按钮上，触发隐藏
+      if (btnState === 'visible' && moved && !isOnButton) {
+        lastMousePos = { x: e.clientX, y: e.clientY };
+        hideButtons();
+      }
+      // visible 状态：移动时更新位置
+      if (btnState === 'visible' && moved) {
+        lastMousePos = { x: e.clientX, y: e.clientY };
       }
     };
 
-    // 鼠标进入表格
-    const handleTableMouseEnter = (e) => {
-      if (!hasHorizontalScroll.value) return;
-      lastMousePos = { x: e.clientX, y: e.clientY };
-      scrollButtonPos.value = { x: e.clientX, y: e.clientY };
-      if (hoverTimer) clearTimeout(hoverTimer);
-      hoverTimer = setTimeout(() => {
-        showScrollButtons.value = true;
-        hoverTimer = null;
-      }, HOVER_DELAY);
-    };
-
-    // 鼠标离开表格
+    // 鼠标离开表格：触发隐藏
     const handleTableMouseLeave = () => {
-      // 清除显示计时器
-      if (hoverTimer) {
-        clearTimeout(hoverTimer);
-        hoverTimer = null;
-      }
-      // 按钮显示中：触发隐藏计时器
-      if (showScrollButtons.value) {
-        if (hideTimer) clearTimeout(hideTimer);
-        hideTimer = setTimeout(() => {
-          showScrollButtons.value = false;
-          hideTimer = null;
-        }, HIDE_DELAY);
+      if (btnState === 'visible') {
+        hideButtons();
       }
     };
 
-    // 鼠标进入按钮
+    // 鼠标进入按钮：保持显示
     const handleButtonMouseEnter = () => {
-      isButtonHovered.value = true;
-      // 清除隐藏计时器，按钮保持显示
-      if (hideTimer) {
-        clearTimeout(hideTimer);
-        hideTimer = null;
-      }
+      isOnButton = true;
+      keepButtons();
     };
 
-    // 鼠标离开按钮
+    // 鼠标离开按钮：触发隐藏
     const handleButtonMouseLeave = () => {
-      isButtonHovered.value = false;
-      // 重新触发隐藏计时器
-      if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = setTimeout(() => {
-        showScrollButtons.value = false;
-        hideTimer = null;
-      }, HIDE_DELAY);
+      isOnButton = false;
+      if (btnState === 'visible') {
+        hideButtons();
+      }
     };
 
     const scrollTable = (direction) => {
