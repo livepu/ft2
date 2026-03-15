@@ -553,7 +553,7 @@ const FtTable = {
 
     const scrollTable = (direction) => {
       if (!tableContainer.value) return;
-      const scrollAmount = 200;
+      const scrollAmount = 120;
       if (direction === 'left') {
         tableContainer.value.scrollLeft -= scrollAmount;
       } else {
