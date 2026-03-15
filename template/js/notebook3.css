@@ -23,10 +23,6 @@ body {
     color: #333;
 }
 
-.notebook-wrapper {
-    line-height: 1.6;
-}
-
 /* ========== 保护 ECharts 不被全局样式影响 ========== */
 /* 只针对 ECharts 图表容器，不影响 tooltip */
 [class*='echarts-instance'],
@@ -84,13 +80,6 @@ body {
         opacity: 1;
         transform: translateY(0);
     }
-}
-
-/* TOC 面板宽度 + 间距 */
-:root {
-    --toc-width: 200px;
-    --toc-gap: 20px;
-    --container-max-width: 900px;
 }
 
 /* ========== 布局架构：左侧浮动菜单 + 主体内容 ========== */
@@ -335,9 +324,7 @@ body {
     }
     
     .toc-float-menu.expanded {
-        position: fixed;
         bottom: 80px;
-        left: 20px;
         width: 280px;
         max-height: 60vh;
     }
