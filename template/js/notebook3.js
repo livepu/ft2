@@ -729,21 +729,22 @@ function createNotebookApp() {
             // 配色选择面板
             const showColorPicker = ref(false);
             
-            // 目录收起状态（小屏幕/底部固定时）
-            const tocCollapsed = ref(true);
+            // 目录展开状态（新版左侧浮动菜单）
+            const menuExpanded = ref(false);
             
-            // 是否移动端视图（≤768px）
-            const isMobileView = ref(false);
+            // 是否窄屏模式（≤1200px）
+            const isNarrow = ref(false);
             
             // 检测屏幕宽度
             const checkScreenWidth = () => {
-                isMobileView.value = window.innerWidth <= 768;
-                console.log('Screen width:', window.innerWidth, 'isMobileView:', isMobileView.value);
-                // 桌面端自动展开目录，移动端自动收起
-                if (!isMobileView.value) {
-                    tocCollapsed.value = false;
+                const width = window.innerWidth;
+                isNarrow.value = width <= 1200;
+                console.log('Screen width:', width, 'isNarrow:', isNarrow.value);
+                // 宽屏自动展开，窄屏自动收起
+                if (!isNarrow.value) {
+                    menuExpanded.value = true;
                 } else {
-                    tocCollapsed.value = true;
+                    menuExpanded.value = false;
                 }
             };
             
@@ -1062,10 +1063,6 @@ function createNotebookApp() {
                 console.log('Notebook Vue3 应用已加载');
                 // 初始化屏幕宽度检测
                 checkScreenWidth();
-                // 移动端默认收起目录
-                if (isMobileView.value) {
-                    tocCollapsed.value = true;
-                }
                 // 监听窗口大小变化
                 window.addEventListener('resize', checkScreenWidth);
             });
@@ -1075,9 +1072,9 @@ function createNotebookApp() {
                 window.removeEventListener('resize', checkScreenWidth);
             });
 
-            // 切换目录收起状态
-            const toggleToc = () => {
-                tocCollapsed.value = !tocCollapsed.value;
+            // 切换菜单展开/收起状态
+            const toggleMenu = () => {
+                menuExpanded.value = !menuExpanded.value;
             };
 
             return {
@@ -1102,10 +1099,10 @@ function createNotebookApp() {
                 toggleColorPicker,
                 setColorPalette,
                 updateChartColors,
-                // 目录收起
-                tocCollapsed,
-                toggleToc,
-                isMobileView
+                // 目录菜单
+                menuExpanded,
+                toggleMenu,
+                isNarrow
             };
         }
     });
