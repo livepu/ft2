@@ -47,13 +47,13 @@
                 </div>
                 
                 <!-- 窄屏状态 - 显示首字，点击展开 -->
-                <div class="menu-narrow" @click="toggleMenu" title="展开目录">
-                    <div class="collapsed-header">📑</div>
+                <div class="menu-narrow">
+                    <div class="collapsed-header" @click="toggleMenu" title="展开目录">📑</div>
                     <ul class="collapsed-list">
                         <li v-for="(item, index) in tocItems" :key="index" 
                             class="collapsed-item"
                             :class="{ selected: isSelected(item.index) }"
-                            @click.stop="scrollToSection(item.index)"
+                            @click="scrollToSection(item.index)"
                             :title="item.title">
                             {{ item.title.charAt(0) }}
                         </li>
