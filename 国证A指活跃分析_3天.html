@@ -103,6 +103,12 @@
                                 class="palette-btn"
                                 :class="{ active: colorPalettes.global === key }"
                                 @click="setColorPalette('global', key)">
+                            <div class="palette-preview">
+                                <span v-for="(color, idx) in palette.colors.slice(0, 5)" 
+                                      :key="idx"
+                                      class="palette-color-dot" 
+                                      :style="{ backgroundColor: color }"></span>
+                            </div>
                             <span class="palette-name">{{ palette.name }}</span>
                         </button>
                     </div>

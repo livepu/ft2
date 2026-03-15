@@ -99,6 +99,8 @@ body {
     justify-content: center;
     padding: 20px;
     gap: 20px;
+    max-width: 100vw;
+    box-sizing: border-box;
 }
 
 .notebook-container {
@@ -121,6 +123,7 @@ body {
     z-index: 1000;
     overflow: hidden;
     transition: width 0.3s ease;
+    flex-shrink: 0;
 }
 
 .toc-float-menu.expanded {
@@ -679,11 +682,13 @@ body {
 
 .pie-wrapper {
     overflow: hidden;
+    max-width: 100%;
 }
 
 .pie-wrapper .chart-container {
     float: left;
     width: calc(100% - 160px) !important;
+    max-width: 100%;
 }
 
 .pie-control {
@@ -721,11 +726,13 @@ body {
 
 .heatmap-wrapper {
     overflow: hidden;
+    max-width: 100%;
 }
 
 .heatmap-wrapper .chart-container {
     float: left;
     width: calc(100% - 110px) !important;
+    max-width: 100%;
 }
 
 .heatmap-control {
@@ -949,21 +956,27 @@ body {
 
 .color-drawer {
     position: fixed;
-    top: 0;
-    right: 0;
-    width: 320px;
-    height: 100vh;
+    bottom: 80px;
+    right: 20px;
+    width: 280px;
+    height: auto;
+    max-height: 70vh;
     background: #fff;
-    box-shadow: -2px 0 20px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
     z-index: 1005;
-    transform: translateX(100%);
-    transition: transform 0.3s ease;
+    transform: translateY(20px);
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
+    border-radius: 12px;
 }
 
 .color-drawer.open {
-    transform: translateX(0);
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
 }
 
 .drawer-header {
@@ -1123,6 +1136,10 @@ body {
     }
     
     .color-drawer {
-        width: 100%;
+        bottom: 80px;
+        right: 20px;
+        width: calc(100vw - 40px);
+        max-width: 280px;
+        max-height: 60vh;
     }
 }
