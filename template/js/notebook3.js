@@ -736,15 +736,17 @@ function createNotebookApp() {
             const isNarrow = ref(false);
             
             // 检测屏幕宽度
-            const checkScreenWidth = () => {
+            const checkScreenWidth = (autoExpand = false) => {
                 const width = window.innerWidth;
                 isNarrow.value = width <= 1200;
                 console.log('Screen width:', width, 'isNarrow:', isNarrow.value);
-                // 宽屏自动展开，窄屏自动收起
-                if (!isNarrow.value) {
-                    menuExpanded.value = true;
-                } else {
-                    menuExpanded.value = false;
+                // 只在初始化时自动展开/收起，resize时不强制覆盖用户手动设置
+                if (autoExpand) {
+                    if (!isNarrow.value) {
+                        menuExpanded.value = true;
+                    } else {
+                        menuExpanded.value = false;
+                    }
                 }
             };
             
@@ -1061,15 +1063,15 @@ function createNotebookApp() {
 
             onMounted(() => {
                 console.log('Notebook Vue3 应用已加载');
-                // 初始化屏幕宽度检测
-                checkScreenWidth();
-                // 监听窗口大小变化
-                window.addEventListener('resize', checkScreenWidth);
+                // 初始化屏幕宽度检测（自动展开）
+                checkScreenWidth(true);
+                // 监听窗口大小变化（不自动展开，只更新isNarrow）
+                window.addEventListener('resize', () => checkScreenWidth(false));
             });
 
             onUnmounted(() => {
                 // 移除resize监听
-                window.removeEventListener('resize', checkScreenWidth);
+                window.removeEventListener('resize', () => checkScreenWidth(false));
             });
 
             // 切换菜单展开/收起状态
