@@ -1075,6 +1075,10 @@ function createNotebookApp() {
             // 切换菜单展开/收起状态
             const toggleMenu = () => {
                 menuExpanded.value = !menuExpanded.value;
+                // 菜单展开/收起后，触发窗口resize事件让ECharts自适应
+                setTimeout(() => {
+                    window.dispatchEvent(new Event('resize'));
+                }, 350); // 等待CSS过渡动画完成
             };
 
             return {
