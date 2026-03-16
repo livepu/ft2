@@ -1,5 +1,5 @@
 /**
- * FT Table Component v1.5.20260313-1
+ * FT Table Component v1.5.20260316-2
  * 版本号说明：主版本。次版本。日期（YYYYMMDD）-修订号
  * */
 
@@ -36,6 +36,10 @@ const FtTable = {
       default: '暂无数据'
     },
     resetPage: {
+      type: Boolean,
+      default: true
+    },
+    scrollButton: {
       type: Boolean,
       default: true
     }
@@ -497,7 +501,7 @@ const FtTable = {
 
     // 鼠标进入表格：启动显示计时
     const handleTableMouseEnter = (e) => {
-      if (!hasHorizontalScroll.value) return;
+      if (!props.scrollButton || !hasHorizontalScroll.value) return;
       lastMousePos = { x: e.clientX, y: e.clientY };
       if (btnState === 'waiting') {
         scrollButtonPos.value = { x: e.clientX, y: e.clientY };
@@ -508,6 +512,7 @@ const FtTable = {
 
     // 鼠标在表格内移动
     const handleTableMouseMove = (e) => {
+      if (!props.scrollButton) return;
       // 计算移动距离
       const dx = e.clientX - lastMousePos.x;
       const dy = e.clientY - lastMousePos.y;
@@ -885,6 +890,7 @@ const FtTable = {
       visiblePages,
       showScrollButtons,
       scrollButtonPos,
+      scrollButton: props.scrollButton,
       handleButtonMouseEnter,
       handleButtonMouseLeave,
       handleTableMouseMove,
@@ -964,7 +970,7 @@ const FtTable = {
       
       <!-- 悬停3秒后显示的滚动按钮（仅当有横向滚动时显示） -->
       <div 
-        v-if="hasHorizontalScroll"
+        v-if="hasHorizontalScroll && scrollButton"
         class="ft-table-scroll-float" 
         :class="{ visible: showScrollButtons }"
         :style="{ left: scrollButtonPos.x + 'px', top: scrollButtonPos.y + 'px' }"
