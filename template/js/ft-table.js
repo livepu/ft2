@@ -49,14 +49,13 @@ const FtTable = {
     const { ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
     
     // ========== 响应式数据 ==========
-    // page 参数默认启用分页，设为 false 禁用
     const pageConfig = computed(() => {
       if (props.page === false) return false;
       return props.page || props.pagination;
     });
     
     const currentPage = ref(1);
-    const pageSize = ref(pageConfig.value?.size || pageConfig.value?.pageSize || 10);
+    const pageSize = ref(props.page?.size || props.pagination?.size || props.page?.pageSize || props.pagination?.pageSize || 10);
     const multiSort = ref([]);
     const tableContainer = ref(null);
     const resizeObserver = ref(null);
@@ -315,7 +314,7 @@ const FtTable = {
 
     // 分页选项
     const pageSizeOptions = computed(() => {
-      return pageConfig.value?.options || pageConfig.value?.pageSizeOptions || [10, 20, 50, 100];
+      return props.page?.options || props.pagination?.options || props.page?.pageSizeOptions || props.pagination?.pageSizeOptions || [10, 20, 50, 100];
     });
 
     // 生成显示的页码数组（首页 上一页 1 2 3 4 5 末页）

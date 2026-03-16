@@ -82,8 +82,6 @@ const CellRenderer = {
             // page 参数：默认启用分页，false 禁用
             if (cell.options?.page !== undefined) {
                 opts.page = cell.options.page;
-            } else if (cell.options?.pagination !== undefined) {
-                opts.pagination = cell.options.pagination;
             }
             
             return opts;
