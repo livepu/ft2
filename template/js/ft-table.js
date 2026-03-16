@@ -461,8 +461,8 @@ const FtTable = {
     let btnState = 'waiting';                  // 按钮状态：waiting | visible | hiding
     let isOnButton = false;                   // 鼠标是否在按钮上
     let lastMousePos = { x: 0, y: 0 };         // 上次鼠标位置
-    const HOVER_DELAY = 2000;                  // 悬停显示延迟（毫秒）
-    const HIDE_DELAY = 1500;                   // 隐藏延迟（毫秒）
+    const HOVER_DELAY = 1000;                  // 悬停显示延迟（毫秒）
+    const HIDE_DELAY = 600;                   // 隐藏延迟（毫秒）
     const MOVE_THRESHOLD = 25;                 // 移动阈值（像素）
 
     // 显示按钮
