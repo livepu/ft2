@@ -167,7 +167,7 @@ def on_bar(bar):
 </div>
     """)
     
-    nb.export_html("d:/01-Doc/程序化/ft2/test_comprehensive.html")
+    nb.export_html()
     print("输出: test_comprehensive.html")
 
 

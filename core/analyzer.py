@@ -394,6 +394,396 @@ class AccountAnalyzer:
         
         return (annualized - self.risk_free_rate) / vol
 
+    @metric(name='最大回撤', desc='历史最大亏损幅度', type='float', order=21)
+    def max_drawdown(self) -> Optional[Tuple[float, date, date]]:
+        """计算最大回撤"""
+        if not self._daily_assets:
+            return None
+        
+        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        
+        sliced_data = {
+            d: v for d, v in self._daily_assets.items()
+            if benchmark_date <= d <= end_date
+        }
+        
+        if not sliced_data:
+            return None
+        
+        dates = sorted(sliced_data.keys())
+        max_drawdown = 0
+        peak_value = sliced_data[dates[0]]
+        start_date_result = end_date_result = peak_date = dates[0]
+        
+        for current_date in dates:
+            current_value = sliced_data[current_date]
+            if current_value > peak_value:
+                peak_value = current_value
+                peak_date = current_date
+            drawdown = (peak_value - current_value) / peak_value
+            if drawdown > max_drawdown:
+                max_drawdown = drawdown
+                start_date_result = peak_date
+                end_date_result = current_date
+        
+        if max_drawdown == 0:
+            return None
+        return max_drawdown, start_date_result, end_date_result
+
+    @metric(name='VaR(95%)', desc='95% 置信度下的最大可能损失', type='float', order=22)
+    def var(self, confidence: float = 0.95) -> Optional[float]:
+        """计算风险价值"""
+        if not self._daily_assets:
+            return None
+        
+        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        
+        sliced_data = {
+            d: v for d, v in self._daily_assets.items()
+            if benchmark_date <= d <= end_date
+        }
+        
+        daily_returns = []
+        dates = sorted(sliced_data.keys())
+        for i in range(1, len(dates)):
+            prev = sliced_data[dates[i - 1]]
+            curr = sliced_data[dates[i]]
+            if prev != 0:
+                daily_returns.append((curr - prev) / prev)
+        
+        if len(daily_returns) < 2:
+            return None
+        
+        sorted_returns = sorted(daily_returns)
+        index = int((1 - confidence) * len(sorted_returns))
+        if index < 0:
+            index = 0
+        
+        return -sorted_returns[index]
+
+    @metric(name='CVaR(95%)', desc='超过 VaR 阈值的平均损失', type='float', order=23)
+    def cvar(self, confidence: float = 0.95) -> Optional[float]:
+        """计算条件风险价值"""
+        if not self._daily_assets:
+            return None
+        
+        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        
+        sliced_data = {
+            d: v for d, v in self._daily_assets.items()
+            if benchmark_date <= d <= end_date
+        }
+        
+        daily_returns = []
+        dates = sorted(sliced_data.keys())
+        for i in range(1, len(dates)):
+            prev = sliced_data[dates[i - 1]]
+            curr = sliced_data[dates[i]]
+            if prev != 0:
+                daily_returns.append((curr - prev) / prev)
+        
+        if len(daily_returns) < 2:
+            return None
+        
+        sorted_returns = sorted(daily_returns)
+        index = int((1 - confidence) * len(sorted_returns))
+        if index < 1:
+            index = 1
+        
+        tail_returns = sorted_returns[:index]
+        return -sum(tail_returns) / len(tail_returns)
+
+    @metric(name='Ulcer Index', desc='衡量回撤深度和持续时间的综合指标', type='float', order=24)
+    def ulcer_index(self) -> Optional[float]:
+        """计算溃疡指数"""
+        if not self._daily_assets:
+            return None
+        
+        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        
+        sliced_data = {
+            d: v for d, v in self._daily_assets.items()
+            if benchmark_date <= d <= end_date
+        }
+        
+        dates = sorted(sliced_data.keys())
+        if len(dates) < 2:
+            return None
+        
+        peak = sliced_data[dates[0]]
+        squared_drawdowns = []
+        
+        for current_date in dates:
+            value = sliced_data[current_date]
+            if value > peak:
+                peak = value
+            drawdown_pct = (peak - value) / peak * 100
+            squared_drawdowns.append(drawdown_pct ** 2)
+        
+        return math.sqrt(sum(squared_drawdowns) / len(squared_drawdowns))
+
+    @metric(name='索提诺比率', desc='只考虑下行风险的夏普比率改进版', type='float', order=31)
+    def sortino_ratio(self, risk_free_rate: float = 0.02) -> Optional[float]:
+        """计算索提诺比率"""
+        annualized_return = self.annualized_return()
+        if annualized_return is None:
+            return None
+        
+        if not self._daily_assets:
+            return None
+        
+        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        
+        sliced_data = {
+            d: v for d, v in self._daily_assets.items()
+            if benchmark_date <= d <= end_date
+        }
+        
+        daily_returns = []
+        dates = sorted(sliced_data.keys())
+        for i in range(1, len(dates)):
+            prev = sliced_data[dates[i - 1]]
+            curr = sliced_data[dates[i]]
+            if prev != 0:
+                daily_returns.append((curr - prev) / prev)
+        
+        if len(daily_returns) < 2:
+            return None
+        
+        negative_returns = [r for r in daily_returns if r < 0]
+        if not negative_returns:
+            return float('inf')
+        
+        downside_variance = sum(r ** 2 for r in negative_returns) / len(daily_returns)
+        downside_deviation = math.sqrt(downside_variance)
+        annualized_downside_deviation = downside_deviation * math.sqrt(252)
+        
+        if annualized_downside_deviation == 0:
+            return float('inf')
+        
+        return (annualized_return - risk_free_rate) / annualized_downside_deviation
+
+    @metric(name='UPI', desc='用溃疡指数调整的风险收益比', type='float', order=32)
+    def upi(self, risk_free_rate: float = 0.02) -> Optional[float]:
+        """计算 Ulcer Performance Index"""
+        annualized_return = self.annualized_return()
+        ulcer_idx = self.ulcer_index()
+        
+        if annualized_return is None or ulcer_idx is None or ulcer_idx == 0:
+            return None
+        
+        return (annualized_return - risk_free_rate) / (ulcer_idx / 100)
+
+    @metric(name='胜率', desc='盈利交易次数占总交易次数的比例', type='float', order=40)
+    def win_rate(self) -> Optional[float]:
+        """计算胜率"""
+        if not self._trade_profits:
+            return None
+        
+        if self._current_range is not None:
+            benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+            
+            sliced_data = {
+                d: v for d, v in self._daily_assets.items()
+                if start_date <= d <= end_date
+            }
+            
+            if not sliced_data:
+                return None
+            
+            actual_start = min(sliced_data.keys())
+            actual_end = max(sliced_data.keys())
+            
+            filtered_trades = [
+                t for t in self._trade_profits
+                if actual_start <= t['close_time'].date() <= actual_end
+            ]
+            
+            if not filtered_trades:
+                return None
+            
+            trades_to_calc = filtered_trades
+        else:
+            trades_to_calc = self._trade_profits
+        
+        wins = sum(1 for t in trades_to_calc if t['profit'] > 0)
+        return wins / len(trades_to_calc)
+
+    def avg_profit(self, mode: str = 'amount') -> Optional[float]:
+        """
+        计算平均盈利
+        
+        Args:
+            mode: 计算模式
+                  - 'amount': 金额模式，计算平均盈利金额
+                  - 'percentage': 百分比模式，计算平均盈利占本金的比例
+            
+        Returns:
+            float: 平均盈利
+                  无盈利交易时返回 None
+        """
+        profitable_trades = [t for t in self._trade_profits if t['profit'] > 0]
+        if not profitable_trades:
+            return None
+        
+        if self._current_range is not None:
+            benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+            
+            sliced_data = {
+                d: v for d, v in self._daily_assets.items()
+                if start_date <= d <= end_date
+            }
+            
+            if not sliced_data:
+                return None
+            
+            actual_start = min(sliced_data.keys())
+            actual_end = max(sliced_data.keys())
+            
+            profitable_trades = [
+                t for t in profitable_trades
+                if actual_start <= t['close_time'].date() <= actual_end
+            ]
+            
+            if not profitable_trades:
+                return None
+        
+        if mode == 'amount':
+            profits = [t['profit'] for t in profitable_trades]
+        elif mode == 'percentage':
+            profits = [
+                t['profit'] / (abs(t['volume']) * t['open_price'])
+                for t in profitable_trades
+            ]
+        else:
+            raise ValueError("mode 必须是 'amount' 或 'percentage'")
+        
+        return sum(profits) / len(profits)
+
+    def avg_loss(self, mode: str = 'amount') -> Optional[float]:
+        """
+        计算平均亏损
+        
+        Args:
+            mode: 计算模式
+                  - 'amount': 金额模式，计算平均亏损金额
+                  - 'percentage': 百分比模式，计算平均亏损占本金的比例
+            
+        Returns:
+            float: 平均亏损（负数）
+                  无亏损交易时返回 None
+        """
+        loss_trades = [t for t in self._trade_profits if t['profit'] < 0]
+        if not loss_trades:
+            return None
+        
+        if self._current_range is not None:
+            benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+            
+            sliced_data = {
+                d: v for d, v in self._daily_assets.items()
+                if start_date <= d <= end_date
+            }
+            
+            if not sliced_data:
+                return None
+            
+            actual_start = min(sliced_data.keys())
+            actual_end = max(sliced_data.keys())
+            
+            loss_trades = [
+                t for t in loss_trades
+                if actual_start <= t['close_time'].date() <= actual_end
+            ]
+            
+            if not loss_trades:
+                return None
+        
+        if mode == 'amount':
+            losses = [t['profit'] for t in loss_trades]
+        elif mode == 'percentage':
+            losses = [
+                t['profit'] / (abs(t['volume']) * t['open_price'])
+                for t in loss_trades
+            ]
+        else:
+            raise ValueError("mode 必须是 'amount' 或 'percentage'")
+        
+        return sum(losses) / len(losses)
+
+    @metric(name='平均盈亏比', desc='平均盈利与平均亏损的比值', type='float', order=41)
+    def avg_profit_loss_ratio(self) -> Optional[float]:
+        """计算平均盈亏比"""
+        avg_profit = self.avg_profit()
+        avg_loss = self.avg_loss()
+        
+        if avg_profit is None or avg_loss is None or avg_loss == 0:
+            return None
+        
+        return abs(avg_profit / avg_loss)
+
+    @metric(name='平均持仓时间', desc='所有交易的平均持仓天数', type='float', order=42)
+    def avg_holding_period(self) -> Optional[float]:
+        """计算平均持仓时间"""
+        if not self._trade_profits:
+            return None
+        
+        if self._current_range is not None:
+            benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+            
+            sliced_data = {
+                d: v for d, v in self._daily_assets.items()
+                if start_date <= d <= end_date
+            }
+            
+            if not sliced_data:
+                return None
+            
+            actual_start = min(sliced_data.keys())
+            actual_end = max(sliced_data.keys())
+            
+            filtered_trades = [
+                t for t in self._trade_profits
+                if actual_start <= t['close_time'].date() <= actual_end
+            ]
+            
+            if not filtered_trades:
+                return None
+            
+            trades_to_calc = filtered_trades
+        else:
+            trades_to_calc = self._trade_profits
+        
+        total_days = sum((t['close_time'] - t['open_time']).days for t in trades_to_calc)
+        return total_days / len(trades_to_calc)
+
+    @metric(name='凯利公式最优仓位', desc='根据胜率和盈亏比计算的最优仓位比例', type='float', order=50)
+    def kelly_criterion(self) -> Optional[float]:
+        """计算凯利公式最优仓位"""
+        if not self._trade_profits:
+            return None
+        
+        win_rate_val = self.win_rate()
+        if win_rate_val is None:
+            return None
+        
+        avg_profit = self.avg_profit()
+        avg_loss = self.avg_loss()
+        
+        if avg_profit is None or avg_loss is None or avg_loss == 0:
+            return None
+        
+        profit_loss_ratio = abs(avg_profit / avg_loss)
+        return win_rate_val - (1 - win_rate_val) / profit_loss_ratio
+
+    @metric(name='半凯利仓位', desc='凯利公式最优仓位的50%', type='float', order=51)
+    def kelly_fraction(self, fraction: float = 0.5) -> Optional[float]:
+        """计算凯利分数仓位"""
+        kelly = self.kelly_criterion()
+        if kelly is None:
+            return None
+        return kelly * fraction
+
     def _collect_metrics(self) -> Dict:
         """收集所有 @metric 装饰器标记的方法"""
         metrics = {}
@@ -435,746 +825,6 @@ class AccountAnalyzer:
             self._current_range = original_range
         
         return result
-
-    # ------------------------------------------------------------------------
-    # 收益指标
-    # ------------------------------------------------------------------------
-
-    def calc_return_rate(self, time_range: TimeRange = None) -> float:
-        """
-        计算累计收益率
-        
-        计算公式：(期末资产 - 基准资产) / 基准资产
-        
-        基准日标准（与掘金量化、同花顺等一致）：
-            - 不传 time_range：基准日 = date[0]，计算区间 = date[1] 到 end
-            - 传入 time_range：基准日 = 区间起点的前一交易日，计算区间 = start 到 end
-        
-        Args:
-            time_range: TimeRange 对象，指定统计区间。
-                       None 表示使用全部数据（从第一个交易日到最后一个交易日）
-            
-        Returns:
-            float: 收益率（小数形式，如 0.15 表示 15%）
-                  数据不足时返回 None
-            
-        Raises:
-            ValueError: 当基准资产为零时抛出
-            
-        Example:
-            >>> analyzer.calc_return_rate()  # 全部区间
-            >>> analyzer.calc_return_rate(TimeRange(period='3m'))  # 最近 3 个月
-            >>> analyzer.calc_return_rate(TimeRange(start=date(2024,1,1), end=date(2024,3,31)))
-        """
-        # 获取包含基准日的数据
-        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
-        if len(sliced_data) < 2:
-            return None
-
-        dates = sorted(sliced_data.keys())
-        # 第一个日期是基准日
-        benchmark_value = sliced_data[dates[0]]
-        # 最后一个日期是终点
-        end_value = sliced_data[dates[-1]]
-        
-        if benchmark_value == 0:
-            raise ValueError("基准资产不能为零")
-        
-        value = (end_value - benchmark_value) / benchmark_value
-        self._metrics['calc_return_rate'] = {'name': '累计收益率', 'value': value, 'order': 10, 'desc': '统计期间内的总收益率'}
-        return value
-
-    def calc_annualized_return(self, time_range: TimeRange = None) -> float:
-        """
-        计算年化收益率
-        
-        将统计期间的收益率换算为年化基准，便于不同期限收益的比较
-        
-        计算公式：(1 + 期间收益率) ^ (365 / 持仓天数) - 1
-        
-        基准日标准：与 calc_return_rate 一致
-        
-        Args:
-            time_range: TimeRange 对象，指定统计区间
-            
-        Returns:
-            float: 年化收益率（小数形式）
-                  数据不足时返回 None
-            
-        Raises:
-            ValueError: 当亏损超过 100% 时无法计算年化
-            
-        Example:
-            >>> analyzer.calc_annualized_return(TimeRange(period='1y'))
-        """
-        interval_return = self.calc_return_rate(time_range)
-        if interval_return is None:
-            return None
-
-        # 获取包含基准日的数据，计算实际持仓天数
-        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
-        dates = sorted(sliced_data.keys())
-        # 持仓天数：从基准日到最后一天
-        days = (dates[-1] - dates[0]).days
-        
-        if days == 0:
-            value = 0
-        elif interval_return <= -1:
-            raise ValueError("亏损超过 100%，无法计算年化收益率")
-        else:
-            value = ((1 + interval_return) ** (365 / days)) - 1
-        self._metrics['calc_annualized_return'] = {'name': '年化收益率', 'value': value, 'order': 11, 'desc': '将收益率换算为年化基准'}
-        return value
-
-    # ------------------------------------------------------------------------
-    # 风险指标
-    # ------------------------------------------------------------------------
-
-    def calc_volatility(self, time_range: TimeRange = None) -> float:
-        """
-        计算年化波动率
-        
-        波动率衡量资产价格的波动程度，是风险的重要指标
-        
-        计算公式：日收益率标准差 × √252（年化因子）
-        
-        基准日标准：使用包含基准日的数据计算日收益率
-        
-        Args:
-            time_range: TimeRange 对象，指定统计区间
-            
-        Returns:
-            float: 年化波动率（小数形式，如 0.2 表示 20%）
-                  数据不足时返回 None
-            
-        Raises:
-            ValueError: 至少需要 2 个数据点才能计算
-            
-        Example:
-            >>> analyzer.calc_volatility(TimeRange(period='6m'))
-        """
-        # 获取包含基准日的数据
-        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
-        if len(sliced_data) < 2:
-            return None
-
-        daily_returns = self._calculate_daily_returns(sliced_data)
-
-        if len(daily_returns) < 2:
-            raise ValueError("至少需要 2 个数据点计算波动率")
-        mean_return = sum(daily_returns) / len(daily_returns)
-        variance = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns)
-        daily_volatility = math.sqrt(variance)
-        value = daily_volatility * math.sqrt(252)
-        self._metrics['calc_volatility'] = {'name': '年化波动率', 'value': value, 'order': 20}
-        return value
-
-    def calc_max_drawdown(self, time_range: TimeRange = None) -> Tuple[float, date, date]:
-        """
-        计算最大回撤
-        
-        最大回撤是历史上从最高点下跌的最大幅度，反映最坏情况下的亏损程度
-        
-        计算方法：遍历所有交易日，记录峰值，计算当前值相对峰值的下跌幅度
-        
-        基准日标准：使用包含基准日的数据计算
-        
-        Args:
-            time_range: TimeRange 对象，指定统计区间
-                       None 表示使用全部数据
-            
-        Returns:
-            Tuple[float, date, date]: 
-                - 最大回撤比例（小数形式，如 0.3 表示 30%）
-                - 回撤开始日期（峰值日期）
-                - 回撤结束日期（最低点日期）
-                如果无回撤数据，返回 (0, None, None)
-            
-        Example:
-            >>> drawdown, start, end = analyzer.calc_max_drawdown()
-            >>> print(f"最大回撤：{drawdown:.2%}，从{start}到{end}")
-            >>> 
-            >>> # 计算最近 6 个月的最大回撤
-            >>> drawdown, start, end = analyzer.calc_max_drawdown(TimeRange(period='6m'))
-        """
-        # 使用 _slice_data_by_range 处理时间区间（包含基准日）
-        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
-        if not sliced_data:
-            return 0, None, None
-
-        dates = sorted(sliced_data.keys())
-        max_drawdown = 0
-        peak_value = sliced_data[dates[0]]
-        start_date = end_date = peak_date = dates[0]
-
-        for current_date in dates:
-            current_value = sliced_data[current_date]
-            if current_value > peak_value:
-                peak_value = current_value
-                peak_date = current_date
-            drawdown = (peak_value - current_value) / peak_value
-            if drawdown > max_drawdown:
-                max_drawdown = drawdown
-                start_date = peak_date
-                end_date = current_date
-        if max_drawdown == 0:
-            return 0, None, None
-        self._metrics['calc_max_drawdown'] = {
-            'name': '最大回撤', 
-            'value': max_drawdown,
-            'start': start_date,
-            'end': end_date,
-            'order': 21,
-            'desc': '历史最大亏损幅度'
-        }
-        return max_drawdown, start_date, end_date
-
-    def calc_var(self, confidence: float = 0.95, time_range: TimeRange = None) -> float:
-        """
-        计算风险价值 (Value at Risk, VaR)
-        
-        VaR 表示在给定置信水平下的最大可能损失，是常用的风险度量指标
-        
-        计算方法：历史模拟法，取日收益率分布的分位数
-        
-        基准日标准：使用包含基准日的数据计算日收益率
-        
-        Args:
-            confidence: 置信水平，默认 0.95（95%）
-                       表示 95% 的情况下损失不会超过 VaR 值
-            time_range: TimeRange 对象，指定统计区间
-            
-        Returns:
-            float: VaR 值（正数，表示最大可能损失的比例）
-                  数据不足时返回 None
-            
-        Example:
-            >>> analyzer.calc_var(confidence=0.95)  # 95% 置信度
-        """
-        # 获取包含基准日的数据
-        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
-        daily_returns = self._calculate_daily_returns(sliced_data)
-
-        if len(daily_returns) < 2:
-            return None
-
-        sorted_returns = sorted(daily_returns)
-        index = int((1 - confidence) * len(sorted_returns))
-        if index < 0:
-            index = 0
-
-        var = -sorted_returns[index]
-        self._metrics['calc_var'] = {'name': 'VaR(95%)', 'value': var, 'order': 22, 'desc': '95% 置信度下的最大可能损失'}
-        return var
-
-    def calc_cvar(self, confidence: float = 0.95, time_range: TimeRange = None) -> float:
-        """
-        计算条件风险价值 (Conditional VaR, CVaR)
-        
-        CVaR 是超过 VaR 阈值的平均损失，比 VaR 更能反映极端风险
-        
-        计算方法：取收益率分布尾部（最差情况）的平均值
-        
-        基准日标准：使用包含基准日的数据计算日收益率
-        
-        Args:
-            confidence: 置信水平，默认 0.95（95%）
-                       计算最差的 5% 情况的平均损失
-            time_range: TimeRange 对象，指定统计区间
-            
-        Returns:
-            float: CVaR 值（正数，表示极端情况下的平均损失）
-                  数据不足时返回 None
-            
-        Example:
-            >>> analyzer.calc_cvar(confidence=0.95)  # 尾部 5% 的平均损失
-        """
-        # 获取包含基准日的数据
-        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
-        daily_returns = self._calculate_daily_returns(sliced_data)
-
-        if len(daily_returns) < 2:
-            return None
-
-        sorted_returns = sorted(daily_returns)
-        index = int((1 - confidence) * len(sorted_returns))
-        if index < 1:
-            index = 1
-
-        tail_returns = sorted_returns[:index]
-        cvar = -sum(tail_returns) / len(tail_returns)
-        self._metrics['calc_cvar'] = {'name': 'CVaR(95%)', 'value': cvar, 'order': 23, 'desc': '超过 VaR 阈值的平均损失'}
-        return cvar
-
-    def calc_ulcer_index(self, time_range: TimeRange = None) -> float:
-        """
-        计算溃疡指数 (Ulcer Index)
-        
-        Ulcer Index 衡量回撤的深度和持续时间，综合反映投资痛苦程度
-        相比最大回撤，它考虑了回撤的持续时间
-        
-        计算方法：计算每个时点相对峰值的回撤百分比的平方平均再开方
-        
-        基准日标准：使用包含基准日的数据计算
-        
-        Args:
-            time_range: TimeRange 对象，指定统计区间
-            
-        Returns:
-            float: Ulcer Index 值（百分比形式，如 15 表示 15%）
-                  数据不足时返回 None
-            
-        Example:
-            >>> analyzer.calc_ulcer_index(TimeRange(period='1y'))
-        """
-        # 获取包含基准日的数据
-        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
-        dates = sorted(sliced_data.keys())
-
-        if len(dates) < 2:
-            return None
-
-        peak = sliced_data[dates[0]]
-        squared_drawdowns = []
-
-        for current_date in dates:
-            value = sliced_data[current_date]
-            if value > peak:
-                peak = value
-            drawdown_pct = (peak - value) / peak * 100
-            squared_drawdowns.append(drawdown_pct ** 2)
-
-        ulcer_index = math.sqrt(sum(squared_drawdowns) / len(squared_drawdowns))
-        self._metrics['calc_ulcer_index'] = {'name': 'Ulcer Index', 'value': ulcer_index, 'order': 24, 'desc': '衡量回撤深度和持续时间的综合指标'}
-        return ulcer_index
-
-    # ------------------------------------------------------------------------
-    # 风险调整收益指标
-    # ------------------------------------------------------------------------
-
-    def calc_sharpe_ratio(self, risk_free_rate: float = 0.02, time_range: TimeRange = None) -> float:
-        """
-        计算夏普比率 (Sharpe Ratio)
-        
-        夏普比率衡量每承担一单位风险所获得的超额收益，是最经典的风险调整收益指标
-        
-        计算公式：(年化收益率 - 无风险利率) / 年化波动率
-        
-        Args:
-            risk_free_rate: 无风险利率，默认 0.02（2%）
-                           通常使用国债收益率作为无风险利率
-            time_range: TimeRange 对象，指定统计区间
-            
-        Returns:
-            float: 夏普比率
-                  数据不足时返回 None
-                  比率越高，说明风险调整后的收益越好
-            
-        Example:
-            >>> analyzer.calc_sharpe_ratio(risk_free_rate=0.03)  # 使用 3% 无风险利率
-        """
-        annualized_return = self.calc_annualized_return(time_range)
-        volatility = self.calc_volatility(time_range)
-
-        if annualized_return is None or volatility is None:
-            return None
-
-        value = (annualized_return - risk_free_rate) / volatility
-        self._metrics['calc_sharpe_ratio'] = {'name': '夏普比率', 'value': value, 'order': 30, 'desc': '每承担一单位风险获得的超额收益'}
-        return value
-
-    def calc_sortino_ratio(self, risk_free_rate: float = 0.02, time_range: TimeRange = None) -> float:
-        """
-        计算索提诺比率 (Sortino Ratio)
-        
-        索提诺比率是夏普比率的改进版，只考虑下行风险（负收益的波动）
-        更适合评估不希望错过上涨机会的投资者
-        
-        计算公式：(年化收益率 - 无风险利率) / 下行标准差
-        
-        基准日标准：使用包含基准日的数据计算日收益率
-        
-        Args:
-            risk_free_rate: 无风险利率，默认 0.02（2%）
-            time_range: TimeRange 对象，指定统计区间
-            
-        Returns:
-            float: 索提诺比率
-                  数据不足时返回 None
-                  如果无负收益，返回无穷大（float('inf')）
-                  比率越高，说明下行风险调整后的收益越好
-            
-        Example:
-            >>> analyzer.calc_sortino_ratio()
-        """
-        annualized_return = self.calc_annualized_return(time_range)
-        if annualized_return is None:
-            return None
-
-        # 获取包含基准日的数据
-        sliced_data = self._slice_data_by_range(time_range, include_benchmark=True)
-        daily_returns = self._calculate_daily_returns(sliced_data)
-
-        if len(daily_returns) < 2:
-            return None
-
-        negative_returns = [r for r in daily_returns if r < 0]
-        if not negative_returns:
-            return float('inf')
-
-        downside_variance = sum(r ** 2 for r in negative_returns) / len(daily_returns)
-        downside_deviation = math.sqrt(downside_variance)
-        annualized_downside_deviation = downside_deviation * math.sqrt(252)
-
-        if annualized_downside_deviation == 0:
-            return float('inf')
-
-        value = (annualized_return - risk_free_rate) / annualized_downside_deviation
-        self._metrics['calc_sortino_ratio'] = {'name': '索提诺比率', 'value': value, 'order': 31, 'desc': '只考虑下行风险的夏普比率改进版'}
-        return value
-
-    def calc_upi(self, risk_free_rate: float = 0.02, time_range: TimeRange = None) -> float:
-        """
-        计算 Ulcer Performance Index (UPI)
-        
-        UPI 使用 Ulcer Index 代替波动率，衡量单位"痛苦"下的超额收益
-        比夏普比率更能反映投资者的真实感受
-        
-        计算公式：(年化收益率 - 无风险利率) / Ulcer Index
-        
-        Args:
-            risk_free_rate: 无风险利率，默认 0.02（2%）
-            time_range: TimeRange 对象，指定统计区间
-            
-        Returns:
-            float: UPI 值
-                  数据不足或 Ulcer Index 为 0 时返回 None
-                  值越高，说明单位痛苦下的收益越好
-            
-        Example:
-            >>> analyzer.calc_upi()
-        """
-        annualized_return = self.calc_annualized_return(time_range)
-        ulcer_index = self.calc_ulcer_index(time_range)
-
-        if annualized_return is None or ulcer_index is None or ulcer_index == 0:
-            return None
-
-        value = (annualized_return - risk_free_rate) / (ulcer_index / 100)
-        self._metrics['calc_upi'] = {'name': 'UPI', 'value': value, 'order': 32, 'desc': '用溃疡指数调整的风险收益比'}
-        return value
-
-    # ------------------------------------------------------------------------
-    # 交易分析指标
-    # ------------------------------------------------------------------------
-
-    def calc_win_rate(self, time_range: TimeRange = None) -> float:
-        """
-        计算胜率
-        
-        胜率是盈利交易次数占总交易次数的比例，反映交易策略的准确性
-        
-        计算公式：盈利交易次数 / 总交易次数
-        
-        基准日标准：根据 time_range 确定的区间过滤交易记录
-        
-        Args:
-            time_range: TimeRange 对象，指定统计区间
-                       None 表示使用全部交易记录
-            
-        Returns:
-            float: 胜率（小数形式，如 0.6 表示 60%）
-                  无交易记录时返回 None
-            
-        Example:
-            >>> analyzer.calc_win_rate()  # 全部交易
-            >>> analyzer.calc_win_rate(TimeRange(period='3m'))  # 最近 3 个月的交易
-        """
-        if not self._trade_profits:
-            return None
-        
-        # 如果指定了时间区间，需要过滤交易记录
-        if time_range is not None:
-            # 获取包含基准日的数据，确定实际计算区间
-            sliced_data = self._slice_data_by_range(time_range, include_benchmark=False)
-            if not sliced_data:
-                return None
-            start_date = min(sliced_data.keys())
-            end_date = max(sliced_data.keys())
-            # 过滤出在时间区间内平仓的交易
-            filtered_trades = [
-                t for t in self._trade_profits
-                if start_date <= t['close_time'].date() <= end_date
-            ]
-            if not filtered_trades:
-                return None
-            trades_to_calc = filtered_trades
-        else:
-            trades_to_calc = self._trade_profits
-        
-        wins = sum(1 for t in trades_to_calc if t['profit'] > 0)
-        value = wins / len(trades_to_calc)
-        self._metrics['calc_win_rate'] = {'name': '胜率', 'value': value, 'order': 40, 'desc': '盈利交易次数占总交易次数的比例'}
-        return value
-
-    def calc_avg_profit(self, mode: str = 'amount', time_range: TimeRange = None) -> float:
-        """
-        计算平均盈利
-        
-        统计所有盈利交易的平均值，可用于计算盈亏比
-        
-        基准日标准：根据 time_range 确定的区间过滤交易记录
-        
-        Args:
-            mode: 计算模式
-                  - 'amount': 金额模式，计算平均盈利金额
-                  - 'percentage': 百分比模式，计算平均盈利占本金的比例
-            time_range: TimeRange 对象，指定统计区间
-                       None 表示使用全部交易记录
-            
-        Returns:
-            float: 平均盈利
-                  无盈利交易时返回 None
-            
-        Example:
-            >>> analyzer.calc_avg_profit(mode='amount')  # 平均盈利金额
-            >>> analyzer.calc_avg_profit(mode='percentage')  # 平均盈利百分比
-            >>> analyzer.calc_avg_profit(time_range=TimeRange(period='3m'))  # 最近 3 个月
-        """
-        profitable_trades = [t for t in self._trade_profits if t['profit'] > 0]
-        if not profitable_trades:
-            return None
-
-        # 如果指定了时间区间，需要过滤交易记录
-        if time_range is not None:
-            # 获取包含基准日的数据，确定实际计算区间
-            sliced_data = self._slice_data_by_range(time_range, include_benchmark=False)
-            if not sliced_data:
-                return None
-            start_date = min(sliced_data.keys())
-            end_date = max(sliced_data.keys())
-            profitable_trades = [
-                t for t in profitable_trades
-                if start_date <= t['close_time'].date() <= end_date
-            ]
-            if not profitable_trades:
-                return None
-
-        if mode == 'amount':
-            profits = [t['profit'] for t in profitable_trades]
-        elif mode == 'percentage':
-            profits = [
-                t['profit'] / (abs(t['volume']) * t['open_price'])
-                for t in profitable_trades
-            ]
-        else:
-            raise ValueError("mode 必须是 'amount' 或 'percentage'")
-
-        return sum(profits) / len(profits)
-
-    def calc_avg_loss(self, mode: str = 'amount', time_range: TimeRange = None) -> float:
-        """
-        计算平均亏损
-        
-        统计所有亏损交易的平均值，可用于计算盈亏比
-        
-        基准日标准：根据 time_range 确定的区间过滤交易记录
-        
-        Args:
-            mode: 计算模式
-                  - 'amount': 金额模式，计算平均亏损金额
-                  - 'percentage': 百分比模式，计算平均亏损占本金的比例
-            time_range: TimeRange 对象，指定统计区间
-                       None 表示使用全部交易记录
-            
-        Returns:
-            float: 平均亏损（负数）
-                  无亏损交易时返回 None
-            
-        Example:
-            >>> analyzer.calc_avg_loss(mode='amount')  # 平均亏损金额
-            >>> analyzer.calc_avg_loss(time_range=TimeRange(period='6m'))  # 最近 6 个月
-        """
-        loss_trades = [t for t in self._trade_profits if t['profit'] < 0]
-        if not loss_trades:
-            return None
-
-        # 如果指定了时间区间，需要过滤交易记录
-        if time_range is not None:
-            # 获取包含基准日的数据，确定实际计算区间
-            sliced_data = self._slice_data_by_range(time_range, include_benchmark=False)
-            if not sliced_data:
-                return None
-            start_date = min(sliced_data.keys())
-            end_date = max(sliced_data.keys())
-            loss_trades = [
-                t for t in loss_trades
-                if start_date <= t['close_time'].date() <= end_date
-            ]
-            if not loss_trades:
-                return None
-
-        if mode == 'amount':
-            losses = [t['profit'] for t in loss_trades]
-        elif mode == 'percentage':
-            losses = [
-                t['profit'] / (abs(t['volume']) * t['open_price'])
-                for t in loss_trades
-            ]
-        else:
-            raise ValueError("mode 必须是 'amount' 或 'percentage'")
-
-        return sum(losses) / len(losses)
-
-    def calc_avg_profit_loss_ratio(self, mode: str = 'amount', time_range: TimeRange = None) -> float:
-        """
-        计算平均盈亏比
-        
-        盈亏比是平均盈利与平均亏损的比值，反映策略的盈利能力
-        比值大于 1 表示盈利时赚的钱多于亏损时赔的钱
-        
-        计算公式：|平均盈利 / 平均亏损|
-        
-        Args:
-            mode: 计算模式
-                  - 'amount': 金额模式
-                  - 'percentage': 百分比模式
-            time_range: TimeRange 对象，指定统计区间
-                       None 表示使用全部交易记录
-            
-        Returns:
-            float: 平均盈亏比
-                  数据不足时返回 None
-            
-        Example:
-            >>> analyzer.calc_avg_profit_loss_ratio()  # 通常使用金额模式
-            >>> analyzer.calc_avg_profit_loss_ratio(time_range=TimeRange(period='1y'))  # 最近 1 年
-        """
-        avg_profit = self.calc_avg_profit(mode, time_range)
-        avg_loss = self.calc_avg_loss(mode, time_range)
-
-        if avg_profit is None or avg_loss is None:
-            return None
-
-        value = abs(avg_profit / avg_loss)
-        self._metrics['calc_avg_profit_loss_ratio'] = {'name': '平均盈亏比', 'value': value, 'order': 41, 'desc': '平均盈利与平均亏损的比值'}
-        return value
-
-    def calc_avg_holding_period(self, time_range: TimeRange = None) -> float:
-        """
-        计算平均持仓时间
-        
-        统计所有交易的平均持仓天数，反映策略的交易频率
-        
-        计算公式：总持仓天数 / 交易次数
-        
-        基准日标准：根据 time_range 确定的区间过滤交易记录
-        
-        Args:
-            time_range: TimeRange 对象，指定统计区间
-                       None 表示使用全部交易记录
-            
-        Returns:
-            float: 平均持仓天数
-                  无交易记录时返回 None
-            
-        Example:
-            >>> analyzer.calc_avg_holding_period()  # 全部交易
-            >>> analyzer.calc_avg_holding_period(TimeRange(period='6m'))  # 最近 6 个月
-        """
-        if not self._trade_profits:
-            return None
-        
-        # 如果指定了时间区间，需要过滤交易记录
-        if time_range is not None:
-            # 获取包含基准日的数据，确定实际计算区间
-            sliced_data = self._slice_data_by_range(time_range, include_benchmark=False)
-            if not sliced_data:
-                return None
-            start_date = min(sliced_data.keys())
-            end_date = max(sliced_data.keys())
-            filtered_trades = [
-                t for t in self._trade_profits
-                if start_date <= t['close_time'].date() <= end_date
-            ]
-            if not filtered_trades:
-                return None
-            trades_to_calc = filtered_trades
-        else:
-            trades_to_calc = self._trade_profits
-        
-        total_days = sum((t['close_time'] - t['open_time']).days for t in trades_to_calc)
-        value = total_days / len(trades_to_calc)
-        self._metrics['calc_avg_holding_period'] = {'name': '平均持仓时间', 'value': value, 'order': 42}
-        return value
-
-    def calc_kelly_criterion(self, time_range: TimeRange = None) -> float:
-        """
-        计算凯利公式最优仓位
-        
-        凯利公式根据胜率和盈亏比计算最优仓位比例，最大化长期复利收益
-        
-        计算公式：Kelly = WinRate - (1 - WinRate) / ProfitLossRatio
-        
-        Args:
-            time_range: TimeRange 对象（暂未使用，保留用于接口统一）
-            
-        Returns:
-            float: 凯利最优仓位比例（小数形式，如 0.3 表示 30% 仓位）
-                  数据不足时返回 None
-                  负值表示不应参与该策略
-            
-        Example:
-            >>> analyzer.calc_kelly_criterion()
-            >>> # 结果解释：0.3 表示最优仓位为 30%
-        """
-        if not self._trade_profits:
-            return None
-
-        win_rate = self.calc_win_rate()
-        if win_rate is None:
-            return None
-
-        avg_profit = self.calc_avg_profit(mode='amount')
-        avg_loss = self.calc_avg_loss(mode='amount')
-
-        if avg_profit is None or avg_loss is None or avg_loss == 0:
-            return None
-
-        profit_loss_ratio = abs(avg_profit / avg_loss)
-
-        kelly = win_rate - (1 - win_rate) / profit_loss_ratio
-        self._metrics['calc_kelly_criterion'] = {'name': '凯利公式最优仓位', 'value': kelly, 'order': 50, 'desc': '根据胜率和盈亏比计算的最优仓位比例'}
-        return kelly
-
-    def calc_kelly_fraction(self, fraction: float = 0.5, time_range: TimeRange = None) -> float:
-        """
-        计算凯利分数仓位
-        
-        由于全凯利仓位波动较大，实践中常使用分数凯利（如半凯利）
-        在保留大部分收益的同时显著降低波动
-        
-        计算公式：仓位 = Kelly × fraction
-        
-        Args:
-            fraction: 凯利分数，默认 0.5（半凯利）
-                     常用值：0.5（半凯利）、0.25（四分之一凯利）
-            time_range: TimeRange 对象（暂未使用，保留用于接口统一）
-            
-        Returns:
-            float: 凯利分数仓位比例
-                  数据不足时返回 None
-            
-        Example:
-            >>> analyzer.calc_kelly_fraction(fraction=0.5)  # 半凯利仓位
-            >>> analyzer.calc_kelly_fraction(fraction=0.25)  # 四分之一凯利
-        """
-        kelly = self.calc_kelly_criterion(time_range)
-        if kelly is None:
-            return None
-        value = kelly * fraction
-        self._metrics['calc_kelly_fraction'] = {'name': '半凯利仓位', 'value': value, 'order': 51}
-        return value
 
     # ------------------------------------------------------------------------
     # 查询方法
@@ -1256,7 +906,7 @@ class AccountAnalyzer:
         导出 HTML 回测报告
         
         生成包含所有指标、每日资产曲线、交易记录的 HTML 报告
-        自动调用所有 calc_ 方法计算指标，并按 order 排序
+        使用新架构的 @metric 装饰器方法计算指标
         
         Args:
             report_name: 报告名称，用于生成文件名
@@ -1287,17 +937,18 @@ class AccountAnalyzer:
             >>> # 导出到指定目录
             >>> analyzer.export_html("年度报告", output_dir="reports/2024")
         """
-        for name in dir(self):
-            if name.startswith('calc_'):
-                method = getattr(self, name)
-                if callable(method):
-                    try:
-                        method(time_range=time_range)
-                    except Exception:
-                        pass
-
-        initial_cash = self.account.snapshots[0].cash if self.account.snapshots else 0
-        final_assets = self.account.snapshots[-1].nav if self.account.snapshots else 0
+        if time_range is not None:
+            if time_range.period:
+                self.range(time_range.period)
+            else:
+                self.range(time_range.start, time_range.end)
+        else:
+            self._current_range = None
+        
+        collected_metrics = self.metrics()
+        
+        initial_cash = self.account.snapshots[0].cash if self.account and self.account.snapshots else 0
+        final_assets = self.account.snapshots[-1].nav if self.account and self.account.snapshots else 0
 
         dates = sorted(self._daily_assets.keys())
         start_date = dates[1] if len(dates) > 1 else None
@@ -1309,12 +960,17 @@ class AccountAnalyzer:
             {"name": "初始资金", "value": initial_cash, "order": 3, "desc": "回测开始时投入的资金"},
             {"name": "最终资产", "value": final_assets, "order": 4, "desc": "回测结束时的总资产"},
         ]
-        for method_name, data in self._metrics.items():
+        
+        for metric_name, metric_data in collected_metrics.items():
+            value = metric_data['value']
+            if isinstance(value, tuple):
+                value = value[0]
+            
             metrics.append({
-                "name": data['name'], 
-                "value": data['value'],
-                "order": data.get('order', 99),
-                "desc": data.get('desc', '')
+                "name": metric_data['name'], 
+                "value": value,
+                "order": metric_data.get('order', 99),
+                "desc": metric_data.get('desc', '')
             })
         
         metrics.sort(key=lambda x: x['order'])
@@ -1676,37 +1332,6 @@ class AccountAnalyzer:
 
         return processed_trades
 
-    def _get_caller_dir(self) -> str:
-        """
-        获取调用者所在目录
-        
-        使用 inspect 模块获取调用当前方法的代码所在的目录
-        用于确定 HTML 报告的输出路径基准
-        
-        Returns:
-            str: 调用者脚本的绝对目录路径
-            
-        Example:
-            # 如果在 d:\\project\\backtest\\main.py 中调用
-            # analyzer._get_caller_dir() 返回 "d:\\project\\backtest"
-        """
-        frame = inspect.currentframe()
-        try:
-            caller_frame = None
-            for frame_info in inspect.stack():
-                if frame_info.filename != __file__:
-                    caller_frame = frame_info
-                    break
-
-            if caller_frame:
-                return os.path.dirname(os.path.abspath(caller_frame.filename))
-            else:
-                return os.path.dirname(os.path.abspath(__file__))
-        finally:
-            del frame
-
-        return processed_trades
-    
     def _get_caller_dir(self) -> str:
         """
         获取调用者所在目录

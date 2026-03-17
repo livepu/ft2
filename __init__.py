@@ -11,7 +11,7 @@ from .core import (
     engine, Engine,
     context, Context, _Cache,
     account, AccountManager, PositionSnapshot, AccountSnapshot, TradeRecord,
-    AccountAnalyzer,
+    AccountAnalyzer, TimeRange, metric,
 )
 
 # Notebook模块
@@ -22,7 +22,7 @@ __all__ = [
     'engine', 'Engine',
     'context', 'Context', '_Cache',
     'account', 'AccountManager', 'PositionSnapshot', 'AccountSnapshot', 'TradeRecord',
-    'AccountAnalyzer',
+    'AccountAnalyzer', 'TimeRange', 'metric',
     # Notebook
     'Notebook',
 ]
