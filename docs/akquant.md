@@ -952,7 +952,7 @@ def prepare_multi_timeframe_data(df_daily):
 | **交易分析** | TradePnL (FIFO) | _calculate_profit() |
 | **结果格式** | DataFrame + 原始对象 | DataFrame |
 | **绘图** | result.plot() | 无 |
-| **HTML报告** | ❌ 无 | ✅ to_html_report() |
+| **HTML报告** | ❌ 无 | ✅ export_html() |
 | **权益曲线** | equity_curve | snapshots |
 
 ### 4.9 代码示例对比
@@ -1016,7 +1016,7 @@ print(result.metrics_df)
 engine.run(MyStrategy, start_time=start_time, end_time=end_time)
 analyzer = AccountAnalyzer(account)
 print(f"收益率: {analyzer.calculate_return_rate()*100:.2f}%")
-analyzer.to_html_report("回测报告")
+analyzer.export_html("回测报告")
 ```
 
 ---

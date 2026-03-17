@@ -14,6 +14,7 @@
 | v1.4 | 重构分页参数：新增 page 参数，pagination 降级为兼容 |
 | v1.5 | 新版 page 参数优先，pagination 后期移除 |
 | v1.5.20260316-1 | 优化：悬停滚动按钮逻辑，隐藏延迟调整为1.5秒，滚动步长120px，新增移动阈值检测 |
+| v1.5.20260316-2 | 新增：scrollButton 参数可禁用悬停滚动按钮功能 |
 
 ---
 
@@ -80,6 +81,7 @@ const cols2 = [
 | `heatmap` | `Object \| Boolean` | `false` | 热力图配置 |
 | `emptyText` | `String` | `'暂无数据'` | 空数据提示文本 |
 | `resetPage` | `Boolean` | `true` | 数据变化时是否自动重置到第一页 |
+| `scrollButton` | `Boolean` | `true` | 是否启用悬停滚动按钮功能，`false` 禁用 |
 
 ### 3.2 列配置（cols）详解
 
@@ -187,6 +189,16 @@ const cols = [
 #### 悬停滚动按钮逻辑
 
 当表格内容超出容器宽度时，组件提供悬停触发的浮动滚动按钮，方便用户快速左右滚动。
+
+**功能控制：**
+
+```javascript
+// 默认开启（不传或传 true）
+<ft-table :data="data" :cols="cols" />
+
+// 禁用悬停滚动按钮
+<ft-table :data="data" :cols="cols" :scroll-button="false" />
+```
 
 **触发逻辑：**
 
