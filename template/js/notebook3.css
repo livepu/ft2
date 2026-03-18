@@ -459,6 +459,7 @@ body {
 .cell-title h3 { font-size: 16px; color: #37352f; }
 
 /* 文本 */
+.cell-text { white-space: pre-wrap; }
 .cell-text.text-heading { font-weight: bold; font-size: 16px; }
 .cell-text.text-code {
     font-family: 'Consolas', 'Monaco', monospace;
@@ -468,6 +469,7 @@ body {
 }
 
 /* Markdown */
+.markdown-content { white-space: pre-wrap; }
 .markdown-content h1 { font-size: 20px; margin: 0 0 10px; color: #37352f; }
 .markdown-content h2 { font-size: 18px; margin: 0 0 8px; color: #37352f; }
 .markdown-content h3 { font-size: 16px; margin: 0 0 6px; color: #37352f; }
@@ -527,6 +529,7 @@ body {
     font-family: 'Consolas', 'Monaco', monospace;
     font-size: 13px;
     color: #98c379;
+    white-space: pre-wrap;
 }
 
 /* 指标卡片 */
