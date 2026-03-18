@@ -858,6 +858,7 @@ const FtTable = {
         /* 排序图标基础样式 - 保证无外部样式时依然可辨识 */
         span.sort-icon {
           font-size: 0.8em;
+          padding-right: 0.4em;
         }
         span.sort-priority {
           font-size: 0.7em;
