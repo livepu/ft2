@@ -1,5 +1,5 @@
 /**
- * FT Table Component v1.5.20260316-2
+ * FT Table Component v1.5.20260318-1
  * 版本号说明：主版本。次版本。日期（YYYYMMDD）-修订号
  * */
 
@@ -535,8 +535,31 @@ const FtTable = {
     };
 
     // 鼠标离开表格：触发隐藏
-    const handleTableMouseLeave = () => {
+    const handleTableMouseLeave = (e) => {
+      // 检查鼠标是否移动到了按钮区域，如果是则不隐藏
+      const buttonEl = document.querySelector('.ft-table-scroll-float');
+      if (buttonEl && buttonEl.contains(e.relatedTarget)) {
+        return;
+      }
       if (btnState === 'visible') {
+        hideButtons();
+      }
+    };
+
+    // 滚轮滚动时检查鼠标是否在表格外
+    const handleTableWheel = (e) => {
+      if (!props.scrollButton || btnState !== 'visible') return;
+      if (!tableContainer.value) return;
+      
+      // 检查鼠标是否在表格容器外
+      const rect = tableContainer.value.getBoundingClientRect();
+      const isOutside = 
+        e.clientX < rect.left || 
+        e.clientX > rect.right || 
+        e.clientY < rect.top || 
+        e.clientY > rect.bottom;
+      
+      if (isOutside && !isOnButton) {
         hideButtons();
       }
     };
@@ -717,6 +740,11 @@ const FtTable = {
     onMounted(() => {
       injectTableStyles();
       
+      // 监听全局滚轮事件，用于检测鼠标是否离开表格
+      if (props.scrollButton) {
+        document.addEventListener('wheel', handleTableWheel, { passive: true });
+      }
+      
       if (hasFreeze.value) {
         nextTick(() => {
           applyFreezeStyles();
@@ -735,6 +763,9 @@ const FtTable = {
     onUnmounted(() => {
       if (resizeObserver.value) {
         resizeObserver.value.disconnect();
+      }
+      if (props.scrollButton) {
+        document.removeEventListener('wheel', handleTableWheel);
       }
     });
 
@@ -895,6 +926,7 @@ const FtTable = {
       handleTableMouseMove,
       handleTableMouseEnter,
       handleTableMouseLeave,
+      handleTableWheel,
       scrollTable,
       handleSort,
       getSortIndicator,
