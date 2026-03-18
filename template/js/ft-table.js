@@ -1,11 +1,11 @@
 /**
- * FT Table Component v1.5.20260318-1
+ * FT Table Component v1.5.20260318-2
  * 版本号说明：主版本。次版本。日期（YYYYMMDD）-修订号
  * */
 
 const FtTable = {
   name: 'FtTable',
-  
+
   props: {
     data: {
       type: Array,
@@ -47,13 +47,13 @@ const FtTable = {
 
   setup(props, { slots }) {
     const { ref, computed, onMounted, onUnmounted, watch, nextTick } = Vue;
-    
+
     // ========== 响应式数据 ==========
     const pageConfig = computed(() => {
       if (props.page === false) return false;
       return props.page || props.pagination;
     });
-    
+
     const currentPage = ref(1);
     const pageSize = ref(props.page?.size || props.pagination?.size || props.page?.pageSize || props.pagination?.pageSize || 10);
     const multiSort = ref([]);
@@ -61,13 +61,13 @@ const FtTable = {
     const resizeObserver = ref(null);
 
     // ========== 计算属性 ==========
-    
+
     // 排序后的数据
     const sortedData = computed(() => {
       if (multiSort.value.length === 0) {
         return props.data;
       }
-      
+
       return [...props.data].sort((a, b) => {
         for (const sort of multiSort.value) {
           const v1 = a[sort.field];
@@ -101,7 +101,7 @@ const FtTable = {
     const displayCols = computed(() => {
       // 检查 cols 是否有效数组
       const isValidCols = Array.isArray(props.cols) && props.cols.length > 0;
-      
+
       if (isValidCols) {
         // 处理字符串数组格式 ["代码", "名称"] → [{field: "代码", title: "代码", slot: "cell-代码"}]
         return props.cols.map(col => {
@@ -113,7 +113,7 @@ const FtTable = {
           return { ...col, slot: slotName };
         });
       }
-      
+
       // cols 无效或为空：从数据自动推断所有字段
       if (props.data && props.data.length > 0) {
         return Object.keys(props.data[0]).map(key => ({
@@ -124,7 +124,7 @@ const FtTable = {
       }
       return [];
     });
-    
+
     // 检查是否有自定义插槽
     const hasSlot = (slotName) => {
       return slotName && slots[slotName];
@@ -152,7 +152,7 @@ const FtTable = {
     // 解析列的热力图配置
     const parseColHeatmap = (col) => {
       if (!col.heatmap) return null;
-      
+
       if (typeof col.heatmap === 'object') {
         return {
           enabled: true,
@@ -160,7 +160,7 @@ const FtTable = {
           colors: col.heatmap.colors || null
         };
       }
-      
+
       return null;
     };
 
@@ -169,7 +169,7 @@ const FtTable = {
       if (!props.heatmap || props.heatmap === true) {
         return null;
       }
-      
+
       const defaults = {
         start: 1,
         end: -1,
@@ -179,7 +179,7 @@ const FtTable = {
         colors: ['#2196f3', '#fff', '#f44336'],
         axis: 'column'
       };
-      
+
       return { ...defaults, ...props.heatmap };
     });
 
@@ -187,35 +187,35 @@ const FtTable = {
     const heatmapRanges = computed(() => {
       const data = paginatedData.value;
       const cols = displayCols.value;
-      
+
       if (data.length === 0) return {};
-      
+
       const ranges = {};
       const groupValues = {};
-      
+
       const hasGlobalHeatmap = props.heatmap && typeof props.heatmap === 'object';
       const hasColHeatmap = cols.some(col => col.heatmap);
-      
+
       if (!hasGlobalHeatmap && !hasColHeatmap) {
         return ranges;
       }
-      
+
       const excludeRowsSet = new Set(
         (heatmapConfig.value?.excludeRows || []).map(idx => idx < 0 ? data.length + idx : idx)
       );
       const validRows = data.filter((_, idx) => !excludeRowsSet.has(idx));
-      
+
       if (hasColHeatmap) {
         cols.forEach(col => {
           const colHeatmap = parseColHeatmap(col);
           if (!colHeatmap) return;
-          
+
           const groupName = colHeatmap.group;
-          
+
           if (!groupValues[groupName]) {
             groupValues[groupName] = [];
           }
-          
+
           validRows.forEach(row => {
             const v = row[col.field];
             if (typeof v === 'number' && !isNaN(v)) {
@@ -223,7 +223,7 @@ const FtTable = {
             }
           });
         });
-        
+
         Object.keys(groupValues).forEach(groupName => {
           const values = groupValues[groupName];
           if (values.length > 0) {
@@ -234,16 +234,16 @@ const FtTable = {
           }
         });
       }
-      
+
       if (hasGlobalHeatmap) {
         const config = heatmapConfig.value;
-        
+
         if (config.columns && config.columns.length > 0) {
           config.columns.forEach(field => {
             const values = validRows
               .map(row => row[field])
               .filter(v => typeof v === 'number' && !isNaN(v));
-            
+
             if (values.length > 0) {
               ranges[field] = {
                 min: Math.min(...values),
@@ -259,22 +259,22 @@ const FtTable = {
           const excludeSet = new Set((config.exclude || []).map(v => {
             return v > 0 ? v - 1 : totalCols + v;
           }));
-          
+
           const heatmapCols = [];
           for (let i = start; i <= end; i++) {
             if (i >= 0 && i < totalCols && !excludeSet.has(i)) {
               heatmapCols.push(cols[i]);
             }
           }
-          
+
           if (config.axis === 'column') {
             heatmapCols.forEach(col => {
               if (col.heatmap) return;
-              
+
               const values = validRows
                 .map(row => row[col.field])
                 .filter(v => typeof v === 'number' && !isNaN(v));
-              
+
               if (values.length > 0) {
                 ranges[col.field] = {
                   min: Math.min(...values),
@@ -293,7 +293,7 @@ const FtTable = {
                 }
               });
             });
-            
+
             if (allValues.length > 0) {
               const globalRange = {
                 min: Math.min(...allValues),
@@ -308,7 +308,7 @@ const FtTable = {
           }
         }
       }
-      
+
       return ranges;
     });
 
@@ -322,32 +322,35 @@ const FtTable = {
       const total = totalPages.value;
       const current = currentPage.value;
       const maxVisible = 5; // 显示 5 个页码
-      
+
       if (total <= maxVisible) {
         // 总页数少于 5 个，全部显示
         return Array.from({ length: total }, (_, i) => i + 1);
       }
-      
+
       // 固定显示 5 个页码，当前页居中（如果可能）
       let start = Math.max(1, current - Math.floor(maxVisible / 2));
       let end = start + maxVisible - 1;
-      
+
       // 调整边界
       if (end > total) {
         end = total;
         start = total - maxVisible + 1;
       }
-      
+
       return Array.from({ length: end - start + 1 }, (_, i) => start + i);
     });
 
     // ========== 方法 ==========
-    
+
     // 排序处理 - 按点击顺序形成优先级
     const handleSort = (col) => {
       const field = col.field;
       const existingIndex = multiSort.value.findIndex(s => s.field === field);
-      
+
+      // 判断是否是最后一列（用于自动滚动）
+      const isLastCol = displayCols.value[displayCols.value.length - 1]?.field === field;
+
       if (existingIndex >= 0) {
         const existing = multiSort.value[existingIndex];
         if (existing.order === 'desc') {
@@ -361,8 +364,15 @@ const FtTable = {
       } else {
         multiSort.value.push({ field, order: 'desc', priority: multiSort.value.length + 1 });
       }
-      
+
       currentPage.value = 1;
+
+      // 如果点击的是最后一列，自动滚动到最右侧确保排序图标可见
+      if (isLastCol && tableContainer.value) {
+        nextTick(() => {
+          tableContainer.value.scrollLeft = tableContainer.value.scrollWidth;
+        });
+      }
     };
 
     // 获取排序指示器（返回对象供模板使用）
@@ -385,7 +395,7 @@ const FtTable = {
       const left = props.freeze.left || 0;
       const right = props.freeze.right || 0;
       const total = displayCols.value.length;
-      
+
       return index < left || index >= total - right;
     };
 
@@ -399,20 +409,20 @@ const FtTable = {
     // 应用冻结列样式
     const applyFreezeStyles = () => {
       if (!hasFreeze.value || !tableContainer.value) return;
-      
+
       const table = tableContainer.value.querySelector('table');
       if (!table) return;
 
       const headerCells = table.querySelectorAll('thead th');
       const rows = table.querySelectorAll('tbody tr');
-      
+
       // 获取实际列宽
       const colWidths = Array.from(headerCells).map(th => th.offsetWidth);
-      
+
       // 左侧冻结
       let leftOffset = 0;
       const leftCount = props.freeze.left || 0;
-      
+
       for (let i = 0; i < leftCount && i < headerCells.length; i++) {
         headerCells[i].style.left = `${leftOffset}px`;
         rows.forEach(row => {
@@ -425,7 +435,7 @@ const FtTable = {
       let rightOffset = 0;
       const rightCount = props.freeze.right || 0;
       const totalCols = colWidths.length;
-      
+
       for (let i = 0; i < rightCount && i < totalCols; i++) {
         const colIndex = totalCols - 1 - i;
         headerCells[colIndex].style.right = `${rightOffset}px`;
@@ -550,15 +560,15 @@ const FtTable = {
     const handleTableWheel = (e) => {
       if (!props.scrollButton || btnState !== 'visible') return;
       if (!tableContainer.value) return;
-      
+
       // 检查鼠标是否在表格容器外
       const rect = tableContainer.value.getBoundingClientRect();
-      const isOutside = 
-        e.clientX < rect.left || 
-        e.clientX > rect.right || 
-        e.clientY < rect.top || 
+      const isOutside =
+        e.clientX < rect.left ||
+        e.clientX > rect.right ||
+        e.clientY < rect.top ||
         e.clientY > rect.bottom;
-      
+
       if (isOutside && !isOnButton) {
         hideButtons();
       }
@@ -612,11 +622,11 @@ const FtTable = {
     // 颜色插值计算（支持双色/三色）
     const interpolateColor = (colors, ratio) => {
       if (!colors || colors.length < 2) return '#ffffff';
-      
+
       if (colors.length === 2) {
         return interpolateTwoColors(colors[0], colors[1], ratio);
       }
-      
+
       if (ratio <= 0.5) {
         return interpolateTwoColors(colors[0], colors[1], ratio * 2);
       } else {
@@ -634,62 +644,62 @@ const FtTable = {
         }
         return hex;
       };
-      
+
       const hex1 = expandHex(color1);
       const hex2 = expandHex(color2);
-      
+
       const r1 = parseInt(hex1.substring(0, 2), 16);
       const g1 = parseInt(hex1.substring(2, 4), 16);
       const b1 = parseInt(hex1.substring(4, 6), 16);
-      
+
       const r2 = parseInt(hex2.substring(0, 2), 16);
       const g2 = parseInt(hex2.substring(2, 4), 16);
       const b2 = parseInt(hex2.substring(4, 6), 16);
-      
+
       const r = Math.round(r1 + (r2 - r1) * ratio);
       const g = Math.round(g1 + (g2 - g1) * ratio);
       const b = Math.round(b1 + (b2 - b1) * ratio);
-      
+
       return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
     };
 
     // 判断单元格是否在热力图范围内
     const isHeatmapCell = (col, colIndex, rowIndex) => {
       if (!hasHeatmap.value) return false;
-      
+
       if (isFreezeCol(colIndex)) return false;
-      
+
       if (col.heatmap) return true;
-      
+
       const hasGlobalHeatmap = props.heatmap && typeof props.heatmap === 'object';
       if (!hasGlobalHeatmap) return false;
-      
+
       const config = heatmapConfig.value;
       if (!config) return false;
-      
+
       const cols = displayCols.value;
       const data = paginatedData.value;
-      
+
       const excludeRowsSet = new Set(
         (config.excludeRows || []).map(idx => idx < 0 ? data.length + idx : idx)
       );
-      
+
       if (excludeRowsSet.has(rowIndex)) return false;
-      
+
       if (config.columns && config.columns.length > 0) {
         return config.columns.includes(col.field);
       }
-      
+
       const totalCols = cols.length;
       const start = config.start > 0 ? config.start - 1 : totalCols + config.start;
       const end = config.end > 0 ? config.end - 1 : totalCols + config.end;
       const excludeSet = new Set((config.exclude || []).map(v => {
         return v > 0 ? v - 1 : totalCols + v;
       }));
-      
+
       if (colIndex < start || colIndex > end) return false;
       if (excludeSet.has(colIndex)) return false;
-      
+
       return true;
     };
 
@@ -698,13 +708,13 @@ const FtTable = {
       if (!hasHeatmap.value) return {};
       if (!isHeatmapCell(col, colIndex, rowIndex)) return {};
       if (typeof value !== 'number' || isNaN(value)) return {};
-      
+
       const config = heatmapConfig.value;
       const ranges = heatmapRanges.value;
-      
+
       let colors = config?.colors || ['#2196f3', '#fff', '#f44336'];
       let rangeKey = col.field;
-      
+
       const colHeatmap = parseColHeatmap(col);
       if (colHeatmap) {
         if (colHeatmap.colors) {
@@ -712,47 +722,47 @@ const FtTable = {
         }
         rangeKey = colHeatmap.group;
       }
-      
+
       const range = ranges[rangeKey];
-      
+
       if (!range) return {};
-      
+
       const { min, max } = range;
       if (min === max) {
         const midColor = colors.length === 3 ? colors[1] : colors[1];
-        return { 
+        return {
           'background-color': midColor,
           '--heatmap-bg': midColor
         };
       }
-      
+
       const ratio = (value - min) / (max - min);
       const bgColor = interpolateColor(colors, ratio);
-      
-      return { 
+
+      return {
         'background-color': bgColor,
         '--heatmap-bg': bgColor
       };
     };
 
     // ========== 生命周期 ==========
-    
+
     onMounted(() => {
       injectTableStyles();
-      
+
       // 监听全局滚轮事件，用于检测鼠标是否离开表格
       if (props.scrollButton) {
         document.addEventListener('wheel', handleTableWheel, { passive: true });
       }
-      
+
       if (hasFreeze.value) {
         nextTick(() => {
           applyFreezeStyles();
-          
+
           resizeObserver.value = new ResizeObserver(() => {
             applyFreezeStyles();
           });
-          
+
           if (tableContainer.value) {
             resizeObserver.value.observe(tableContainer.value);
           }
@@ -822,7 +832,7 @@ const FtTable = {
     const injectTableStyles = () => {
       const styleId = 'ft-table-freeze-core';
       if (document.getElementById(styleId)) return;
-      
+
       const style = document.createElement('style');
       style.id = styleId;
       style.textContent = `
@@ -858,7 +868,6 @@ const FtTable = {
         /* 排序图标基础样式 - 保证无外部样式时依然可辨识 */
         span.sort-icon {
           font-size: 0.8em;
-          padding-right: 0.4em;
         }
         span.sort-priority {
           font-size: 0.7em;
