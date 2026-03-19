@@ -1,5 +1,5 @@
 /**
- * FT Table Component v1.5.20260318-2
+ * FT Table Component v1.5.20260319-1
  * 版本号说明：主版本。次版本。日期（YYYYMMDD）-修订号
  * */
 
@@ -508,9 +508,21 @@ const FtTable = {
       }, HIDE_DELAY);
     };
 
+    // 检查鼠标是否在 tbody 区域
+    const isMouseOnBody = (e) => {
+      // 直接使用 e.target 判断是否在 tbody 内
+      const target = e.target;
+      if (!target) return false;
+      // 检查 target 本身或其父元素是否是 tbody 或 tbody 的子元素
+      const tbody = target.closest('tbody');
+      return tbody !== null;
+    };
+
     // 鼠标进入表格：启动显示计时
     const handleTableMouseEnter = (e) => {
       if (!props.scrollButton || !hasHorizontalScroll.value) return;
+      // 只有在 tbody 区域才触发显示
+      if (!isMouseOnBody(e)) return;
       lastMousePos = { x: e.clientX, y: e.clientY };
       if (btnState === 'waiting') {
         scrollButtonPos.value = { x: e.clientX, y: e.clientY };
@@ -522,6 +534,14 @@ const FtTable = {
     // 鼠标在表格内移动
     const handleTableMouseMove = (e) => {
       if (!props.scrollButton) return;
+      // 只有在 tbody 区域才触发显示
+      if (!isMouseOnBody(e)) {
+        if (btnState === 'waiting' && buttonTimer) {
+          clearTimeout(buttonTimer);
+          buttonTimer = null;
+        }
+        return;
+      }
       // 计算移动距离
       const dx = e.clientX - lastMousePos.x;
       const dy = e.clientY - lastMousePos.y;
