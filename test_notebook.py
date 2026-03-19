@@ -131,6 +131,50 @@ def test_comprehensive():
     # ========== 【自由内容】分隔线 ==========
     nb.divider()
     
+    # ========== 【Section嵌套】文本换行测试 ==========
+    with nb.section("文本换行测试"):
+        nb.text("""【text三引号测试】第一行
+第二行
+第三行""")
+        
+        nb.text('【text单引号+\\n测试】第一行\n第二行\n第三行')
+        
+        nb.text('【text变量拼接测试】\n' + '\n'.join(['项目1', '项目2', '项目3']))
+    
+    # ========== 【Section嵌套】Markdown换行测试 ==========
+    with nb.section("Markdown换行测试"):
+        nb.markdown("""【markdown三引号测试】
+# 一级标题
+## 二级标题
+正文第一行
+正文第二行
+**加粗文本**
+*斜体文本*""")
+        
+        nb.markdown('【markdown单引号+\\n测试】\n# 标题\n第一行\n第二行\n**加粗**')
+        
+        nb.markdown("""【markdown列表测试】
+- 列表项1
+- 列表项2
+- 列表项3
+
+1. 有序列表1
+2. 有序列表2
+3. 有序列表3""")
+        
+        nb.markdown("""【markdown代码块测试】
+```python
+def hello():
+    print("world")
+```
+行内代码: `print(1)`""")
+        
+        nb.markdown("""【markdown引用测试】
+> 这是引用内容
+> 第二行引用
+>
+> 嵌套引用""")
+    
     # ========== 【Section嵌套】历史记录（折叠） ==========
     with nb.section("历史记录", collapsed=True):
         nb.table(
