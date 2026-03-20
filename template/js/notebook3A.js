@@ -232,6 +232,7 @@ const CellRenderer = {
 
                 // 饼图特殊处理
                 if (isPie) {
+                    const pieColors = getChartColors('pie');
                     // 构建 label 格式
                     let labelFormatter = '{b}';
                     if (showValue && showPercent) {
@@ -243,9 +244,15 @@ const CellRenderer = {
                     }
                     
                     return {
-                        color: getChartColors('pie'),
+                        color: pieColors,
                         tooltip: {},
                         legend: {
+                            data: data.map((item, i) => ({
+                                name: item.name,
+                                itemStyle: {
+                                    color: pieColors[i % pieColors.length]
+                                }
+                            })),
                             top: 10,
                             left: 'center',
                             orient: 'horizontal'
@@ -278,13 +285,16 @@ const CellRenderer = {
                 // 柱状图特殊处理：按系列使用系统配色
                 if (isBar) {
                     const barColors = getChartColors('bar');
+                    const isSingleSeries = (data.series || []).length === 1;
                     return {
-                        color: barColors,
                         tooltip: {},
                         legend: {
-                            data: (data.series || []).map(s => ({
+                            data: (data.series || []).map((s, i) => ({
                                 name: s.name,
-                                icon: 'rect'
+                                icon: 'rect',
+                                itemStyle: {
+                                    color: isSingleSeries ? barColors[0] : barColors[i % barColors.length]
+                                }
                             })),
                             top: 5
                         },
@@ -298,24 +308,35 @@ const CellRenderer = {
                             scale: true,
                             boundaryGap: ['10%', '10%']
                         },
-                        series: (data.series || []).map((s, i) => ({
-                            name: s.name,
-                            type: 'bar',
-                            data: s.data,
-                            itemStyle: {
-                                color: barColors[i % barColors.length],
-                                borderRadius: [4, 4, 0, 0]
-                            }
-                        }))
+                        series: (data.series || []).map((s, i) => {
+                            const baseColor = barColors[i % barColors.length];
+                            return {
+                                name: s.name,
+                                type: 'bar',
+                                data: s.data,
+                                itemStyle: {
+                                    color: isSingleSeries ? function(params) {
+                                        return params.value >= 0 ? barColors[0] : '#27ae60';
+                                    } : baseColor,
+                                    borderRadius: [4, 4, 0, 0]
+                                }
+                            };
+                        })
                     };
                 }
 
                 // 折线图和面积图
+                const lineColors = getChartColors('line');
                 return {
-                    color: getChartColors('line'),
+                    color: lineColors,
                     ...baseOption,
                     legend: { 
-                        data: (data.series || []).map(s => s.name), 
+                        data: (data.series || []).map((s, i) => ({
+                            name: s.name,
+                            itemStyle: {
+                                color: lineColors[i % lineColors.length]
+                            }
+                        })), 
                         top: 5 
                     },
                     xAxis: {
@@ -338,12 +359,12 @@ const CellRenderer = {
                                 type: 'linear',
                                 x: 0, y: 0, x2: 0, y2: 1,
                                 colorStops: [
-                                    { offset: 0, color: getChartColors('line')[i % getChartColors('line').length] + '60' },
-                                    { offset: 1, color: getChartColors('line')[i % getChartColors('line').length] + '10' }
+                                    { offset: 0, color: lineColors[i % lineColors.length] + '60' },
+                                    { offset: 1, color: lineColors[i % lineColors.length] + '10' }
                                 ]
                             }
                         } : undefined,
-                        itemStyle: { color: getChartColors('line')[i % getChartColors('line').length] }
+                        itemStyle: { color: lineColors[i % lineColors.length] }
                     }))
                 };
             } else if (type === 'heatmap') {

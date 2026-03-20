@@ -21,7 +21,7 @@
                 <!-- 主体容器 -->
 
                 <!-- 目录菜单组件 -->
-                <toc-menu :title="title" :cells="cells"></toc-menu>
+                <toc-menu :title="title" :cells="cells" @scroll-to="scrollToSection"></toc-menu>
 
                 <div class="notebook-container">
                     <!-- 头部 -->

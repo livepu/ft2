@@ -1,5 +1,5 @@
 /**
- * FT Table Component v1.5.20260319-1
+ * FT Table Component v1.5.20260320-1
  * 版本号说明：主版本。次版本。日期（YYYYMMDD）-修订号
  * */
 
