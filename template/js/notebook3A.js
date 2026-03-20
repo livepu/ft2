@@ -95,7 +95,8 @@ const CellRenderer = {
                 chart_type: charts.series[0].type,
                 series: charts.series,
                 xAxis: charts.xAxis?.[0]?.data || [],
-                yAxis: charts.yAxis?.[0]?.data || []
+                yAxis: charts.yAxis?.[0]?.data || [],
+                raw: charts  // 保留原始配置，供特殊类型使用
             };
         };
 
@@ -110,28 +111,57 @@ const CellRenderer = {
         // -----------------------------------------------------------------------------
         // 4. 图表处理插件
         // -----------------------------------------------------------------------------
+
+        // 特殊类型插件（无差异化处理，直接适配基础配置）
+        const gaugePlugin = (extracted) => ({
+            series: extracted.series
+        });
+
+        const radarPlugin = (extracted) => ({
+            ...extracted.raw  // 保留原始 radar/indicator 配置
+        });
+
+        const funnelPlugin = (extracted) => ({
+            series: extracted.series
+        });
+
         const chartPlugins = {
             pie: (extracted, options) => processPie(extracted, options),
-            heatmap: (extracted, options) => processHeatmap(extracted, options)
+            heatmap: (extracted, options) => processHeatmap(extracted, options),
+            gauge: gaugePlugin,
+            radar: radarPlugin,
+            funnel: funnelPlugin
         };
 
         const processChart = (extracted, options = {}) => {
             const chartType = extracted.chart_type;
             const plugin = chartPlugins[chartType];
-            return plugin ? plugin(extracted, options) : buildGenericOption(extracted);
+            
+            // 统一获取配色（heatmap 除外）
+            if (chartType !== 'heatmap') {
+                options.colors = getChartColors(chartType);
+            }
+            
+            const option = plugin ? plugin(extracted, options) : buildGenericOption(extracted, options);
+            
+            // 统一添加默认 tooltip（如果插件未指定）
+            if (!option.tooltip) {
+                option.tooltip = {};
+            }
+            
+            return option;
         };
 
         // -----------------------------------------------------------------------------
         // 5. 通用图表配置构建
         // -----------------------------------------------------------------------------
-        const buildGenericOption = (extracted) => {
-            const colors = getChartColors(extracted.chart_type);
+        const buildGenericOption = (extracted, options = {}) => {
+            const colors = options.colors || getChartColors(extracted.chart_type);
             const chartType = extracted.chart_type;
             const series = extracted.series || [];
 
             const option = {
                 color: colors,
-                tooltip: {},
                 series: series
             };
 
@@ -198,7 +228,7 @@ const CellRenderer = {
         // 6. Pie 图表插件
         // -----------------------------------------------------------------------------
         const processPie = (extracted, options) => {
-            const colors = getChartColors('pie');
+            const colors = options.colors || getChartColors('pie');
             const data = extracted.series[0]?.data || [];
             const { showValue = true, showPercent = true } = options;
 
@@ -209,7 +239,6 @@ const CellRenderer = {
 
             return {
                 color: colors,
-                tooltip: {},
                 legend: {
                     data: data.map((item, i) => ({
                         name: item.name,
@@ -258,7 +287,6 @@ const CellRenderer = {
             const visualMax = Math.ceil(maxValue / step) * step;
 
             return {
-                tooltip: {},
                 grid: { left: '10%', right: '18%', top: '10%', bottom: '12%' },
                 xAxis: { type: 'category', data: extracted.xAxis, splitArea: { show: true } },
                 yAxis: { type: 'category', data: extracted.yAxis, splitArea: { show: true } },
