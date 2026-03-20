@@ -498,7 +498,6 @@ const FtTable = {
     // 隐藏按钮（延迟隐藏）
     const hideButtons = () => {
       if (btnState !== 'visible') return;
-      if (isOnButton) return;  // 鼠标在按钮上时不隐藏
       btnState = 'hiding';
       if (buttonTimer) clearTimeout(buttonTimer);
       buttonTimer = setTimeout(() => {
@@ -576,20 +575,21 @@ const FtTable = {
       }
     };
 
-    // 滚轮滚动时检查鼠标是否在表格外
+    // 滚轮滚动时检查鼠标是否离开 tbody
     const handleTableWheel = (e) => {
       if (!props.scrollButton || btnState !== 'visible') return;
-      if (!tableContainer.value) return;
 
-      // 检查鼠标是否在表格容器外
-      const rect = tableContainer.value.getBoundingClientRect();
+      const tbody = tableContainer.value?.querySelector('tbody');
+      if (!tbody) return;
+
+      const rect = tbody.getBoundingClientRect();
       const isOutside =
         e.clientX < rect.left ||
         e.clientX > rect.right ||
         e.clientY < rect.top ||
         e.clientY > rect.bottom;
 
-      if (isOutside && !isOnButton) {
+      if (isOutside) {
         hideButtons();
       }
     };
