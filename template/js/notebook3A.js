@@ -5,11 +5,13 @@
 
 const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
 
-// ========== Cell 渲染组件（组合式 API）==========
+// =============================================================================
+// 第一部分：CellRenderer 组件 - 核心渲染组件
+// =============================================================================
+
 const CellRenderer = {
     name: 'CellRenderer',
     components: {
-        // FtTable 会从父组件传递，如果可用
         FtTable: typeof window !== 'undefined' && window.FtTable ? window.FtTable : null
     },
     props: {
@@ -18,19 +20,20 @@ const CellRenderer = {
         level: { type: Number, default: 0 }
     },
     setup(props) {
+        // -----------------------------------------------------------------------------
+        // 1. 响应式状态定义
+        // -----------------------------------------------------------------------------
         const chartRef = ref(null);
         let chartInstance = null;
-        
-        // 热力图放大倍数控制
         const heatmapMultiplier = ref(1);
         const heatmapRawData = ref(null);
-        
-        // 饼图显示控制
         const pieShowValue = ref(true);
         const pieShowPercent = ref(true);
         const pieRawData = ref(null);
 
-        // 渲染 Markdown
+        // -----------------------------------------------------------------------------
+        // 2. 工具函数
+        // -----------------------------------------------------------------------------
         const renderMarkdown = (content) => {
             if (!content) return '';
             return content
@@ -40,7 +43,6 @@ const CellRenderer = {
                 .replace(/\n/g, '<br>');
         };
 
-        // 获取指标样式类
         const getMetricClass = (value) => {
             if (typeof value !== 'string') return '';
             if (value.includes('%')) {
@@ -52,15 +54,12 @@ const CellRenderer = {
             return '';
         };
 
-        // 获取表格列配置
         const getTableCols = (cell) => {
             if (cell.options?.columns) {
-                // 支持两种格式：字符串数组 或 对象数组
                 return cell.options.columns.map(col => {
                     if (typeof col === 'string') {
                         return { field: col, title: col };
                     }
-                    // 已经是对象格式 {field, title}
                     return { field: col.field, title: col.title || col.field };
                 });
             }
@@ -73,26 +72,23 @@ const CellRenderer = {
             return [];
         };
 
-        // 获取表格选项
         const getTableOptions = (cell) => {
             const opts = {};
             if (cell.options?.freeze) opts.freeze = cell.options.freeze;
             if (cell.options?.heatmap) opts.heatmap = cell.options.heatmap;
-            
-            // page 参数：默认启用分页，false 禁用
             if (cell.options?.page !== undefined) {
                 opts.page = cell.options.page;
             }
-            
             return opts;
         };
 
-        // 获取图表类型（从 pyecharts 的 charts 配置中提取）
         const getChartType = (content) => {
             return content.charts?.series?.[0]?.type || null;
         };
 
-        // 从 pyecharts 配置中提取核心数据（统一格式）
+        // -----------------------------------------------------------------------------
+        // 3. 图表数据提取与配色
+        // -----------------------------------------------------------------------------
         const extractChartData = (charts) => {
             if (!charts?.series?.[0]) return null;
             return {
@@ -103,7 +99,6 @@ const CellRenderer = {
             };
         };
 
-        // 获取图表配色（基于分组查找）
         const getChartColors = (chartType) => {
             const colorPalettes = window.colorPalettes;
             const group = colorPalettes.typeToGroup[chartType] || 'chart';
@@ -112,32 +107,34 @@ const CellRenderer = {
             return palette ? palette.colors : ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4'];
         };
 
-        // ========== 插件注册表：只有需要特殊处理的图表才注册 ==========
+        // -----------------------------------------------------------------------------
+        // 4. 图表处理插件
+        // -----------------------------------------------------------------------------
         const chartPlugins = {
             pie: (extracted, options) => processPie(extracted, options),
             heatmap: (extracted, options) => processHeatmap(extracted, options)
         };
 
-        // ========== 统一处理函数 ==========
         const processChart = (extracted, options = {}) => {
             const chartType = extracted.chart_type;
             const plugin = chartPlugins[chartType];
             return plugin ? plugin(extracted, options) : buildGenericOption(extracted);
         };
 
-        // ========== 通用配置构建（自动适配所有图表）==========
+        // -----------------------------------------------------------------------------
+        // 5. 通用图表配置构建
+        // -----------------------------------------------------------------------------
         const buildGenericOption = (extracted) => {
             const colors = getChartColors(extracted.chart_type);
             const chartType = extracted.chart_type;
             const series = extracted.series || [];
-            
+
             const option = {
                 color: colors,
                 tooltip: {},
                 series: series
             };
-            
-            // 根据图表类型设置坐标轴
+
             if (['line', 'bar', 'area'].includes(chartType)) {
                 option.xAxis = {
                     type: 'category',
@@ -154,15 +151,14 @@ const CellRenderer = {
                     data: series.map(s => ({ name: s.name, icon: 'rect' })),
                     top: 5
                 };
-                
-                // 处理 series
+
                 option.series = series.map((s, i) => {
                     const baseOption = {
                         name: s.name,
                         type: chartType === 'area' ? 'line' : chartType,
                         data: s.data
                     };
-                    
+
                     if (chartType === 'line' || chartType === 'area') {
                         baseOption.smooth = true;
                         if (chartType === 'area') {
@@ -177,7 +173,7 @@ const CellRenderer = {
                             };
                         }
                     }
-                    
+
                     if (chartType === 'bar') {
                         const isSingleSeries = series.length === 1;
                         baseOption.itemStyle = {
@@ -187,28 +183,30 @@ const CellRenderer = {
                             borderRadius: [4, 4, 0, 0]
                         };
                     }
-                    
+
                     return baseOption;
                 });
             } else if (chartType === 'scatter') {
                 if (extracted.xAxis.length) option.xAxis = { type: 'category', data: extracted.xAxis };
                 if (extracted.yAxis.length) option.yAxis = { type: 'category', data: extracted.yAxis };
             }
-            
+
             return option;
         };
 
-        // ========== Pie 插件：配色 + 显示切换 ==========
+        // -----------------------------------------------------------------------------
+        // 6. Pie 图表插件
+        // -----------------------------------------------------------------------------
         const processPie = (extracted, options) => {
             const colors = getChartColors('pie');
             const data = extracted.series[0]?.data || [];
             const { showValue = true, showPercent = true } = options;
-            
+
             let labelFormatter = '{b}';
             if (showValue && showPercent) labelFormatter = '{b}\n{c} ({d}%)';
             else if (showValue) labelFormatter = '{b}\n{c}';
             else if (showPercent) labelFormatter = '{b}\n({d}%)';
-            
+
             return {
                 color: colors,
                 tooltip: {},
@@ -231,12 +229,18 @@ const CellRenderer = {
             };
         };
 
-        // ========== Heatmap 插件：配色 + 放大功能 ==========
+        // -----------------------------------------------------------------------------
+        // 7. Heatmap 图表插件
+        // -----------------------------------------------------------------------------
+        const HEATMAP_COLORS = [
+            '#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8',
+            '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026'
+        ];
+
         const processHeatmap = (extracted, options) => {
-            const colors = getChartColors('heatmap');
             const rawData = extracted.series[0]?.data || [];
             const { multiplier = 1 } = options;
-            
+
             let minValue = Infinity, maxValue = -Infinity;
             const displayData = rawData.map(d => {
                 const scaled = d[2] * multiplier;
@@ -244,7 +248,7 @@ const CellRenderer = {
                 if (scaled > maxValue) maxValue = scaled;
                 return [d[0], d[1], scaled];
             });
-            
+
             const valueRange = maxValue - minValue;
             let step = 0.01, decimalPlaces = 2;
             if (valueRange >= 10) { step = 5; decimalPlaces = 0; }
@@ -252,7 +256,7 @@ const CellRenderer = {
             else if (valueRange >= 0.1) { step = 0.05; decimalPlaces = 2; }
             const visualMin = Math.floor(minValue / step) * step;
             const visualMax = Math.ceil(maxValue / step) * step;
-            
+
             return {
                 tooltip: {},
                 grid: { left: '10%', right: '18%', top: '10%', bottom: '12%' },
@@ -264,7 +268,7 @@ const CellRenderer = {
                     calculable: true, orient: 'vertical', right: '2%', top: 'center',
                     text: [visualMax.toFixed(decimalPlaces) + ' (×' + multiplier + ')',
                            visualMin.toFixed(decimalPlaces) + ' (×' + multiplier + ')'],
-                    inRange: { color: colors }
+                    inRange: { color: HEATMAP_COLORS }
                 },
                 series: [{
                     type: 'heatmap',
@@ -275,7 +279,9 @@ const CellRenderer = {
             };
         };
 
-        // 初始化图表
+        // -----------------------------------------------------------------------------
+        // 8. 图表初始化与更新
+        // -----------------------------------------------------------------------------
         const initChart = () => {
             if (!chartRef.value || !props.cell.content) {
                 console.warn('Chart init skipped: no chartRef or content');
@@ -285,12 +291,12 @@ const CellRenderer = {
             const cell = props.cell;
             const content = cell.content;
             chartInstance = echarts.init(chartRef.value);
-            
+
             if (!content.charts) {
                 console.warn('Chart init skipped: no charts config');
                 return;
             }
-            
+
             const chartsConfig = JSON.parse(JSON.stringify(content.charts));
             const extracted = extractChartData(chartsConfig);
             if (!extracted) {
@@ -316,55 +322,51 @@ const CellRenderer = {
             const option = processChart(extracted, options);
             chartInstance.setOption(option);
         };
-        
-        // 更新热力图（当放大倍数改变时）
+
         const updateHeatmap = () => {
             if (!chartInstance || !heatmapRawData.value) return;
             const option = processChart(heatmapRawData.value, { multiplier: heatmapMultiplier.value });
             chartInstance.setOption(option, { replaceMerge: ['visualMap'] });
         };
-        
-        // 更新饼图（当显示选项改变时）
+
         const updatePie = () => {
             if (!chartInstance || !pieRawData.value) return;
-            const option = processChart(pieRawData.value, { 
-                showValue: pieShowValue.value, 
-                showPercent: pieShowPercent.value 
+            const option = processChart(pieRawData.value, {
+                showValue: pieShowValue.value,
+                showPercent: pieShowPercent.value
             });
             chartInstance.setOption(option);
         };
 
-        onMounted(() => {
-            if (['chart', 'heatmap', 'pyecharts'].includes(props.cell.type)) {
-                nextTick(() => initChart());
-                
-                // 监听窗口大小变化，自动调整图表尺寸
-                window.addEventListener('resize', handleResize);
-                
-                // 监听配色方案变化，更新图表
-                window.addEventListener('colorSchemeChanged', initChart);
-            }
-        });
-        
-        onUnmounted(() => {
-            // 移除resize监听，避免内存泄漏
-            window.removeEventListener('resize', handleResize);
-            // 移除配色方案变化监听
-            window.removeEventListener('colorSchemeChanged', initChart);
-            // 销毁图表实例
-            if (chartInstance) {
-                chartInstance.dispose();
-                chartInstance = null;
-            }
-        });
-        
-        // 处理窗口resize
         const handleResize = () => {
             if (chartInstance) {
                 chartInstance.resize();
             }
         };
 
+        // -----------------------------------------------------------------------------
+        // 9. 生命周期钩子
+        // -----------------------------------------------------------------------------
+        onMounted(() => {
+            if (['chart', 'heatmap', 'pyecharts'].includes(props.cell.type)) {
+                nextTick(() => initChart());
+                window.addEventListener('resize', handleResize);
+                window.addEventListener('colorSchemeChanged', initChart);
+            }
+        });
+
+        onUnmounted(() => {
+            window.removeEventListener('resize', handleResize);
+            window.removeEventListener('colorSchemeChanged', initChart);
+            if (chartInstance) {
+                chartInstance.dispose();
+                chartInstance = null;
+            }
+        });
+
+        // -----------------------------------------------------------------------------
+        // 10. 暴露给模板的属性和方法
+        // -----------------------------------------------------------------------------
         return {
             chartRef,
             heatmapMultiplier,
@@ -379,16 +381,20 @@ const CellRenderer = {
             getChartType
         };
     },
+
+    // -----------------------------------------------------------------------------
+    // 11. 模板
+    // -----------------------------------------------------------------------------
     template: `
         <!-- Section - 直接渲染，不包裹 .cell -->
-        <div v-if="cell.type === 'section'" 
+        <div v-if="cell.type === 'section'"
              class="section"
-             :class="{ 
+             :class="{
                  'nested-section': level > 0,
                  'collapsible-section': cell.options?.collapsed !== undefined
              }"
              :id="'section-' + cellId">
-            <div v-if="cell.title" 
+            <div v-if="cell.title"
                  class="section-title"
                  :class="{ 'collapsible-header': cell.options?.collapsed !== undefined }"
                  @click="cell.options?.collapsed !== undefined && (cell.options.collapsed = !cell.options.collapsed)">
@@ -398,8 +404,8 @@ const CellRenderer = {
                 </span>
             </div>
             <div class="section-content" v-show="cell.options?.collapsed !== true">
-                <cell-renderer 
-                    v-for="(subCell, idx) in cell.children" 
+                <cell-renderer
+                    v-for="(subCell, idx) in cell.children"
                     :key="idx"
                     :cell="subCell"
                     :cell-id="cellId + '-' + idx"
@@ -407,7 +413,7 @@ const CellRenderer = {
                 </cell-renderer>
             </div>
         </div>
-        
+
         <!-- 其他类型 - 包裹在 .cell 中 -->
         <div v-else class="cell">
             <!-- 标题 -->
@@ -416,27 +422,27 @@ const CellRenderer = {
                 <h2 v-else-if="cell.options?.level === 2">{{ cell.content }}</h2>
                 <h3 v-else>{{ cell.content }}</h3>
             </div>
-            
+
             <!-- 文本 -->
-            <div v-else-if="cell.type === 'text'" 
-                 class="cell-text" 
+            <div v-else-if="cell.type === 'text'"
+                 class="cell-text"
                  :class="'text-' + (cell.options?.style || 'normal')">
                 {{ cell.content }}
             </div>
-            
+
             <!-- Markdown -->
-            <div v-else-if="cell.type === 'markdown'" 
-                 class="markdown-content" 
+            <div v-else-if="cell.type === 'markdown'"
+                 class="markdown-content"
                  v-html="renderMarkdown(cell.content)">
             </div>
-            
+
             <!-- 代码 -->
             <div v-else-if="cell.type === 'code'" class="code-block">
                 <div class="code-header">{{ cell.content?.lang || 'Python' }}</div>
                 <div class="code-input"><pre>{{ cell.content?.code }}</pre></div>
                 <div v-if="cell.content?.output" class="code-output">{{ cell.content.output }}</div>
             </div>
-            
+
             <!-- 表格 -->
             <div v-else-if="cell.type === 'table'" class="cell-table">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
@@ -451,12 +457,12 @@ const CellRenderer = {
                     v-bind="getTableOptions(cell)">
                 </ft-table>
             </div>
-            
+
             <!-- 指标 -->
             <div v-else-if="cell.type === 'metrics'" class="cell-metrics">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
                 <div class="metrics-grid" :style="{'--columns': cell.options?.columns || 4}">
-                    <div v-for="metric in cell.content" 
+                    <div v-for="metric in cell.content"
                          :key="metric.name"
                          class="metric-card"
                          :class="getMetricClass(metric.value)">
@@ -466,7 +472,7 @@ const CellRenderer = {
                     </div>
                 </div>
             </div>
-            
+
             <!-- 饼图（带显示控制） -->
             <div v-else-if="cell.content?.charts && getChartType(cell.content) === 'pie'"
                  class="cell-chart pie-with-control">
@@ -483,15 +489,15 @@ const CellRenderer = {
                         <div class="control-label">显示选项</div>
                         <div class="checkbox-group">
                             <label class="checkbox-item">
-                                <input 
-                                    type="checkbox" 
+                                <input
+                                    type="checkbox"
                                     v-model="pieShowValue"
                                     @change="updatePie">
                                 <span>原始数据</span>
                             </label>
                             <label class="checkbox-item">
-                                <input 
-                                    type="checkbox" 
+                                <input
+                                    type="checkbox"
                                     v-model="pieShowPercent"
                                     @change="updatePie">
                                 <span>百分比</span>
@@ -500,7 +506,7 @@ const CellRenderer = {
                     </div>
                 </div>
             </div>
-            
+
             <!-- 热力图（带放大倍数控制） -->
             <div v-else-if="cell.content?.charts && getChartType(cell.content) === 'heatmap'"
                  class="cell-chart heatmap-with-control">
@@ -517,20 +523,20 @@ const CellRenderer = {
                         <div class="control-label">数据缩放</div>
                         <div class="current-multiplier">×{{ heatmapMultiplier }}</div>
                         <div class="multiplier-buttons">
-                            <button 
-                                v-for="m in [1000, 100, 10]" 
+                            <button
+                                v-for="m in [1000, 100, 10]"
                                 :key="m"
                                 :class="{ active: heatmapMultiplier === m }"
                                 @click="heatmapMultiplier = m; updateHeatmap()">
                                 ×{{ m }}
                             </button>
-                            <button 
+                            <button
                                 :class="{ active: heatmapMultiplier === 1 }"
                                 @click="heatmapMultiplier = 1; updateHeatmap()">
                                 原始
                             </button>
-                            <button 
-                                v-for="m in [0.1, 0.01]" 
+                            <button
+                                v-for="m in [0.1, 0.01]"
                                 :key="m"
                                 :class="{ active: heatmapMultiplier === m }"
                                 @click="heatmapMultiplier = m; updateHeatmap()">
@@ -540,9 +546,9 @@ const CellRenderer = {
                     </div>
                 </div>
             </div>
-            
+
             <!-- 其他图表（折线图、柱状图等） -->
-            <div v-else-if="(cell.type === 'chart' || cell.type === 'pyecharts') && cell.content?.charts" 
+            <div v-else-if="(cell.type === 'chart' || cell.type === 'pyecharts') && cell.content?.charts"
                  class="cell-chart">
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
                 <div ref="chartRef"
@@ -558,10 +564,10 @@ const CellRenderer = {
             <div v-else-if="cell.type === 'html'" class="html-block">
                 <div class="html-block-inner" v-html="cell.content"></div>
             </div>
-            
+
             <!-- 分隔线 -->
             <div v-else-if="cell.type === 'divider'" class="cell-divider"></div>
-            
+
             <!-- 可折叠（遗留类型，保持兼容） -->
             <div v-else-if="cell.type === 'collapsible'" class="cell-collapsible">
                 <button class="collapse-toggle" @click="cell.options.collapsed = !cell.options.collapsed">
@@ -569,8 +575,8 @@ const CellRenderer = {
                     <span>{{ cell.options?.collapsed ? '▶' : '▼' }}</span>
                 </button>
                 <div v-show="!cell.options?.collapsed" class="collapse-content">
-                    <cell-renderer 
-                        v-for="(subCell, idx) in cell.children" 
+                    <cell-renderer
+                        v-for="(subCell, idx) in cell.children"
                         :key="idx"
                         :cell="subCell"
                         :cell-id="cellId + '-' + idx"
@@ -582,17 +588,20 @@ const CellRenderer = {
     `
 };
 
-// ========== 配色器组件 ==========
+// =============================================================================
+// 第二部分：ColorPicker 组件 - 配色选择器
+// =============================================================================
+
 const ColorPicker = {
     name: 'ColorPicker',
     setup() {
         const showColorPicker = ref(false);
         const colorPalettes = window.colorPalettes;
-        
+
         const toggleColorPicker = () => {
             showColorPicker.value = !showColorPicker.value;
         };
-        
+
         const setColorPalette = (scope, paletteKey) => {
             if (scope === 'global') {
                 colorPalettes.global = paletteKey;
@@ -604,7 +613,7 @@ const ColorPicker = {
             }
             window.dispatchEvent(new CustomEvent('colorSchemeChanged'));
         };
-        
+
         return {
             showColorPicker,
             colorPalettes,
@@ -617,7 +626,7 @@ const ColorPicker = {
             <div class="color-float-btn" @click="toggleColorPicker" :class="{ active: showColorPicker }" title="配色">
                 <span>🎨</span>
             </div>
-            
+
             <div class="drawer-overlay" v-if="showColorPicker" @click="showColorPicker = false"></div>
             <aside class="color-drawer" :class="{ open: showColorPicker }">
                 <div class="drawer-header">
@@ -633,9 +642,9 @@ const ColorPicker = {
                                     :class="{ active: colorPalettes.global === key }"
                                     @click="setColorPalette('global', key)">
                                 <div class="palette-preview">
-                                    <span v-for="(color, idx) in palette.colors.slice(0, 5)" 
+                                    <span v-for="(color, idx) in palette.colors.slice(0, 5)"
                                           :key="idx"
-                                          class="palette-color-dot" 
+                                          class="palette-color-dot"
                                           :style="{ backgroundColor: color }"></span>
                                 </div>
                                 <span class="palette-name">{{ palette.name }}</span>
@@ -669,7 +678,10 @@ const ColorPicker = {
     `
 };
 
-// ========== 目录菜单组件 ==========
+// =============================================================================
+// 第三部分：TocMenu 组件 - 目录菜单组件
+// =============================================================================
+
 const TocMenu = {
     name: 'TocMenu',
     props: {
@@ -678,22 +690,16 @@ const TocMenu = {
         cells: { type: Array, default: () => [] }
     },
     setup(props) {
+        // -----------------------------------------------------------------------------
+        // 1. 响应式状态
+        // -----------------------------------------------------------------------------
         const selectedIndices = ref(new Set());
         const menuExpanded = ref(false);
         const isNarrow = ref(false);
-        
-        const checkScreenWidth = () => {
-            const width = window.innerWidth;
-            const wasNarrow = isNarrow.value;
-            isNarrow.value = width <= 1200;
-            
-            if (!isNarrow.value) {
-                menuExpanded.value = true;
-            } else if (!wasNarrow && isNarrow.value) {
-                menuExpanded.value = false;
-            }
-        };
-        
+
+        // -----------------------------------------------------------------------------
+        // 2. 计算属性
+        // -----------------------------------------------------------------------------
         const tocItems = computed(() => {
             const items = [];
             if (props.title) {
@@ -706,11 +712,14 @@ const TocMenu = {
             });
             return items;
         });
-        
+
         const selectedCount = computed(() => selectedIndices.value.size);
-        
+
+        // -----------------------------------------------------------------------------
+        // 3. 方法
+        // -----------------------------------------------------------------------------
         const isSelected = (index) => selectedIndices.value.has(index);
-        
+
         const toggleSelection = (index) => {
             const newSet = new Set(selectedIndices.value);
             if (newSet.has(index)) {
@@ -720,16 +729,16 @@ const TocMenu = {
             }
             selectedIndices.value = newSet;
         };
-        
+
         const selectAll = () => {
             const allIndices = tocItems.value.map(item => item.index);
             selectedIndices.value = new Set(allIndices);
         };
-        
+
         const clearSelection = () => {
             selectedIndices.value = new Set();
         };
-        
+
         const scrollToSection = (index) => {
             if (index === -1) {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -738,44 +747,120 @@ const TocMenu = {
                 if (el) el.scrollIntoView({ behavior: 'smooth' });
             }
         };
-        
+
         const toggleMenu = () => {
             menuExpanded.value = !menuExpanded.value;
             setTimeout(() => {
                 window.dispatchEvent(new Event('resize'));
             }, 350);
         };
-        
+
+        const checkScreenWidth = () => {
+            const width = window.innerWidth;
+            const wasNarrow = isNarrow.value;
+            isNarrow.value = width <= 1200;
+
+            if (!isNarrow.value) {
+                menuExpanded.value = true;
+            } else if (!wasNarrow && isNarrow.value) {
+                menuExpanded.value = false;
+            }
+        };
+
+        // -----------------------------------------------------------------------------
+        // 4. 截图功能
+        // -----------------------------------------------------------------------------
+        const stitchImages = async (imageBlobs) => {
+            const images = await Promise.all(imageBlobs.map(blob => {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = URL.createObjectURL(blob);
+                });
+            }));
+
+            const MARGIN_TOP = 12;
+            const MARGIN_BOTTOM = 12;
+            const CONTAINER_PADDING = 20;
+
+            const maxContentWidth = Math.max(...images.map(img => img.width));
+            const maxWidth = maxContentWidth + CONTAINER_PADDING * 2;
+            const contentHeight = images.reduce((sum, img) => sum + img.height, 0);
+            const spacingHeight = (images.length - 1) * (MARGIN_TOP + MARGIN_BOTTOM);
+            const totalHeight = contentHeight + spacingHeight + CONTAINER_PADDING * 2;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = maxWidth;
+            canvas.height = totalHeight;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#f5f5f5';
+            ctx.fillRect(0, 0, maxWidth, totalHeight);
+
+            let currentY = CONTAINER_PADDING;
+            images.forEach((img, index) => {
+                const x = Math.floor((maxWidth - img.width) / 2);
+
+                if (index > 0) {
+                    ctx.fillStyle = '#f5f5f5';
+                    ctx.fillRect(0, currentY, maxWidth, MARGIN_TOP);
+                    currentY += MARGIN_TOP;
+                }
+
+                ctx.drawImage(img, x, currentY);
+                currentY += img.height;
+
+                if (index < images.length - 1) {
+                    ctx.fillStyle = '#f5f5f5';
+                    ctx.fillRect(0, currentY, maxWidth, MARGIN_BOTTOM);
+                    currentY += MARGIN_BOTTOM;
+                }
+
+                URL.revokeObjectURL(img.src);
+            });
+
+            return new Promise((resolve) => {
+                canvas.toBlob(resolve, 'image/png');
+            });
+        };
+
+        const showToast = (message, type = 'info', duration = 3000) => {
+            if (typeof window !== 'undefined' && window.showToast) {
+                window.showToast(message, type, duration);
+            }
+        };
+
         const captureScreenshot = async () => {
             if (selectedIndices.value.size === 0) return;
-            
+
             const mainContainer = document.querySelector('.notebook-container');
             const elementsToCapture = [];
-            
+
             if (selectedIndices.value.has(-1)) {
                 const header = mainContainer.querySelector('.notebook-header');
                 if (header) elementsToCapture.push(header);
             }
-            
+
             const sortedIndices = [...selectedIndices.value]
                 .filter(index => index !== -1)
                 .sort((a, b) => a - b);
-            
+
             sortedIndices.forEach(index => {
                 const section = document.getElementById('section-' + index);
                 if (section) elementsToCapture.push(section);
             });
-            
+
             try {
                 await new Promise(resolve => setTimeout(resolve, 300));
-                
+
                 const imageBlobs = [];
                 for (const el of elementsToCapture) {
                     const hasTable = el.querySelector('ft-table, .ft-table, table');
                     if (hasTable) {
                         await new Promise(resolve => setTimeout(resolve, 200));
                     }
-                    
+
                     const result = await snapdom(el, {
                         scale: 2,
                         backgroundColor: '#f5f5f5',
@@ -784,9 +869,9 @@ const TocMenu = {
                     const blob = await result.toBlob({ type: 'png' });
                     imageBlobs.push(blob);
                 }
-                
+
                 const finalBlob = await stitchImages(imageBlobs);
-                
+
                 try {
                     window.focus();
                     await navigator.clipboard.write([
@@ -810,28 +895,28 @@ const TocMenu = {
                 showToast('截图失败: ' + err.message, 'error');
             }
         };
-        
+
         const captureAll = async () => {
             const element = document.querySelector('.notebook-container');
             if (!element) {
                 showToast('未找到截图区域', 'error');
                 return;
             }
-            
+
             try {
                 window.focus();
                 document.body.focus();
-                
+
                 const result = await snapdom(element, {
                     backgroundColor: '#f5f5f5',
                     scale: 1,
                     cache: 'auto'
                 });
-                
+
                 const blob = await result.toBlob({ type: 'png' });
-                
+
                 window.focus();
-                
+
                 try {
                     await navigator.clipboard.write([
                         new ClipboardItem({ 'image/png': blob })
@@ -852,77 +937,22 @@ const TocMenu = {
                 showToast('截图失败: ' + err.message, 'error');
             }
         };
-        
-        const stitchImages = async (imageBlobs) => {
-            const images = await Promise.all(imageBlobs.map(blob => {
-                return new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.onload = () => resolve(img);
-                    img.onerror = reject;
-                    img.src = URL.createObjectURL(blob);
-                });
-            }));
-            
-            const MARGIN_TOP = 12;
-            const MARGIN_BOTTOM = 12;
-            const CONTAINER_PADDING = 20;
-            
-            const maxContentWidth = Math.max(...images.map(img => img.width));
-            const maxWidth = maxContentWidth + CONTAINER_PADDING * 2;
-            const contentHeight = images.reduce((sum, img) => sum + img.height, 0);
-            const spacingHeight = (images.length - 1) * (MARGIN_TOP + MARGIN_BOTTOM);
-            const totalHeight = contentHeight + spacingHeight + CONTAINER_PADDING * 2;
-            
-            const canvas = document.createElement('canvas');
-            canvas.width = maxWidth;
-            canvas.height = totalHeight;
-            const ctx = canvas.getContext('2d');
-            
-            ctx.fillStyle = '#f5f5f5';
-            ctx.fillRect(0, 0, maxWidth, totalHeight);
-            
-            let currentY = CONTAINER_PADDING;
-            images.forEach((img, index) => {
-                const x = Math.floor((maxWidth - img.width) / 2);
-                
-                if (index > 0) {
-                    ctx.fillStyle = '#f5f5f5';
-                    ctx.fillRect(0, currentY, maxWidth, MARGIN_TOP);
-                    currentY += MARGIN_TOP;
-                }
-                
-                ctx.drawImage(img, x, currentY);
-                currentY += img.height;
-                
-                if (index < images.length - 1) {
-                    ctx.fillStyle = '#f5f5f5';
-                    ctx.fillRect(0, currentY, maxWidth, MARGIN_BOTTOM);
-                    currentY += MARGIN_BOTTOM;
-                }
-                
-                URL.revokeObjectURL(img.src);
-            });
-            
-            return new Promise((resolve) => {
-                canvas.toBlob(resolve, 'image/png');
-            });
-        };
-        
-        const showToast = (message, type = 'info', duration = 3000) => {
-            if (typeof window !== 'undefined' && window.showToast) {
-                window.showToast(message, type, duration);
-            }
-        };
-        
+
+        // -----------------------------------------------------------------------------
+        // 5. 生命周期钩子
+        // -----------------------------------------------------------------------------
         onMounted(() => {
             checkScreenWidth();
             window.addEventListener('resize', checkScreenWidth);
         });
-        
+
         onUnmounted(() => {
             window.removeEventListener('resize', checkScreenWidth);
         });
-        
+
+        // -----------------------------------------------------------------------------
+        // 6. 暴露给模板
+        // -----------------------------------------------------------------------------
         return {
             tocItems,
             selectedCount,
@@ -938,6 +968,10 @@ const TocMenu = {
             isNarrow
         };
     },
+
+    // -----------------------------------------------------------------------------
+    // 7. 模板
+    // -----------------------------------------------------------------------------
     template: `
         <nav class="toc-float-menu" :class="{ expanded: menuExpanded }" v-if="tocItems.length > 0">
             <div class="menu-wide">
@@ -946,11 +980,11 @@ const TocMenu = {
                     <button v-if="isNarrow" class="collapse-btn" @click="toggleMenu" title="收起">✕</button>
                 </div>
                 <ul class="menu-list">
-                    <li v-for="(item, index) in tocItems" :key="index" 
-                        class="menu-item" 
+                    <li v-for="(item, index) in tocItems" :key="index"
+                        class="menu-item"
                         :class="{ selected: isSelected(item.index) }"
                         @click="scrollToSection(item.index)">
-                        <input type="checkbox" :checked="isSelected(item.index)" 
+                        <input type="checkbox" :checked="isSelected(item.index)"
                                @click.stop="toggleSelection(item.index)">
                         <span class="menu-title">{{ item.title }}</span>
                     </li>
@@ -962,11 +996,11 @@ const TocMenu = {
                     <button @click="captureAll" class="full-btn">📋 全页</button>
                 </div>
             </div>
-            
+
             <div class="menu-narrow">
                 <div class="collapsed-header" @click="toggleMenu" title="展开目录">📑</div>
                 <ul class="collapsed-list">
-                    <li v-for="(item, index) in tocItems" :key="index" 
+                    <li v-for="(item, index) in tocItems" :key="index"
                         class="collapsed-item"
                         :class="{ selected: isSelected(item.index) }"
                         @click="scrollToSection(item.index)"
@@ -979,14 +1013,17 @@ const TocMenu = {
     `
 };
 
-// ========== Toast 提示组件 ==========
+// =============================================================================
+// 第四部分：Toast 组件 - 提示消息组件
+// =============================================================================
+
 const Toast = {
     name: 'Toast',
     setup() {
         const toastMessage = ref('');
         const toastType = ref('info');
         let toastTimer = null;
-        
+
         const showToast = (message, type = 'info', duration = 3000) => {
             toastMessage.value = message;
             toastType.value = type;
@@ -995,12 +1032,11 @@ const Toast = {
                 toastMessage.value = '';
             }, duration);
         };
-        
-        // 将 showToast 暴露到 window，供其他组件调用
+
         if (typeof window !== 'undefined') {
             window.showToast = showToast;
         }
-        
+
         return {
             toastMessage,
             toastType
@@ -1013,11 +1049,13 @@ const Toast = {
     `
 };
 
-// ========== 创建 Notebook 应用 ==========
+// =============================================================================
+// 第五部分：createNotebookApp - 创建 Notebook 应用
+// =============================================================================
+
 function createNotebookApp() {
-    // 从全局获取 FtTable 组件（由 ft-table.js 暴露到 window）
     const FtTableComponent = typeof window !== 'undefined' ? window.FtTable : null;
-    
+
     return createApp({
         components: {
             CellRenderer,
@@ -1028,7 +1066,9 @@ function createNotebookApp() {
         },
 
         setup() {
-            // 从全局变量获取配置（由后端渲染时注入）
+            // -----------------------------------------------------------------------------
+            // 1. 配置与状态
+            // -----------------------------------------------------------------------------
             const config = window.notebookConfig || {
                 title: '未命名 Notebook',
                 createdAt: new Date().toLocaleString(),
@@ -1037,14 +1077,14 @@ function createNotebookApp() {
 
             const title = ref(config.title);
             const createdAt = ref(config.createdAt);
-            // 兼容 cells 和 children 两种字段名
             const cells = ref(config.children || config.cells || []);
             const isScreenshotMode = ref(false);
-            
-            // 配色方案 - 基于分组的配色管理（方案A）
+
+            // -----------------------------------------------------------------------------
+            // 2. 配色方案配置
+            // -----------------------------------------------------------------------------
             const defaultPalettes = {
                 global: 'warmToCool',
-                // 图表类型到分组的映射（新增图表类型只需在此添加）
                 typeToGroup: {
                     line: 'chart',
                     bar: 'chart',
@@ -1054,16 +1094,12 @@ function createNotebookApp() {
                     pie: 'pie',
                     doughnut: 'pie',
                     funnel: 'pie',
-                    gauge: 'pie',
-                    heatmap: 'heatmap'
+                    gauge: 'pie'
                 },
-                // 分组配色设置（修改分组配色，该组下所有图表类型同步更新）
                 groups: {
                     chart: 'warmToCool',
-                    pie: 'warmToCool',
-                    heatmap: 'heatmap'
+                    pie: 'warmToCool'
                 },
-                // 配色方案定义
                 palettes: {
                     warmToCool: {
                         name: '暖冷渐变系',
@@ -1087,14 +1123,19 @@ function createNotebookApp() {
                     }
                 }
             };
-            
-            // 如果 window.colorPalettes 不存在，创建并赋值
-            // 如果存在但结构不匹配（没有 groups），也重新创建
+
             if (!window.colorPalettes || !window.colorPalettes.groups) {
                 window.colorPalettes = Vue.reactive(defaultPalettes);
             }
             const colorPalettes = window.colorPalettes;
-            
+
+            // -----------------------------------------------------------------------------
+            // 3. Toast 方法（供内部使用）
+            // -----------------------------------------------------------------------------
+            const toastMessage = ref('');
+            const toastType = ref('info');
+            let toastTimer = null;
+
             const showToast = (message, type = 'info', duration = 3000) => {
                 toastMessage.value = message;
                 toastType.value = type;
@@ -1103,7 +1144,10 @@ function createNotebookApp() {
                     toastMessage.value = '';
                 }, duration);
             };
-            
+
+            // -----------------------------------------------------------------------------
+            // 4. 暴露给模板
+            // -----------------------------------------------------------------------------
             return {
                 title,
                 createdAt,
@@ -1114,7 +1158,10 @@ function createNotebookApp() {
     });
 }
 
-// 导出（如果支持模块系统）
+// =============================================================================
+// 第六部分：导出
+// =============================================================================
+
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { CellRenderer, ColorPicker, TocMenu, Toast, createNotebookApp };
 }
