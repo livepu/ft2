@@ -92,55 +92,15 @@ const CellRenderer = {
             return content.charts?.series?.[0]?.type || null;
         };
 
-        // 从 pyecharts 配置中提取核心数据，转换为 buildChartOption 格式
+        // 从 pyecharts 配置中提取核心数据（统一格式）
         const extractChartData = (charts) => {
-            if (!charts || !charts.series || !charts.series[0]) return null;
-            
-            const series = charts.series;
-            const chartType = series[0].type;
-            
-            if (chartType === 'line' || chartType === 'bar') {
-                const xAxisData = charts.xAxis?.[0]?.data || [];
-                const extractedSeries = series.map(s => {
-                    let data = s.data || [];
-                    if (data.length > 0 && Array.isArray(data[0])) {
-                        data = data.map(d => d[1]);
-                    }
-                    return { name: s.name, data };
-                });
-                return {
-                    chart_type: chartType,
-                    xAxis: xAxisData,
-                    series: extractedSeries
-                };
-            }
-            
-            if (chartType === 'pie') {
-                return {
-                    chart_type: 'pie',
-                    data: series[0].data || []
-                };
-            }
-            
-            if (chartType === 'heatmap') {
-                const xAxisData = charts.xAxis?.[0]?.data || [];
-                const yAxisData = charts.yAxis?.[0]?.data || [];
-                const heatmapRawData = series[0].data || [];
-                const heatmapDict = {};
-                yAxisData.forEach((year, yIdx) => {
-                    heatmapDict[year] = {};
-                    xAxisData.forEach((month, mIdx) => {
-                        const point = heatmapRawData.find(p => p[0] === mIdx && p[1] === yIdx);
-                        heatmapDict[year][month] = point ? point[2] : 0;
-                    });
-                });
-                return {
-                    chart_type: 'heatmap',
-                    data: heatmapDict
-                };
-            }
-            
-            return null;
+            if (!charts?.series?.[0]) return null;
+            return {
+                chart_type: charts.series[0].type,
+                series: charts.series,
+                xAxis: charts.xAxis?.[0]?.data || [],
+                yAxis: charts.yAxis?.[0]?.data || []
+            };
         };
 
         // 初始化图表
@@ -159,51 +119,38 @@ const CellRenderer = {
                 return;
             }
             
-            // 深拷贝一份配置，避免修改原始数据
             const chartsConfig = JSON.parse(JSON.stringify(content.charts));
-            
             const extracted = extractChartData(chartsConfig);
             if (!extracted) {
-                // 直接使用原始配置，但已修改了 tooltip
                 chartInstance.setOption(chartsConfig);
                 return;
             }
-            
-            // 使用 buildChartOption 处理
+
             const chartType = extracted.chart_type;
-            const data = extracted.data || extracted;
-            
+
             if (chartType === 'pie') {
-                pieRawData.value = extracted.data;
+                pieRawData.value = extracted;
             }
             if (chartType === 'heatmap') {
-                heatmapRawData.value = extracted.data;
+                heatmapRawData.value = extracted;
                 heatmapMultiplier.value = 1;
             }
-            
-            const option = buildChartOption(
-                chartType === 'heatmap' ? 'heatmap' : 'chart',
-                chartType,
-                data,
-                cell.options,
-                heatmapMultiplier.value,
-                pieShowValue.value,
-                pieShowPercent.value
-            );
+
+            const option = buildChartOption(extracted, cell.options, heatmapMultiplier.value, pieShowValue.value, pieShowPercent.value);
             chartInstance.setOption(option);
         };
         
         // 更新热力图（当放大倍数改变时）
         const updateHeatmap = () => {
             if (!chartInstance || !heatmapRawData.value) return;
-            const option = buildChartOption('heatmap', 'heatmap', heatmapRawData.value, props.cell.options, heatmapMultiplier.value);
+            const option = buildChartOption(heatmapRawData.value, props.cell.options, heatmapMultiplier.value);
             chartInstance.setOption(option, { replaceMerge: ['visualMap'] });
         };
         
         // 更新饼图（当显示选项改变时）
         const updatePie = () => {
             if (!chartInstance || !pieRawData.value) return;
-            const option = buildChartOption('chart', 'pie', pieRawData.value, props.cell.options, 1, pieShowValue.value, pieShowPercent.value);
+            const option = buildChartOption(pieRawData.value, props.cell.options, 1, pieShowValue.value, pieShowPercent.value);
             chartInstance.setOption(option);
         };
 
@@ -217,244 +164,168 @@ const CellRenderer = {
             return palette ? palette.colors : ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa', '#d35400', '#9b59b6', '#76d7c4'];
         };
 
-        // 构建图表配置
-        const buildChartOption = (type, chartType, data, options = {}, multiplier = 1, showValue = true, showPercent = true) => {
-            const baseOption = {
-                tooltip: {},
-                grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true }
-            };
+        // 构建图表配置（统一数据格式：{ series, xAxis, yAxis }）
+        const buildChartOption = (data, options = {}, multiplier = 1, showValue = true, showPercent = true) => {
+            const chartType = data.chart_type;
+            const series = data.series || [];
+            const xAxis = data.xAxis || [];
+            const yAxis = data.yAxis || [];
 
-            if (type === 'chart') {
-                const isLine = chartType === 'line';
-                const isBar = chartType === 'bar';
-                const isArea = chartType === 'area';
-                const isPie = chartType === 'pie';
-
-                // 饼图特殊处理
-                if (isPie) {
-                    const pieColors = getChartColors('pie');
-                    // 构建 label 格式
-                    let labelFormatter = '{b}';
-                    if (showValue && showPercent) {
-                        labelFormatter = '{b}\n{c} ({d}%)';
-                    } else if (showValue) {
-                        labelFormatter = '{b}\n{c}';
-                    } else if (showPercent) {
-                        labelFormatter = '{b}\n({d}%)';
-                    }
-                    
-                    return {
-                        color: pieColors,
-                        tooltip: {},
-                        legend: {
-                            data: data.map((item, i) => ({
-                                name: item.name,
-                                itemStyle: {
-                                    color: pieColors[i % pieColors.length]
-                                }
-                            })),
-                            top: 10,
-                            left: 'center',
-                            orient: 'horizontal'
-                        },
-                        series: [{
-                            type: 'pie',
-                            data: data,
-                            radius: ['40%', '70%'],
-                            center: ['45%', '55%'],
-                            label: {
-                                show: true,
-                                formatter: labelFormatter
-                            },
-                            labelLine: {
-                                show: true,
-                                length: 15,
-                                length2: 10
-                            },
-                            emphasis: {
-                                label: {
-                                    show: true,
-                                    fontSize: 14,
-                                    fontWeight: 'bold'
-                                }
-                            }
-                        }]
-                    };
-                }
-
-                // 柱状图特殊处理：按系列使用系统配色
-                if (isBar) {
-                    const barColors = getChartColors('bar');
-                    const isSingleSeries = (data.series || []).length === 1;
-                    return {
-                        tooltip: {},
-                        legend: {
-                            data: (data.series || []).map((s, i) => ({
-                                name: s.name,
-                                icon: 'rect',
-                                itemStyle: {
-                                    color: isSingleSeries ? barColors[0] : barColors[i % barColors.length]
-                                }
-                            })),
-                            top: 5
-                        },
-                        grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
-                        xAxis: {
-                            type: 'category',
-                            data: data.xAxis || data.dates || data.categories || []
-                        },
-                        yAxis: {
-                            type: 'value',
-                            scale: true,
-                            boundaryGap: ['10%', '10%']
-                        },
-                        series: (data.series || []).map((s, i) => {
-                            const baseColor = barColors[i % barColors.length];
-                            return {
-                                name: s.name,
-                                type: 'bar',
-                                data: s.data,
-                                itemStyle: {
-                                    color: isSingleSeries ? function(params) {
-                                        return params.value >= 0 ? barColors[0] : '#27ae60';
-                                    } : baseColor,
-                                    borderRadius: [4, 4, 0, 0]
-                                }
-                            };
-                        })
-                    };
-                }
-
-                // 折线图和面积图
-                const lineColors = getChartColors('line');
-                return {
-                    color: lineColors,
-                    ...baseOption,
-                    legend: { 
-                        data: (data.series || []).map((s, i) => ({
-                            name: s.name,
-                            itemStyle: {
-                                color: lineColors[i % lineColors.length]
-                            }
-                        })), 
-                        top: 5 
-                    },
-                    xAxis: {
-                        type: 'category',
-                        boundaryGap: false,
-                        data: data.xAxis || data.dates || data.categories || []
-                    },
-                    yAxis: { 
-                        type: 'value',
-                        scale: true,
-                        boundaryGap: ['10%', '10%']
-                    },
-                    series: (data.series || []).map((s, i) => ({
-                        name: s.name,
-                        type: isArea ? 'line' : chartType,
-                        data: s.data,
-                        smooth: true,
-                        areaStyle: isArea ? { 
-                            color: {
-                                type: 'linear',
-                                x: 0, y: 0, x2: 0, y2: 1,
-                                colorStops: [
-                                    { offset: 0, color: lineColors[i % lineColors.length] + '60' },
-                                    { offset: 1, color: lineColors[i % lineColors.length] + '10' }
-                                ]
-                            }
-                        } : undefined,
-                        itemStyle: { color: lineColors[i % lineColors.length] }
-                    }))
-                };
-            } else if (type === 'heatmap') {
-                const years = Object.keys(data);
-                const months = Object.keys(data[years[0]]);
-                const heatmapData = [];
-                let minValue = Infinity;
-                let maxValue = -Infinity;
-                
-                years.forEach((year, yIndex) => {
-                    months.forEach((month, mIndex) => {
-                        const value = data[year][month];
-                        if (value !== undefined) {
-                            const numValue = parseFloat(value);
-                            heatmapData.push([mIndex, yIndex, numValue]);
-                            minValue = Math.min(minValue, numValue);
-                            maxValue = Math.max(maxValue, numValue);
-                        }
-                    });
-                });
-
-                // 应用传入的放大倍数（保持为数字类型）
-                const displayData = heatmapData.map(d => [d[0], d[1], d[2] * multiplier]);
-                
-                // 根据放大后的数据范围设置 visualMap（实际最大值最小值）
-                const displayValues = displayData.map(d => d[2]);
-                const actualMin = Math.min(...displayValues);
-                const actualMax = Math.max(...displayValues);
-                
-                // 根据数值范围确定合适的步长和小数位数
-                const valueRange = actualMax - actualMin;
-                let step = 0.01;
-                let decimalPlaces = 2;
-                
-                if (valueRange >= 10) {
-                    step = 5;
-                    decimalPlaces = 0;
-                } else if (valueRange >= 1) {
-                    step = 0.5;
-                    decimalPlaces = 1;
-                } else if (valueRange >= 0.1) {
-                    step = 0.05;
-                    decimalPlaces = 2;
-                }
-                
-                // 向上/向下取整，让边界更美观
-                const visualMin = Math.floor(actualMin / step) * step;
-                const visualMax = Math.ceil(actualMax / step) * step;
-
-                return {
-                    tooltip: {},
-                    grid: { left: '10%', right: '18%', top: '10%', bottom: '12%' },
-                    xAxis: {
-                        type: 'category',
-                        data: months,
-                        splitArea: { show: true }
-                    },
-                    yAxis: {
-                        type: 'category',
-                        data: years,
-                        splitArea: { show: true }
-                    },
-                    visualMap: {
-                        min: visualMin,
-                        max: visualMax,
-                        range: [visualMin, visualMax],
-                        calculable: true,
-                        orient: 'vertical',
-                        right: '2%',
-                        top: 'center',
-                        text: [visualMax.toFixed(decimalPlaces) + ' (×' + multiplier + ')', 
-                               visualMin.toFixed(decimalPlaces) + ' (×' + multiplier + ')'],
-                        inRange: {
-                            color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8',
-                                    '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']
-                        }
-                    },
-                    series: [{
-                        name: '收益',
-                        type: 'heatmap',
-                        data: displayData,
-                        label: { show: true, formatter: function(params) {
-                            return params.value[2].toFixed(2);
-                        }},
-                        emphasis: { itemStyle: { shadowBlur: 10 } }
-                    }]
-                };
+            if (chartType === 'pie') {
+                return buildPieOption(series[0]?.data || [], showValue, showPercent);
             }
+            if (chartType === 'bar') {
+                return buildBarOption(series, xAxis);
+            }
+            if (chartType === 'line' || chartType === 'area') {
+                return buildLineOption(series, xAxis, chartType === 'area');
+            }
+            if (chartType === 'heatmap') {
+                return buildHeatmapOption(series[0]?.data || [], xAxis, yAxis, multiplier);
+            }
+            return { tooltip: {} };
+        };
 
-            return baseOption;
+        // 饼图配置
+        const buildPieOption = (data, showValue, showPercent) => {
+            const pieColors = getChartColors('pie');
+            let labelFormatter = '{b}';
+            if (showValue && showPercent) labelFormatter = '{b}\n{c} ({d}%)';
+            else if (showValue) labelFormatter = '{b}\n{c}';
+            else if (showPercent) labelFormatter = '{b}\n({d}%)';
+            return {
+                color: pieColors,
+                tooltip: {},
+                legend: {
+                    data: data.map((item, i) => ({
+                        name: item.name,
+                        itemStyle: { color: pieColors[i % pieColors.length] }
+                    })),
+                    top: 10,
+                    left: 'center',
+                    orient: 'horizontal'
+                },
+                series: [{
+                    type: 'pie',
+                    data: data,
+                    radius: ['40%', '70%'],
+                    center: ['45%', '55%'],
+                    label: { show: true, formatter: labelFormatter },
+                    labelLine: { show: true, length: 15, length2: 10 },
+                    emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } }
+                }]
+            };
+        };
+
+        // 柱状图配置
+        const buildBarOption = (series, xAxis) => {
+            const barColors = getChartColors('bar');
+            const isSingleSeries = series.length === 1;
+            return {
+                tooltip: {},
+                legend: {
+                    data: series.map((s, i) => ({
+                        name: s.name,
+                        icon: 'rect',
+                        itemStyle: { color: isSingleSeries ? barColors[0] : barColors[i % barColors.length] }
+                    })),
+                    top: 5
+                },
+                grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
+                xAxis: { type: 'category', data: xAxis },
+                yAxis: { type: 'value', scale: true, boundaryGap: ['10%', '10%'] },
+                series: series.map((s, i) => {
+                    const baseColor = barColors[i % barColors.length];
+                    return {
+                        name: s.name,
+                        type: 'bar',
+                        data: s.data,
+                        itemStyle: {
+                            color: isSingleSeries ? function(params) {
+                                return params.value >= 0 ? barColors[0] : '#27ae60';
+                            } : baseColor,
+                            borderRadius: [4, 4, 0, 0]
+                        }
+                    };
+                })
+            };
+        };
+
+        // 折线图/面积图配置
+        const buildLineOption = (series, xAxis, isArea) => {
+            const lineColors = getChartColors('line');
+            return {
+                color: lineColors,
+                tooltip: {},
+                grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
+                legend: {
+                    data: series.map((s, i) => ({
+                        name: s.name,
+                        itemStyle: { color: lineColors[i % lineColors.length] }
+                    })),
+                    top: 5
+                },
+                xAxis: { type: 'category', boundaryGap: false, data: xAxis },
+                yAxis: { type: 'value', scale: true, boundaryGap: ['10%', '10%'] },
+                series: series.map((s, i) => ({
+                    name: s.name,
+                    type: isArea ? 'line' : 'line',
+                    data: s.data,
+                    smooth: true,
+                    areaStyle: isArea ? {
+                        color: {
+                            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                            colorStops: [
+                                { offset: 0, color: lineColors[i % lineColors.length] + '60' },
+                                { offset: 1, color: lineColors[i % lineColors.length] + '10' }
+                            ]
+                        }
+                    } : undefined,
+                    itemStyle: { color: lineColors[i % lineColors.length] }
+                }))
+            };
+        };
+
+        // 热力图配置
+        const buildHeatmapOption = (rawData, xAxis, yAxis, multiplier) => {
+            let minValue = Infinity, maxValue = -Infinity;
+            const displayData = rawData.map(d => {
+                const scaled = d[2] * multiplier;
+                if (scaled < minValue) minValue = scaled;
+                if (scaled > maxValue) maxValue = scaled;
+                return [d[0], d[1], scaled];
+            });
+            const valueRange = maxValue - minValue;
+            let step = 0.01, decimalPlaces = 2;
+            if (valueRange >= 10) { step = 5; decimalPlaces = 0; }
+            else if (valueRange >= 1) { step = 0.5; decimalPlaces = 1; }
+            else if (valueRange >= 0.1) { step = 0.05; decimalPlaces = 2; }
+            const visualMin = Math.floor(minValue / step) * step;
+            const visualMax = Math.ceil(maxValue / step) * step;
+            return {
+                tooltip: {},
+                grid: { left: '10%', right: '18%', top: '10%', bottom: '12%' },
+                xAxis: { type: 'category', data: xAxis, splitArea: { show: true } },
+                yAxis: { type: 'category', data: yAxis, splitArea: { show: true } },
+                visualMap: {
+                    min: visualMin, max: visualMax,
+                    range: [visualMin, visualMax],
+                    calculable: true, orient: 'vertical', right: '2%', top: 'center',
+                    text: [visualMax.toFixed(decimalPlaces) + ' (×' + multiplier + ')',
+                           visualMin.toFixed(decimalPlaces) + ' (×' + multiplier + ')'],
+                    inRange: {
+                        color: ['#313695', '#4575b4', '#74add1', '#abd9e9', '#e0f3f8',
+                                '#ffffbf', '#fee090', '#fdae61', '#f46d43', '#d73027', '#a50026']
+                    }
+                },
+                series: [{
+                    name: '收益',
+                    type: 'heatmap',
+                    data: displayData,
+                    label: { show: true, formatter: params => params.value[2].toFixed(2) },
+                    emphasis: { itemStyle: { shadowBlur: 10 } }
+                }]
+            };
         };
 
         onMounted(() => {
