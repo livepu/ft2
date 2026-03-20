@@ -13,145 +13,48 @@
 <body>
     {% raw %}
     <div id="app">
-        <!-- Toast 提示容器 -->
-        <div class="toast-container" v-if="toastMessage">
-            <div class="toast" :class="toastType">{{ toastMessage }}</div>
-        </div>
-        
+                    
+            <!-- Toast 提示组件 -->
+            <toast></toast>
         <!-- 整体居中 wrapper -->
-        <div class="notebook-wrapper">
-            <!-- ========== 左侧浮动目录菜单 ========== -->
-            <nav class="toc-float-menu" :class="{ expanded: menuExpanded }" v-if="tocItems.length > 0">
-                <!-- 宽屏状态 - 完整显示 -->
-                <div class="menu-wide">
-                    <div class="menu-header">
-                        <span>📑 目录</span>
-                        <button v-if="isNarrow" class="collapse-btn" @click="toggleMenu" title="收起">✕</button>
+            <div class="notebook-wrapper">
+                <!-- 主体容器 -->
+
+                <!-- 目录菜单组件 -->
+                <toc-menu :title="title" :cells="cells"></toc-menu>
+
+                <div class="notebook-container">
+                    <!-- 头部 -->
+                    <div class="notebook-header">
+                        <h1>{{ title }}</h1>
+                        <div class="meta">
+                            <span>📅 {{ createdAt }}</span>
+                        </div>
                     </div>
-                    <ul class="menu-list">
-                        <li v-for="(item, index) in tocItems" :key="index" 
-                            class="menu-item" 
-                            :class="{ selected: isSelected(item.index) }"
-                            @click="scrollToSection(item.index)">
-                            <input type="checkbox" :checked="isSelected(item.index)" 
-                                   @click.stop="toggleSelection(item.index)">
-                            <span class="menu-title">{{ item.title }}</span>
-                        </li>
-                    </ul>
-                    <div class="menu-footer">
-                        <button @click="selectAll">全选</button>
-                        <button @click="clearSelection">清空</button>
-                        <button @click="captureScreenshot" :disabled="selectedCount === 0">截图选中</button>
-                        <button @click="captureAll" class="full-btn">📋 全页</button>
-                    </div>
+                    
+                    <!-- 内容区域 -->
+                    <cell-renderer 
+                        v-for="(cell, index) in cells" 
+                        :key="index"
+                        :cell="cell"
+                        :cell-id="index"
+                        :level="0">
+                    </cell-renderer>
                 </div>
-                
-                <!-- 窄屏状态 - 显示首字，点击展开 -->
-                <div class="menu-narrow">
-                    <div class="collapsed-header" @click="toggleMenu" title="展开目录">📑</div>
-                    <ul class="collapsed-list">
-                        <li v-for="(item, index) in tocItems" :key="index" 
-                            class="collapsed-item"
-                            :class="{ selected: isSelected(item.index) }"
-                            @click="scrollToSection(item.index)"
-                            :title="item.title">
-                            {{ item.title.charAt(0) }}
-                        </li>
-                    </ul>
-                </div>
-            </nav>
-            
-            <!-- 主体容器 -->
-            <div class="notebook-container">
-                <!-- 头部 -->
-                <div class="notebook-header">
-                    <h1>{{ title }}</h1>
-                    <div class="meta">
-                        <span>📅 {{ createdAt }}</span>
-                    </div>
-                </div>
-                
-                <!-- 内容区域 -->
-                <cell-renderer 
-                    v-for="(cell, index) in cells" 
-                    :key="index"
-                    :cell="cell"
-                    :cell-id="index"
-                    :level="0">
-                </cell-renderer>
+
             </div>
+
             
+            <!-- 配色器组件 -->
+            <color-picker></color-picker>
         </div>
-            
-        <!-- 配色按钮 - 固定在右下角 -->
-        <div class="color-float-btn" @click="toggleColorPicker" :class="{ active: showColorPicker }" title="配色">
-            <span>🎨</span>
-        </div>
-        
-        <!-- ========== 配色器抽屉 ========== -->
-        <div class="drawer-overlay" v-if="showColorPicker" @click="showColorPicker = false"></div>
-        <aside class="color-drawer" :class="{ open: showColorPicker }">
-            <div class="drawer-header">
-                <span>🎨 配色方案</span>
-                <button class="close-btn" @click="showColorPicker = false">✕</button>
-            </div>
-            <div class="drawer-body">
-                <div class="palette-group">
-                    <h5>全局配色</h5>
-                    <div class="palette-options">
-                        <button v-for="(palette, key) in colorPalettes.palettes" :key="key"
-                                class="palette-btn"
-                                :class="{ active: colorPalettes.global === key }"
-                                @click="setColorPalette('global', key)">
-                            <div class="palette-preview">
-                                <span v-for="(color, idx) in palette.colors.slice(0, 5)" 
-                                      :key="idx"
-                                      class="palette-color-dot" 
-                                      :style="{ backgroundColor: color }"></span>
-                            </div>
-                            <span class="palette-name">{{ palette.name }}</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="palette-group">
-                    <h5>按图表类型</h5>
-                    <div class="palette-options">
-                        <div class="chart-type-picker">
-                            <label>折线图:</label>
-                            <select v-model="colorPalettes.types.line" @change="updateChartColors">
-                                <option v-for="(palette, key) in colorPalettes.palettes" :key="key" :value="key">
-                                    {{ palette.name }}
-                                </option>
-                            </select>
-                        </div>
-                        <div class="chart-type-picker">
-                            <label>柱状图:</label>
-                            <select v-model="colorPalettes.types.bar" @change="updateChartColors">
-                                <option v-for="(palette, key) in colorPalettes.palettes" :key="key" :value="key">
-                                    {{ palette.name }}
-                                </option>
-                            </select>
-                        </div>
-                        <div class="chart-type-picker">
-                            <label>饼图:</label>
-                            <select v-model="colorPalettes.types.pie" @change="updateChartColors">
-                                <option v-for="(palette, key) in colorPalettes.palettes" :key="key" :value="key">
-                                    {{ palette.name }}
-                                </option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </aside>
-    </div>
     {% endraw %}
 
     <!-- Notebook 数据注入（Jinja2 渲染） -->
     <script id="notebook-data" type="application/json">{{ data_json | safe }}</script>
     
     <!-- Notebook Vue3 JS -->
-    <script src="https://gitee.com/liveup_admin/ft2/raw/master/template/js/notebook3.js"></script>
+    <script src="template/js/notebook3A.js"></script>
     <script>
         // 从 Jinja2 注入的数据创建配置
         const dataElement = document.getElementById('notebook-data');
