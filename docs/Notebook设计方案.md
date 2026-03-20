@@ -466,14 +466,57 @@ const CellRenderer = {
 };
 ```
 
-### 3.4 图表初始化
+### 3.4 图表初始化（插件架构）
+
+**架构设计：插件注册 + 通用兜底**
 
 ```javascript
-// ECharts 初始化
+// 数据提取（统一格式）
+const extractChartData = (charts) => {
+    if (!charts?.series?.[0]) return null;
+    return {
+        chart_type: charts.series[0].type,
+        series: charts.series,
+        xAxis: charts.xAxis?.[0]?.data || [],
+        yAxis: charts.yAxis?.[0]?.data || [],
+        raw: charts  // 保留原始配置，供特殊类型使用
+    };
+};
+
+// 插件注册表
+const chartPlugins = {
+    pie: (extracted, options) => processPie(extracted, options),
+    heatmap: (extracted, options) => processHeatmap(extracted, options),
+    gauge: gaugePlugin,
+    radar: radarPlugin,
+    funnel: funnelPlugin
+};
+
+// 统一处理入口
+const processChart = (extracted, options = {}) => {
+    const chartType = extracted.chart_type;
+    const plugin = chartPlugins[chartType];
+    
+    // 统一获取配色（heatmap 除外）
+    if (chartType !== 'heatmap') {
+        options.colors = getChartColors(chartType);
+    }
+    
+    const option = plugin ? plugin(extracted, options) : buildGenericOption(extracted, options);
+    
+    // 统一添加默认 tooltip
+    if (!option.tooltip) {
+        option.tooltip = {};
+    }
+    
+    return option;
+};
+
+// 图表初始化
 onMounted(() => {
-    if (['chart', 'heatmap'].includes(props.cell.type)) {
+    if (['chart', 'heatmap', 'pyecharts'].includes(props.cell.type)) {
         chartInstance = echarts.init(chartRef.value);
-        const option = buildChartOption(props.cell);
+        const option = processChart(extracted, options);
         chartInstance.setOption(option);
     }
 });
@@ -483,6 +526,26 @@ window.addEventListener('resize', () => {
     chartInstance?.resize();
 });
 ```
+
+**架构优势：**
+
+| 特性 | 说明 |
+|------|------|
+| **插件注册** | 新增图表类型只需注册插件，无需修改核心逻辑 |
+| **配色统一** | 在 processChart 层统一获取，避免重复调用 |
+| **tooltip 统一** | 默认添加，插件可覆盖 |
+| **通用兜底** | 未注册类型走 buildGenericOption |
+| **特殊类型透传** | gauge/radar/funnel 等保留原始配置 |
+
+**图表类型处理策略：**
+
+| 图表类型 | 处理方式 | 配色来源 |
+|---------|---------|---------|
+| line/bar/area/scatter | buildGenericOption | 用户可选配色 |
+| pie | processPie 插件 | 用户可选配色 |
+| heatmap | processHeatmap 插件 | 固定蓝-黄-红渐变 |
+| gauge/radar/funnel | 透传插件 | 用户可选配色 |
+| 其他 | buildGenericOption | 用户可选配色 |
 
 ### 3.5 配色方案
 
@@ -930,6 +993,7 @@ class Cell:
 | V5.3 | 2026-03-07 | **图表布局优化**：饼图/热力图控制面板右浮动，左右布局清晰 |
 | V5.4 | 2026-03-07 | **热力图功能增强**：visualMap 实际数据范围 + 缩放时自动重置选择区间 |
 | V5.5 | 2026-03-07 | **ft-table 架构优化**：组件注入样式（核心功能）vs 外部 CSS（视觉样式）职责清晰分离 |
+| V5.6 | 2026-03-21 | **图表插件架构**：插件注册模式 + 通用兜底 + 配色统一管理 + tooltip 统一添加 |
 
 ---
 
@@ -945,7 +1009,7 @@ ft2/
 └── template/
     ├── notebook.html        # Jinja2 + Vue3 模板
     └── js/
-        ├── notebook-vue3.js # Vue3 组件
+        ├── notebook3A.js    # Vue3 组件（插件架构版本）
         ├── notebook.css     # 样式文件
         ├── vue.global.prod.js
         ├── echarts.min.js
@@ -954,103 +1018,134 @@ ft2/
 
 ---
 
-## 附录H：Chart 参数设计思路
+## 附录H：图表插件架构设计
 
 ### H.1 核心设计理念
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    nb.chart() 数据流                             │
+│                    图表处理架构                                   │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  用户调用（简化输入）                                             │
-│  nb.chart('line', data, title='净值曲线', yaxis_opts={...})     │
+│  extractChartData()                                              │
+│  ├── 统一数据格式                                                │
+│  ├── chart_type, series, xAxis, yAxis                           │
+│  └── raw: 保留原始配置（供特殊类型使用）                          │
 │                         ↓                                        │
-│  内部构建 pyecharts 实例                                         │
-│  line = Line()                                                   │
-│  line.add_xaxis(data['xAxis'])                                   │
-│  line.add_yaxis(...)                                             │
-│  line.set_global_opts(yaxis_opts=...)                            │
+│  processChart()                                                  │
+│  ├── 统一获取配色（heatmap 除外）                                │
+│  ├── 统一添加 tooltip                                            │
+│  └── 查表分发到插件                                              │
 │                         ↓                                        │
-│  调用 dump_options() 输出 JSON                                   │
-│  option = json.loads(line.dump_options())                        │
-│                         ↓                                        │
-│  封装为 Notebook JSON                                            │
-│  {"type": "chart", "content": {"charts": {...}, "height": ...}} │
-│                         ↓                                        │
-│  前端 Vue3 渲染                                                  │
-│  echarts.init(dom).setOption(cell.content.charts)               │
+│  chartPlugins[chartType]                                         │
+│  ├── 有插件 → 执行插件                                           │
+│  └── 无插件 → buildGenericOption() 通用兜底                      │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**核心思路**：`nb.chart()` 是 pyecharts 的简化封装，通过 pyecharts 实例传入参数，再输出 JSON。前端 Vue3 通过 JSON 输出 ECharts。
+**核心思路**：插件注册模式 + 通用兜底，新增图表类型只需注册插件，无需修改核心逻辑。
 
 ### H.2 设计目标
 
 | 目标 | 说明 |
 |------|------|
-| **简化输入** | 数据格式比 pyecharts 更简洁 |
-| **复用 pyecharts** | 内部使用 pyecharts 实例，复用 `dump_options()` |
-| **输出统一** | `chart()` 和 `pyecharts()` 输出格式一致 |
-| **前端简单** | Vue3 直接调用 `setOption(content.charts)` |
+| **可扩展性** | 新增图表类型只需注册插件 |
+| **职责清晰** | 插件只关心核心配置，配色和 tooltip 统一处理 |
+| **避免重复** | 配色获取、tooltip 添加只在一处 |
+| **兼容性好** | 特殊类型通过 raw 保留原始配置 |
 
-### H.3 API 设计
+### H.3 插件注册表
 
-```python
-def chart(self, chart_type, data, title, height='400px', **kwargs):
-    """
-    创建图表（pyecharts 简化封装）
+```javascript
+const chartPlugins = {
+    // 差异化处理（需要特殊逻辑）
+    pie: (extracted, options) => processPie(extracted, options),
+    heatmap: (extracted, options) => processHeatmap(extracted, options),
     
-    基础参数:
-        chart_type: 'line' | 'bar' | 'area' | 'pie' | 'heatmap'（必填）
-        data: 图表数据（必填）
-        title: Cell 标题（必填，图表必须有标题）
-        
-    容器参数（有默认值）:
-        height: 容器高度，默认 '400px'
-        width: 容器宽度，默认 '100%'
-        
-    全局参数（可选，遵循 pyecharts 规范）:
-        title_opts: 标题配置
-        legend_opts: 图例配置
-        tooltip_opts: 提示框配置
-        xaxis_opts: X轴配置
-        yaxis_opts: Y轴配置
-        datazoom_opts: 数据缩放
-        visualmap_opts: 视觉映射
-        grid_opts: 网格配置
-        
-    系列参数（可选，统一应用到所有系列）:
-        series_opts: 系列配置
-    """
+    // 透传型（保留原始配置）
+    gauge: (extracted) => ({ series: extracted.series }),
+    radar: (extracted) => ({ ...extracted.raw }),
+    funnel: (extracted) => ({ series: extracted.series })
+};
 ```
 
-### H.4 参数分类
+### H.4 统一处理入口
 
+```javascript
+const processChart = (extracted, options = {}) => {
+    const chartType = extracted.chart_type;
+    const plugin = chartPlugins[chartType];
+    
+    // 统一获取配色（heatmap 除外）
+    if (chartType !== 'heatmap') {
+        options.colors = getChartColors(chartType);
+    }
+    
+    const option = plugin ? plugin(extracted, options) : buildGenericOption(extracted, options);
+    
+    // 统一添加默认 tooltip
+    if (!option.tooltip) {
+        option.tooltip = {};
+    }
+    
+    return option;
+};
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  基础参数                                                        │
-│  ├── chart_type   图表类型（必填）                               │
-│  ├── data         图表数据（必填）                               │
-│  └── title        Cell 标题（必填）                              │
-├─────────────────────────────────────────────────────────────────┤
-│  容器参数（有默认值）                                             │
-│  ├── height       高度，默认 '400px'                             │
-│  └── width        宽度，默认 '100%'                              │
-├─────────────────────────────────────────────────────────────────┤
-│  全局参数（可选，遵循 pyecharts 规范）                            │
-│  ├── title_opts     标题配置                                     │
-│  ├── legend_opts    图例配置                                     │
-│  ├── tooltip_opts   提示框配置                                   │
-│  ├── xaxis_opts     X轴配置                                      │
-│  ├── yaxis_opts     Y轴配置                                      │
-│  ├── datazoom_opts  数据缩放                                     │
-│  ├── visualmap_opts 视觉映射                                     │
-│  └── grid_opts      网格配置                                     │
-├─────────────────────────────────────────────────────────────────┤
-│  系列参数（可选，统一应用）                                       │
-│  └── series_opts    系列配置                                     │
+
+### H.5 扩展新图表类型
+
+**步骤1：添加插件**
+
+```javascript
+// 差异化处理（需要特殊逻辑）
+const processNewType = (extracted, options) => {
+    const colors = options.colors;
+    // ... 自定义处理逻辑
+    return { color: colors, series: extracted.series };
+};
+
+// 透传型（只需保留原始配置）
+const newTypePlugin = (extracted) => ({
+    series: extracted.series
+});
+```
+
+**步骤2：注册插件**
+
+```javascript
+chartPlugins['newType'] = newTypePlugin;
+```
+
+### H.6 图表类型处理策略
+
+| 图表类型 | 处理方式 | 配色来源 |
+|---------|---------|---------|
+| line/bar/area/scatter | buildGenericOption | 用户可选配色 |
+| pie | processPie 插件 | 用户可选配色 |
+| heatmap | processHeatmap 插件 | 固定蓝-黄-红渐变 |
+| gauge/radar/funnel | 透传插件 | 用户可选配色 |
+| 其他 | buildGenericOption | 用户可选配色 |
+
+### H.7 设计优势
+
+| 优势 | 说明 |
+|------|------|
+| **可扩展性** | 新增图表类型只需注册插件，无需修改核心逻辑 |
+| **职责清晰** | 插件只关心核心配置，配色和 tooltip 统一处理 |
+| **避免重复** | 配色获取、tooltip 添加只在一处 |
+| **兼容性好** | 特殊类型通过 raw 保留原始配置 |
+| **易于维护** | 每个插件职责单一，代码清晰 |
+
+### H.8 版本记录
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| V1.0 | 2026-03-21 | 建立插件架构：插件注册 + 通用兜底 + 配色统一 |
+
+---
+
+## 附录I：Chart 参数设计思路
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1660,9 +1755,441 @@ with nb.section("详细数据", collapsed=True):
 
 ---
 
-## 附录J：页面布局架构设计
+## 附录J：Python端图表插件架构重构思路
 
 ### J.1 问题背景
+
+**当前架构**：`nb.chart()` 使用 if-elif 判断图表类型
+
+```python
+if chart_type in ('line', 'bar', 'area'):
+    chart = _build_line_bar_area(chart_type, data, series_opts)
+elif chart_type == 'pie':
+    chart = _build_pie(data, series_opts)
+elif chart_type == 'heatmap':
+    chart = _build_heatmap(data, series_opts)
+elif chart_type == 'kline':
+    chart = _build_kline(data, series_opts)
+else:
+    raise ValueError(f"不支持的图表类型: {chart_type}")
+```
+
+**问题**：
+1. 扩展新图表类型需要修改核心代码
+2. 数据转换逻辑和构建逻辑混在一起
+3. 与前端插件架构不一致
+
+### J.2 数据格式分析
+
+| 图表类型 | 用户输入格式 | pyecharts 需要 | 是否需要转换 |
+|---------|-------------|---------------|-------------|
+| line/bar/area/scatter/kline | `{xAxis, series}` | `{xAxis, series}` | ❌ 无需转换 |
+| pie | `[{name, value}]` | `[(name, value)]` | ✅ 需要转换 |
+| heatmap | `{y: {x: value}}` 或 DataFrame | `[[x,y,value], ...]` | ✅ 需要转换 |
+
+**关键发现**：5种图表（line/bar/area/scatter/kline）已经是统一格式！
+
+### J.3 重构方案一：适配器 + 构建器分离
+
+#### 架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           数据转换流程                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  chart(chart_type, data)                                                     │
+│         │                                                                    │
+│         ▼                                                                    │
+│  ┌─────────────────┐                                                         │
+│  │ 查表获取配置     │                                                         │
+│  │ CHART_REGISTRY   │                                                        │
+│  └─────────────────┘                                                         │
+│         │                                                                    │
+│         ▼                                                                    │
+│  ┌─────────────────┐      ┌─────────────────┐                               │
+│  │ 数据适配器       │      │ 转换后的数据     │                               │
+│  │ adapter(data)   │ ───→ │ adapted_data    │                               │
+│  └─────────────────┘      └─────────────────┘                               │
+│         │                                                                    │
+│         ▼                                                                    │
+│  ┌─────────────────┐                                                         │
+│  │ 图表构建器       │                                                         │
+│  │ builder(...)    │                                                         │
+│  └─────────────────┘                                                         │
+│         │                                                                    │
+│         ▼                                                                    │
+│  pyecharts 图表对象                                                          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 数据适配器
+
+```python
+def _adapt_passthrough(data):
+    """透传（无需转换）"""
+    return data
+
+def _adapt_pie(data):
+    """饼图适配：[{name, value}] → [(name, value)]"""
+    return [(item['name'], item['value']) for item in data]
+
+def _adapt_heatmap(data):
+    """热力图适配：{y: {x: value}} → {xAxis, yAxis, data}"""
+    if HAS_PANDAS and isinstance(data, pd.DataFrame):
+        df = data.copy()
+        if isinstance(df.index, pd.RangeIndex) and len(df.columns) > 1:
+            df = df.set_index(df.columns[0])
+        data = df.to_dict(orient='index')
+    
+    xaxis_data, yaxis_data, values = [], [], []
+    for y_idx, (y_name, x_dict) in enumerate(data.items()):
+        yaxis_data.append(str(y_name))
+        for x_name, value in x_dict.items():
+            x_name_str = str(x_name)
+            if x_name_str not in xaxis_data:
+                xaxis_data.append(x_name_str)
+            values.append([xaxis_data.index(x_name_str), y_idx, value])
+    
+    return {'xAxis': xaxis_data, 'yAxis': yaxis_data, 'data': values}
+```
+
+#### 图表构建器
+
+```python
+def _build_xy_chart(ChartClass, adapted_data, series_opts, is_area=False):
+    """XY 轴图表构建器（通用）"""
+    from pyecharts import options as opts
+    chart = ChartClass()
+    chart.add_xaxis(adapted_data['xAxis'])
+    for s in adapted_data['series']:
+        params = {'series_name': s.get('name', ''), 'y_axis': s['data'], **series_opts}
+        if is_area:
+            params['areastyle_opts'] = opts.AreaStyleOpts(opacity=0.3)
+        chart.add_yaxis(**params)
+    return chart
+
+def _build_pie_chart(adapted_data, series_opts):
+    """饼图构建器"""
+    from pyecharts.charts import Pie
+    chart = Pie()
+    chart.add('', adapted_data, **series_opts)
+    return chart
+
+def _build_heatmap_chart(adapted_data, series_opts):
+    """热力图构建器"""
+    from pyecharts.charts import HeatMap
+    chart = HeatMap()
+    chart.add_xaxis(adapted_data['xAxis'])
+    chart.add_yaxis('', adapted_data['yAxis'], adapted_data['data'], **series_opts)
+    return chart
+```
+
+#### 图表类型注册表
+
+```python
+from pyecharts.charts import Line, Bar, Scatter, Kline
+
+CHART_REGISTRY = {
+    # XY 轴系列（透传 + 统一构建器）
+    'line': {
+        'class': Line,
+        'adapter': _adapt_passthrough,
+        'builder': lambda d, opts: _build_xy_chart(Line, d, opts)
+    },
+    'bar': {
+        'class': Bar,
+        'adapter': _adapt_passthrough,
+        'builder': lambda d, opts: _build_xy_chart(Bar, d, opts)
+    },
+    'area': {
+        'class': Line,
+        'adapter': _adapt_passthrough,
+        'builder': lambda d, opts: _build_xy_chart(Line, d, opts, is_area=True)
+    },
+    'scatter': {
+        'class': Scatter,
+        'adapter': _adapt_passthrough,
+        'builder': lambda d, opts: _build_xy_chart(Scatter, d, opts)
+    },
+    'kline': {
+        'class': Kline,
+        'adapter': _adapt_passthrough,
+        'builder': lambda d, opts: _build_xy_chart(Kline, d, opts)
+    },
+    
+    # 特殊类型（自定义适配器 + 构建器）
+    'pie': {
+        'adapter': _adapt_pie,
+        'builder': _build_pie_chart
+    },
+    'heatmap': {
+        'adapter': _adapt_heatmap,
+        'builder': _build_heatmap_chart
+    },
+}
+```
+
+#### 统一入口
+
+```python
+@staticmethod
+def chart(chart_type: str, data, height: str = '400px', **kwargs) -> Cell:
+    spec = CHART_REGISTRY.get(chart_type)
+    if not spec:
+        raise ValueError(f"不支持的图表类型: {chart_type}")
+    
+    # 1. 数据适配
+    adapted_data = spec['adapter'](data)
+    
+    # 2. 图表构建
+    series_opts = kwargs.pop('series_opts', {})
+    chart = spec['builder'](adapted_data, series_opts)
+    
+    # 3. 全局配置
+    global_opts_keys = ['title_opts', 'legend_opts', 'tooltip_opts',
+                        'xaxis_opts', 'yaxis_opts', 'datazoom_opts',
+                        'visualmap_opts', 'grid_opts']
+    global_opts = {k: kwargs.pop(k) for k in global_opts_keys if k in kwargs}
+    
+    if global_opts:
+        chart.set_global_opts(**{k: _create_opts(k, v) for k, v in global_opts.items()})
+    
+    # 4. 输出
+    option_dict = json.loads(chart.dump_options())
+    return Cell(CellType.CHART, {"charts": option_dict, "width": kwargs.get('width', '100%'), "height": height})
+```
+
+### J.4 扩展新图表类型
+
+#### 情况1：XY 轴系列（最简单）
+
+```python
+# 只需加一行
+CHART_REGISTRY['scatterGL'] = {
+    'class': ScatterGL,
+    'adapter': _adapt_passthrough,
+    'builder': lambda d, opts: _build_xy_chart(ScatterGL, d, opts)
+}
+```
+
+#### 情况2：特殊格式（需要适配器）
+
+```python
+# 1. 写适配器
+def _adapt_radar(data):
+    """雷达图适配"""
+    return data  # 或自定义转换
+
+# 2. 写构建器
+def _build_radar_chart(adapted_data, series_opts):
+    from pyecharts.charts import Radar
+    chart = Radar()
+    chart.add_schema(schema=adapted_data['schema'])
+    for s in adapted_data['series']:
+        chart.add(s['name'], s['data'], **series_opts)
+    return chart
+
+# 3. 注册
+CHART_REGISTRY['radar'] = {
+    'adapter': _adapt_radar,
+    'builder': _build_radar_chart
+}
+```
+
+### J.5 方案对比
+
+| 维度 | 当前 if-elif | 插件注册表 |
+|------|-------------|-----------|
+| 扩展 XY 类型 | 改 if 条件 | 加一行注册 |
+| 扩展特殊类型 | 加 elif 分支 | 加适配器 + 构建器 + 注册 |
+| 数据转换逻辑 | 混在构建器里 | 独立适配器 |
+| 类型一目了然 | ❌ 需看代码 | ✅ 看注册表 |
+| 与前端架构一致 | ❌ 不一致 | ✅ 一致 |
+
+### J.6 设计优势
+
+| 优势 | 说明 |
+|------|------|
+| **职责分离** | 数据适配、图表构建、全局配置各司其职 |
+| **扩展简单** | 新增类型只需注册，无需修改核心代码 |
+| **与前端一致** | 前端有 chartPlugins，后端有 CHART_REGISTRY |
+| **易于维护** | 每个类型的适配器和构建器独立 |
+
+---
+
+### J.4 重构方案二：简化注册表模式（推荐）
+
+#### 核心思路
+
+**不过度分离**：
+- 5种图表（line/bar/area/scatter/kline）：无需 adapter，直接用统一 builder
+- 2种特殊图表（pie/heatmap）：转换 + 构建合并在一个函数里
+
+#### 架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        简化注册表模式流程                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  chart(chart_type, data)                                                     │
+│         │                                                                    │
+│         ▼                                                                    │
+│  ┌─────────────────┐                                                         │
+│  │ 查表获取配置     │                                                         │
+│  │ CHART_REGISTRY   │                                                        │
+│  └─────────────────┘                                                         │
+│         │                                                                    │
+│         ▼                                                                    │
+│  ┌─────────────────┐                                                         │
+│  │ 图表构建器       │                                                         │
+│  │ builder(...)    │                                                         │
+│  │ (转换+构建合并)  │                                                         │
+│  └─────────────────┘                                                         │
+│         │                                                                    │
+│         ▼                                                                    │
+│  pyecharts 图表对象                                                          │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 注册表定义
+
+```python
+CHART_REGISTRY = {
+    # ---------- 通用 XY 轴系列（统一处理）----------
+    'line': {
+        'class': Line,
+        'builder': lambda data, opts: _build_xy_chart(Line, data, opts)
+    },
+    'bar': {
+        'class': Bar,
+        'builder': lambda data, opts: _build_xy_chart(Bar, data, opts)
+    },
+    'area': {
+        'class': Line,
+        'builder': lambda data, opts: _build_xy_chart(Line, data, opts, is_area=True)
+    },
+    'scatter': {
+        'class': Scatter,
+        'builder': lambda data, opts: _build_xy_chart(Scatter, data, opts)
+    },
+    'kline': {
+        'class': Kline,
+        'builder': lambda data, opts: _build_xy_chart(Kline, data, opts)
+    },
+    
+    # ---------- 特殊类型（转换+构建合并）----------
+    'pie': {
+        'class': Pie,
+        'builder': _build_pie
+    },
+    'heatmap': {
+        'class': HeatMap,
+        'builder': _build_heatmap
+    },
+}
+```
+
+#### 通用构建器
+
+```python
+def _build_xy_chart(ChartClass, data, series_opts, is_area=False):
+    """通用 XY 轴图表构建器（转换+构建合并）"""
+    from pyecharts import options as opts
+    chart = ChartClass()
+    chart.add_xaxis(data['xAxis'])
+    for s in data['series']:
+        params = {'series_name': s.get('name', ''), 'y_axis': s['data'], **series_opts}
+        if is_area:
+            params['areastyle_opts'] = opts.AreaStyleOpts(opacity=0.3)
+        chart.add_yaxis(**params)
+    return chart
+```
+
+#### 特殊构建器（转换+构建合并）
+
+```python
+def _build_pie(data, series_opts):
+    """饼图构建器（转换+构建合并）"""
+    from pyecharts.charts import Pie
+    chart = Pie()
+    data_pair = [(item['name'], item['value']) for item in data]  # 转换
+    chart.add('', data_pair, **series_opts)  # 构建
+    return chart
+```
+
+#### 统一入口
+
+```python
+@staticmethod
+def chart(chart_type: str, data, height: str = '400px', **kwargs) -> Cell:
+    width = kwargs.pop('width', '100%')
+    
+    # 1. 查表
+    spec = CHART_REGISTRY.get(chart_type)
+    if not spec:
+        supported = list(CHART_REGISTRY.keys())
+        raise ValueError(f"不支持的图表类型: {chart_type}，可用: {supported}")
+    
+    # 2. 提取参数
+    global_opts_keys = ['title_opts', 'legend_opts', 'tooltip_opts',
+                        'xaxis_opts', 'yaxis_opts', 'datazoom_opts',
+                        'visualmap_opts', 'grid_opts']
+    global_opts = {k: kwargs.pop(k) for k in global_opts_keys if k in kwargs}
+    series_opts = kwargs.pop('series_opts', {})
+    
+    # 3. 构建图表
+    chart = spec['builder'](data, series_opts)
+    
+    # 4. 全局配置
+    if global_opts:
+        chart.set_global_opts(**{k: _create_opts(k, v) for k, v in global_opts.items()})
+    
+    # 5. 输出
+    option_dict = json.loads(chart.dump_options())
+    return Cell(CellType.CHART, {"charts": option_dict, "width": width, "height": height})
+```
+
+---
+
+### J.5 方案对比
+
+| 维度 | 当前 if-elif | 方案一（适配器+构建器分离） | 方案二（简化注册表，推荐） |
+|------|-------------|-------------------------|-----------------------|
+| **代码简洁度** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **职责分离** | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **扩展性** | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **易于理解** | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
+| **与前端一致** | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
+| **过度设计风险** | ❌ 无 | ⚠️ 有 | ❌ 无 |
+
+---
+
+### J.6 最终推荐
+
+| 场景 | 推荐方案 |
+|------|---------|
+| **当前状态** | 方案二（简化注册表） |
+| **需要频繁扩展** | 方案二（简化注册表） |
+| **追求极致职责分离** | 方案一（适配器+构建器分离） |
+
+---
+
+### J.7 版本记录
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| V1.0 | 2026-03-21 | 设计方案：适配器 + 构建器分离 |
+| V1.1 | 2026-03-21 | 方案对比：新增简化注册表模式（推荐） |
+
+---
+
+## 附录K：页面布局架构设计
+
+### K.1 问题背景
 
 **需求**：主体内容与目录面板需要作为一个整体居中显示，且目录在滚动时保持固定位置。
 
@@ -1674,7 +2201,7 @@ with nb.section("详细数据", collapsed=True):
 
 ---
 
-### J.2 方案对比
+### K.2 方案对比
 
 #### 方案一：Fixed + Calc（Alpine版）
 
@@ -1769,7 +2296,7 @@ with nb.section("详细数据", collapsed=True):
 
 ---
 
-### J.3 方案对比表
+### K.3 方案对比表
 
 | 方面 | Fixed+Calc | Flex+Sticky | Grid+Sticky |
 |------|-----------|-------------|-------------|
@@ -1782,7 +2309,7 @@ with nb.section("详细数据", collapsed=True):
 
 ---
 
-### J.4 最终选择：Grid + Sticky
+### K.4 最终选择：Grid + Sticky
 
 **选择理由**：
 
@@ -1814,7 +2341,7 @@ with nb.section("详细数据", collapsed=True):
 
 ---
 
-### J.5 完整实现
+### K.5 完整实现
 
 ```css
 :root {
@@ -1867,7 +2394,7 @@ with nb.section("详细数据", collapsed=True):
 
 ---
 
-### J.6 设计决策记录
+### K.6 设计决策记录
 
 | 决策点 | 选择 | 理由 |
 |--------|------|------|
@@ -1879,7 +2406,7 @@ with nb.section("详细数据", collapsed=True):
 
 ---
 
-### J.7 架构图示
+### K.7 架构图示
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -2057,7 +2584,7 @@ with nb.section("详细数据", collapsed=True):
 
 ---
 
-### J.8 版本记录
+### K.8 版本记录
 
 | 版本 | 日期 | 变更 |
 |------|------|------|

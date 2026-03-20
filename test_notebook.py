@@ -44,7 +44,22 @@ def test_comprehensive():
                 {"name": "策略", "data": [1.0, 1.05, 1.12, 1.08, 1.15]},
                 {"name": "基准", "data": [1.0, 1.02, 1.04, 1.06, 1.08]}
             ]
-        }, title="净值曲线", height='300px')
+        }, title="净值曲线（字典格式：xAxis+series）", height='300px')
+        
+        # DataFrame 格式的线图（索引=x轴，列=series，与字典格式完全对应）
+        df_line = pd.DataFrame({
+            "策略": [1.0, 1.05, 1.12, 1.08, 1.15],
+            "基准": [1.0, 1.02, 1.04, 1.06, 1.08]
+        }, index=dates)
+        print(df_line)
+        nb.chart('line', df_line, title="净值曲线（DataFrame格式：索引=x轴，列=series）", height='300px')
+        
+        # 堆叠柱状图测试（通过 series_opts 传递 stack 参数）
+        stack_df = pd.DataFrame({
+            "盈利": [100, 150, 80, 200, 120],
+            "亏损": [30, 20, 50, 10, 40]
+        }, index=dates)
+        nb.chart('bar', stack_df, series_opts={'stack': 'total'}, title="月度盈亏堆叠图", height='300px')
         
         # 嵌套：月度分析
         with nb.section("月度分析"):
@@ -69,11 +84,18 @@ def test_comprehensive():
             'series': [{"name": "回撤%", "data": [0, -2, -5, -3, -1]}]
         }, title="回撤曲线", height=250)
         
+        # 字典格式：年份→月份→值
         heatmap_data = {
             "2023": {"01": 0.02, "02": -0.01, "03": 0.03, "04": 0.01, "05": -0.02, "06": 0.04},
             "2024": {"01": 0.05, "02": -0.02, "03": 0.08, "04": 0.03, "05": 0.06, "06": -0.01}
         }
-        nb.chart('heatmap', heatmap_data, title="月度收益热力图")
+        nb.chart('heatmap', heatmap_data, title="月度收益热力图（字典格式：年份→月份）")
+        
+        # DataFrame 格式热力图（索引=x轴=月份，列=y轴=年份，与字典格式对应）
+        df_heatmap = pd.DataFrame(heatmap_data)
+        print(df_heatmap)
+        print(df_heatmap.to_dict())
+        nb.chart('heatmap', df_heatmap, title="月度收益热力图（DataFrame格式：索引=x轴，列=y轴）")
         
         # 嵌套：风险评估
         with nb.section("风险评估", collapsed=True):

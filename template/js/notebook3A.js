@@ -166,9 +166,11 @@ const CellRenderer = {
             };
 
             if (['line', 'bar', 'area'].includes(chartType)) {
+                const isBarChart = chartType === 'bar';
+                
                 option.xAxis = {
                     type: 'category',
-                    boundaryGap: chartType === 'bar',
+                    boundaryGap: isBarChart,
                     data: extracted.xAxis
                 };
                 option.yAxis = {
@@ -188,6 +190,10 @@ const CellRenderer = {
                         type: chartType === 'area' ? 'line' : chartType,
                         data: s.data
                     };
+                    
+                    if (s.stack) {
+                        baseOption.stack = s.stack;
+                    }
 
                     if (chartType === 'line' || chartType === 'area') {
                         baseOption.smooth = true;
@@ -204,8 +210,8 @@ const CellRenderer = {
                         }
                     }
 
-                    if (chartType === 'bar') {
-                        const isSingleSeries = series.length === 1;
+                    if (isBarChart) {
+                        const isSingleSeries = series.length === 1 && !s.stack;
                         baseOption.itemStyle = {
                             color: isSingleSeries ? function(params) {
                                 return params.value >= 0 ? colors[0] : colors[1];

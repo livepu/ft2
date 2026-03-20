@@ -2,12 +2,7 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 import json
-
-try:
-    import pandas as pd
-    HAS_PANDAS = True
-except ImportError:
-    HAS_PANDAS = False
+import pandas as pd
 
 
 # ========== 类型定义 ==========
@@ -100,88 +95,133 @@ def _create_opts(opts_name: str, opts_dict: dict):
     return OptClass(**opts_dict) if OptClass else opts_dict
 
 
-def _build_line_bar_area(chart_type: str, data: dict, series_opts: dict):
-    """构建 line/bar/area 图表"""
-    from pyecharts.charts import Line, Bar
-    from pyecharts import options as opts
+# ========== 图表注册表 ==========
+
+CHART_REGISTRY = None
+
+def _init_chart_registry():
+    """延迟初始化图表注册表，避免 pyecharts 导入开销"""
+    global CHART_REGISTRY
+    if CHART_REGISTRY is not None:
+        return
     
-    ChartClass = Line if chart_type in ('line', 'area') else Bar
+    from pyecharts.charts import Line, Bar, Pie, HeatMap, Kline, Scatter
+    
+    CHART_REGISTRY = {
+        # ---------- 通用 XY 轴系列（统一处理）----------
+        'line': {
+            'class': Line,
+            'builder': lambda data, opts: _build_xy_chart(Line, data, opts)
+        },
+        'bar': {
+            'class': Bar,
+            'builder': lambda data, opts: _build_xy_chart(Bar, data, opts)
+        },
+        'area': {
+            'class': Line,
+            'builder': lambda data, opts: _build_xy_chart(Line, data, opts, is_area=True)
+        },
+        'scatter': {
+            'class': Scatter,
+            'builder': lambda data, opts: _build_xy_chart(Scatter, data, opts)
+        },
+        'kline': {
+            'class': Kline,
+            'builder': lambda data, opts: _build_xy_chart(Kline, data, opts)
+        },
+        
+        # ---------- 特殊类型（转换+构建合并）----------
+        'pie': {
+            'class': Pie,
+            'builder': _build_pie
+        },
+        'heatmap': {
+            'class': HeatMap,
+            'builder': _build_heatmap
+        },
+    }
+
+
+# ========== 通用构建器（XY 轴系列）----------
+
+def _build_xy_chart(ChartClass, data, series_opts, is_area=False):
+    """通用 XY 轴图表构建器（转换+构建合并）"""
+    from pyecharts import options as opts
     chart = ChartClass()
     
-    chart.add_xaxis(data['xAxis'])
+    # 判断格式
+    is_standard_format = isinstance(data, dict) and 'xAxis' in data and 'series' in data
     
-    for s in data['series']:
-        params = {
-            'series_name': s.get('name', ''),
-            'y_axis': s['data'],
-            **series_opts
-        }
-        if chart_type == 'area':
-            params['areastyle_opts'] = opts.AreaStyleOpts(opacity=0.3)
-        chart.add_yaxis(**params)
-    
-    return chart
-
-
-def _build_pie(data: list, series_opts: dict):
-    """构建饼图"""
-    from pyecharts.charts import Pie
-    
-    chart = Pie()
-    data_pair = [(item['name'], item['value']) for item in data]
-    chart.add(series_name='', data_pair=data_pair, **series_opts)
-    return chart
-
-
-def _build_heatmap(data, series_opts: dict):
-    """构建热力图"""
-    from pyecharts.charts import HeatMap
-    
-    chart = HeatMap()
-    
-    if HAS_PANDAS and isinstance(data, pd.DataFrame):
-        df = data.copy()
+    if not is_standard_format:
+        # 处理非标准格式：{y: {x: v}} 或 DataFrame
+        if isinstance(data, pd.DataFrame):
+            df = data.copy()
+        else:
+            # 嵌套 dict 转 DataFrame
+            df = pd.DataFrame(data)
+        
         if isinstance(df.index, pd.RangeIndex) and len(df.columns) > 1:
             df = df.set_index(df.columns[0])
-        data = df.to_dict(orient='index')
+        x_axis = df.index.tolist()
+        series_list = []
+        for col in df.columns:
+            series_list.append({
+                'name': str(col),
+                'data': df[col].tolist()
+            })
+        data = {
+            'xAxis': x_axis,
+            'series': series_list
+        }
     
-    xaxis_data = []
-    yaxis_data = []
-    values = []
-    
-    for y_idx, (y_name, x_dict) in enumerate(data.items()):
-        yaxis_data.append(str(y_name))
-        for x_name, value in x_dict.items():
-            x_name_str = str(x_name)
-            if x_name_str not in xaxis_data:
-                xaxis_data.append(x_name_str)
-            values.append([xaxis_data.index(x_name_str), y_idx, value])
-    
-    chart.add_xaxis(xaxis_data)
-    chart.add_yaxis(
-        series_name='',
-        yaxis_data=yaxis_data,
-        value=values,
-        **series_opts
-    )
-    
+    chart.add_xaxis(data['xAxis'])
+    for s in data['series']:
+        params = {'series_name': s.get('name', ''), 'y_axis': s['data'], **series_opts}
+        if is_area:
+            params['areastyle_opts'] = opts.AreaStyleOpts(opacity=0.3)
+        chart.add_yaxis(**params)
     return chart
 
 
-def _build_kline(data: dict, series_opts: dict):
-    """构建 K 线图"""
-    from pyecharts.charts import Kline
+# ========== 特殊构建器（转换+构建合并）----------
+
+def _build_pie(data, series_opts):
+    """饼图构建器（转换+构建合并）"""
+    from pyecharts.charts import Pie
+    chart = Pie()
+    data_pair = [(item['name'], item['value']) for item in data]  # 转换
+    chart.add('', data_pair, **series_opts)  # 构建
+    return chart
+
+
+def _build_heatmap(data, series_opts):
+    """热力图构建器（转换+构建合并）"""
+    from pyecharts.charts import HeatMap
+    chart = HeatMap()
     
-    chart = Kline()
-    chart.add_xaxis(data['xAxis'])
+    # 统一转成 DataFrame
+    if isinstance(data, pd.DataFrame):
+        df = data.copy()
+    else:
+        df = pd.DataFrame(data)
     
-    for s in data['series']:
-        chart.add_yaxis(
-            series_name=s.get('name', ''),
-            y_axis=s['data'],
-            **series_opts
-        )
+    # 处理 RangeIndex
+    if isinstance(df.index, pd.RangeIndex) and len(df.columns) > 1:
+        df = df.set_index(df.columns[0])
     
+    # 用 stack() 优化
+    xaxis_data = [str(x) for x in df.index]
+    yaxis_data = [str(y) for y in df.columns]
+    
+    x_map = {str(x): i for i, x in enumerate(df.index)}
+    y_map = {str(y): i for i, y in enumerate(df.columns)}
+    
+    stacked = df.stack()
+    values = [[x_map[str(x)], y_map[str(y)], v] for (x, y), v in stacked.items()]
+    
+    # 构建
+    chart.add_xaxis(xaxis_data)
+    chart.add_yaxis('', yaxis_data, values, **series_opts)
     return chart
 
 
@@ -240,31 +280,31 @@ class CellBuilder:
     def chart(chart_type: str, data, height: str = '400px', **kwargs) -> Cell:
         width = kwargs.pop('width', '100%')
         
+        # 1. 初始化注册表
+        _init_chart_registry()
+        
+        # 2. 查表
+        spec = CHART_REGISTRY.get(chart_type)
+        if not spec:
+            supported = list(CHART_REGISTRY.keys())
+            raise ValueError(f"不支持的图表类型: {chart_type}，可用: {supported}")
+        
+        # 3. 提取参数
         global_opts_keys = ['title_opts', 'legend_opts', 'tooltip_opts',
                             'xaxis_opts', 'yaxis_opts', 'datazoom_opts',
                             'visualmap_opts', 'grid_opts']
         global_opts = {k: kwargs.pop(k) for k in global_opts_keys if k in kwargs}
-        
         series_opts = kwargs.pop('series_opts', {})
         
-        if chart_type in ('line', 'bar', 'area'):
-            chart = _build_line_bar_area(chart_type, data, series_opts)
-        elif chart_type == 'pie':
-            chart = _build_pie(data, series_opts)
-        elif chart_type == 'heatmap':
-            chart = _build_heatmap(data, series_opts)
-        elif chart_type == 'kline':
-            chart = _build_kline(data, series_opts)
-        else:
-            raise ValueError(f"不支持的图表类型: {chart_type}")
+        # 4. 构建图表
+        chart = spec['builder'](data, series_opts)
         
+        # 5. 全局配置
         if global_opts:
-            chart.set_global_opts(**{
-                k: _create_opts(k, v) for k, v in global_opts.items()
-            })
+            chart.set_global_opts(**{k: _create_opts(k, v) for k, v in global_opts.items()})
         
+        # 6. 输出
         option_dict = json.loads(chart.dump_options())
-        
         return Cell(
             CellType.CHART,
             {"charts": option_dict, "width": width, "height": height}
