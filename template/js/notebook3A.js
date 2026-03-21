@@ -331,12 +331,7 @@ const CellRenderer = {
             };
         };
 
-        const processStackedChart = (extracted, options) => {
-            const colors = options.colors || getChartColors(extracted.chart_type);
-            const chartType = extracted.chart_type;
-            const series = extracted.series || [];
-            const { normalize = false, showRaw = true, showPercentStack = false } = options;
-
+        const calculateStackTotals = (series) => {
             const rawData = series.map(s => [...(s.data || [])]);
             const dataLength = rawData[0]?.length || 0;
             const totals = new Array(dataLength).fill(0);
@@ -345,6 +340,62 @@ const CellRenderer = {
                     totals[i] = (totals[i] || 0) + (v || 0);
                 });
             });
+            return { rawData, totals };
+        };
+
+        const buildStackLabelFormatter = (rawData, totals, showRaw, showPercent) => {
+            return function(seriesIndex) {
+                return function(params) {
+                    const rawValue = rawData[seriesIndex][params.dataIndex];
+                    const total = totals[params.dataIndex];
+                    const percent = total > 0 ? (rawValue / total * 100).toFixed(1) : 0;
+                    
+                    if (showRaw && showPercent) {
+                        return `${rawValue}\n(${percent}%)`;
+                    } else if (showRaw) {
+                        return String(rawValue);
+                    } else if (showPercent) {
+                        return `${percent}%`;
+                    }
+                    return '';
+                };
+            };
+        };
+
+        const buildStackTooltipFormatter = (rawData, totals, showRaw, showPercent) => {
+            return function(params) {
+                const xValue = params[0].axisValue;
+                const total = totals[params[0].dataIndex];
+                let result = `<strong>${xValue}</strong><br/>`;
+                result += `<div style="color:#666;margin-bottom:4px;">总计: ${total}</div>`;
+                params.forEach(p => {
+                    const rawValue = rawData[p.seriesIndex][p.dataIndex];
+                    const percent = total > 0 ? (rawValue / total * 100).toFixed(1) : 0;
+                    let label = `${p.seriesName}: `;
+                    if (showRaw && showPercent) {
+                        label += `${rawValue} (${percent}%)`;
+                    } else if (showRaw) {
+                        label += rawValue;
+                    } else if (showPercent) {
+                        label += `${percent}%`;
+                    } else {
+                        label += rawValue;
+                    }
+                    result += `${p.marker} ${label}<br/>`;
+                });
+                return result;
+            };
+        };
+
+        const processStackedChart = (extracted, options) => {
+            const colors = options.colors || getChartColors(extracted.chart_type);
+            const chartType = extracted.chart_type;
+            const series = extracted.series || [];
+            const { normalize = false, showRaw = true, showPercentStack = false } = options;
+
+            const { rawData, totals } = calculateStackTotals(series);
+            const labelFormatter = buildStackLabelFormatter(rawData, totals, showRaw, showPercentStack);
+            const tooltipFormatter = buildStackTooltipFormatter(rawData, totals, showRaw, showPercentStack);
 
             let displaySeries;
             let yAxisConfig;
@@ -376,46 +427,6 @@ const CellRenderer = {
                 };
             }
 
-            const buildLabelFormatter = (seriesIndex) => {
-                return function(params) {
-                    const rawValue = rawData[seriesIndex][params.dataIndex];
-                    const total = totals[params.dataIndex];
-                    const percent = total > 0 ? (rawValue / total * 100).toFixed(1) : 0;
-                    
-                    if (showRaw && showPercentStack) {
-                        return `${rawValue}\n(${percent}%)`;
-                    } else if (showRaw) {
-                        return String(rawValue);
-                    } else if (showPercentStack) {
-                        return `${percent}%`;
-                    }
-                    return '';
-                };
-            };
-
-            const tooltipFormatter = function(params) {
-                const xValue = params[0].axisValue;
-                const total = totals[params[0].dataIndex];
-                let result = `<strong>${xValue}</strong><br/>`;
-                result += `<div style="color:#666;margin-bottom:4px;">总计: ${total}</div>`;
-                params.forEach(p => {
-                    const rawValue = rawData[p.seriesIndex][p.dataIndex];
-                    const percent = total > 0 ? (rawValue / total * 100).toFixed(1) : 0;
-                    let label = `${p.seriesName}: `;
-                    if (showRaw && showPercentStack) {
-                        label += `${rawValue} (${percent}%)`;
-                    } else if (showRaw) {
-                        label += rawValue;
-                    } else if (showPercentStack) {
-                        label += `${percent}%`;
-                    } else {
-                        label += rawValue;
-                    }
-                    result += `${p.marker} ${label}<br/>`;
-                });
-                return result;
-            };
-
             const isBarChart = chartType === 'bar';
             
             const option = {
@@ -445,7 +456,7 @@ const CellRenderer = {
                         label: {
                             show: showRaw || showPercentStack,
                             position: 'inside',
-                            formatter: buildLabelFormatter(i)
+                            formatter: labelFormatter(i)
                         }
                     };
                     if (chartType === 'line' || chartType === 'area') {
@@ -555,64 +566,17 @@ const CellRenderer = {
             lastNormalizeState = stackNormalize.value;
             
             if (!normalizeChanged) {
-                // 只切换显示选项，不切换归一化，只更新 label
-                const rawData = stackRawData.value.series.map(s => [...(s.data || [])]);
-                const dataLength = rawData[0]?.length || 0;
-                const totals = new Array(dataLength).fill(0);
-                rawData.forEach(sData => {
-                    sData.forEach((v, i) => {
-                        totals[i] = (totals[i] || 0) + (v || 0);
-                    });
-                });
-                
+                const { rawData, totals } = calculateStackTotals(stackRawData.value.series);
                 const showRaw = stackShowRaw.value;
                 const showPercent = stackShowPercent.value;
-                
-                const buildLabelFormatter = (seriesIndex) => {
-                    return function(params) {
-                        const rawValue = rawData[seriesIndex][params.dataIndex];
-                        const total = totals[params.dataIndex];
-                        const percent = total > 0 ? (rawValue / total * 100).toFixed(1) : 0;
-                        
-                        if (showRaw && showPercent) {
-                            return `${rawValue}\n(${percent}%)`;
-                        } else if (showRaw) {
-                            return String(rawValue);
-                        } else if (showPercent) {
-                            return `${percent}%`;
-                        }
-                        return '';
-                    };
-                };
-                
-                const tooltipFormatter = function(params) {
-                    const xValue = params[0].axisValue;
-                    const total = totals[params[0].dataIndex];
-                    let result = `<strong>${xValue}</strong><br/>`;
-                    result += `<div style="color:#666;margin-bottom:4px;">总计: ${total}</div>`;
-                    params.forEach(p => {
-                        const rawValue = rawData[p.seriesIndex][p.dataIndex];
-                        const percent = total > 0 ? (rawValue / total * 100).toFixed(1) : 0;
-                        let label = `${p.seriesName}: `;
-                        if (showRaw && showPercent) {
-                            label += `${rawValue} (${percent}%)`;
-                        } else if (showRaw) {
-                            label += rawValue;
-                        } else if (showPercent) {
-                            label += `${percent}%`;
-                        } else {
-                            label += rawValue;
-                        }
-                        result += `${p.marker} ${label}<br/>`;
-                    });
-                    return result;
-                };
+                const labelFormatter = buildStackLabelFormatter(rawData, totals, showRaw, showPercent);
+                const tooltipFormatter = buildStackTooltipFormatter(rawData, totals, showRaw, showPercent);
                 
                 const series = stackRawData.value.series.map((s, i) => ({
                     label: {
                         show: showRaw || showPercent,
                         position: 'inside',
-                        formatter: buildLabelFormatter(i)
+                        formatter: labelFormatter(i)
                     }
                 }));
                 
@@ -625,7 +589,6 @@ const CellRenderer = {
                     }
                 });
             } else {
-                // 切换归一化，需要完整刷新
                 const option = processChart(stackRawData.value, {
                     normalize: stackNormalize.value,
                     showRaw: stackShowRaw.value,
