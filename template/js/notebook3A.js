@@ -907,8 +907,17 @@ const ColorPicker = {
         const showColorPicker = ref(false);
         const colorPalettes = window.colorPalettes;
 
-        const toggleColorPicker = () => {
-            showColorPicker.value = !showColorPicker.value;
+        const STORAGE_KEY = 'nb_palette_global';
+
+        const savePaletteToStorage = (scope, paletteKey) => {
+            try {
+                const existingStr = localStorage.getItem(STORAGE_KEY);
+                const existing = existingStr ? JSON.parse(existingStr) : {};
+                existing[scope] = paletteKey;
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+            } catch (e) {
+                console.warn('保存配色失败:', e);
+            }
         };
 
         const setColorPalette = (scope, paletteKey) => {
@@ -920,7 +929,12 @@ const ColorPicker = {
             } else if (colorPalettes.groups[scope] !== undefined) {
                 colorPalettes.groups[scope] = paletteKey;
             }
+            savePaletteToStorage(scope, paletteKey);
             window.dispatchEvent(new CustomEvent('colorSchemeChanged'));
+        };
+
+        const toggleColorPicker = () => {
+            showColorPicker.value = !showColorPicker.value;
         };
 
         return {
@@ -1437,6 +1451,35 @@ function createNotebookApp() {
                 window.colorPalettes = Vue.reactive(defaultPalettes);
             }
             const colorPalettes = window.colorPalettes;
+
+            const STORAGE_KEY = 'nb_palette_global';
+
+            const loadPaletteFromStorage = () => {
+                try {
+                    const saved = localStorage.getItem(STORAGE_KEY);
+                    if (saved) {
+                        return JSON.parse(saved);
+                    }
+                } catch (e) {
+                    console.warn('读取配色失败:', e);
+                }
+                return null;
+            };
+
+            const savedPalette = loadPaletteFromStorage();
+            if (savedPalette) {
+                if (savedPalette.global && colorPalettes.palettes[savedPalette.global]) {
+                    colorPalettes.global = savedPalette.global;
+                    Object.keys(colorPalettes.groups).forEach(group => {
+                        colorPalettes.groups[group] = savedPalette.global;
+                    });
+                }
+                Object.keys(savedPalette).forEach(scope => {
+                    if (scope !== 'global' && colorPalettes.groups[scope] !== undefined && colorPalettes.palettes[savedPalette[scope]]) {
+                        colorPalettes.groups[scope] = savedPalette[scope];
+                    }
+                });
+            }
 
             // -----------------------------------------------------------------------------
             // 3. Toast 方法（供内部使用）
