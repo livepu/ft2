@@ -340,3 +340,86 @@ class CellBuilder:
         if collapsed is not None:
             opts["collapsed"] = collapsed
         return Section(children or [], title, opts)
+
+
+def _build_grid(charts_config, total_height=600):
+    import json
+    heights = [c['height'] for c in charts_config]
+    total = sum(heights)
+    chart_options_list = []
+    for i, cfg in enumerate(charts_config):
+        chart_type = cfg['type']
+        data = cfg['data']
+        kwargs = cfg.get('kwargs', {})
+        series_opts = kwargs.pop('series_opts', {})
+        spec = CHART_REGISTRY.get(chart_type)
+        if not spec:
+            raise ValueError(f"不支持的图表类型: {chart_type}")
+        chart = spec['builder'](data, series_opts)
+        
+        global_opts_keys = ['title_opts', 'legend_opts', 'tooltip_opts',
+                            'xaxis_opts', 'yaxis_opts', 'datazoom_opts',
+                            'visualmap_opts', 'grid_opts']
+        global_opts = {k: kwargs.pop(k) for k in global_opts_keys if k in kwargs}
+        if global_opts:
+            chart.set_global_opts(**{k: _create_opts(k, v) for k, v in global_opts.items()})
+        
+        chart_options = json.loads(chart.dump_options())
+        chart_options_list.append(chart_options)
+    
+    option = {
+        'grid': [],
+        'xAxis': [],
+        'yAxis': [],
+        'series': [],
+        'tooltip': {'trigger': 'axis'},
+        'legend': [],
+        'title': []
+    }
+    
+    top = 5
+    for i, chart_opt in enumerate(chart_options_list):
+        grid_height = heights[i]
+        height_percent = grid_height / total * 100
+        
+        option['grid'].append({
+            'top': f"{top}%",
+            'height': f"{height_percent - 5}%",
+            'containLabel': True
+        })
+        
+        titles = chart_opt.get('title', [])
+        if not isinstance(titles, list):
+            titles = [titles] if titles else []
+        for title in titles:
+            title_copy = title.copy()
+            title_copy['top'] = f"{top}%"
+            option['title'].append(title_copy)
+        
+        legends = chart_opt.get('legend', [])
+        if not isinstance(legends, list):
+            legends = [legends]
+        for legend in legends:
+            legend_copy = legend.copy()
+            legend_copy['top'] = f"{top}%"
+            option['legend'].append(legend_copy)
+        
+        for xaxis in chart_opt.get('xAxis', []):
+            xaxis_copy = xaxis.copy()
+            xaxis_copy['gridIndex'] = i
+            option['xAxis'].append(xaxis_copy)
+        
+        for yaxis in chart_opt.get('yAxis', []):
+            yaxis_copy = yaxis.copy()
+            yaxis_copy['gridIndex'] = i
+            option['yAxis'].append(yaxis_copy)
+        
+        for series in chart_opt.get('series', []):
+            series_copy = series.copy()
+            series_copy['xAxisIndex'] = i
+            series_copy['yAxisIndex'] = i
+            option['series'].append(series_copy)
+        
+        top += height_percent
+    
+    return option

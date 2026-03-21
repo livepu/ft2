@@ -505,6 +505,18 @@ const CellRenderer = {
             }
 
             const chartsConfig = JSON.parse(JSON.stringify(content.charts));
+            
+            // 检测是否是 Grid 多图表模式
+            const isGridMode = Array.isArray(chartsConfig.grid) && chartsConfig.grid.length > 1;
+            console.log('[Chart Init] isGridMode:', isGridMode, 'grid count:', chartsConfig.grid?.length);
+            
+            if (isGridMode) {
+                console.log('[Chart Init] Grid mode - using raw config');
+                chartInstance.setOption(chartsConfig);
+                return;
+            }
+            
+            console.log('[Chart Init] Single chart mode - processing');
             const extracted = extractChartData(chartsConfig);
             if (!extracted) {
                 chartInstance.setOption(chartsConfig);
@@ -735,6 +747,19 @@ const CellRenderer = {
                         <div class="metric-label">{{ metric.name }}</div>
                         <div v-if="metric.desc" class="metric-desc">{{ metric.desc }}</div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Grid 多图表（优先检查） -->
+            <div v-else-if="(cell.type === 'chart' || cell.type === 'pyecharts') && cell.content?.charts && Array.isArray(cell.content.charts.grid) && cell.content.charts.grid.length > 1"
+                 class="cell-chart">
+                <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div ref="chartRef"
+                     class="chart-container"
+                     :style="{
+                         width: cell.content?.width || '100%',
+                         height: typeof (cell.content?.height || cell.options?.height) === 'string' ? (cell.content?.height || cell.options?.height) : (cell.content?.height || cell.options?.height || 400) + 'px'
+                     }">
                 </div>
             </div>
 

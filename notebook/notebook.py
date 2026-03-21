@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 from jinja2 import Environment, FileSystemLoader
 
-from .cell import Cell, Section, CellType, CellBuilder, CellLike
+from .cell import Cell, Section, CellType, CellBuilder, CellLike, _build_grid, _init_chart_registry
 
 
 class SectionContext:
@@ -60,6 +60,7 @@ class Notebook:
         self.created_at = datetime.now()
         self._cell_counter = 0
         self._section_stack: List[SectionContext] = []
+        self._chartg_buffer = []
         
         caller_frame = None
         for frame_info in inspect.stack():
@@ -72,15 +73,44 @@ class Notebook:
         else:
             self.base_dir = os.path.dirname(os.path.abspath(__file__))
     
-    def _push_section(self, section: SectionContext):
+    def _push_section(self, section):
         """进入 Section"""
         self._section_stack.append(section)
     
-    def _pop_section(self) -> SectionContext:
+    def _pop_section(self):
         """退出 Section"""
         return self._section_stack.pop()
     
-    def _add_cell(self, cell: CellLike, title: str = None) -> 'Notebook':
+    def _flush_chartg(self):
+        """合并 chartg buffer"""
+        if not self._chartg_buffer:
+            return
+        _init_chart_registry()
+        heights = [c['height'] for c in self._chartg_buffer]
+        total_height = sum(heights)
+        option_dict = _build_grid(self._chartg_buffer, total_height)
+        cell = Cell(
+            CellType.PYECHARTS,
+            {"charts": option_dict, "width": "100%", "height": f"{total_height}px"}
+        )
+        self._chartg_buffer.clear()
+        self._cell_counter += 1
+        if self._section_stack:
+            self._section_stack[-1].children.append(cell)
+        else:
+            self.children.append(cell)
+    
+    def chartg(self, chart_type, data, height=200, **kwargs):
+        """添加 Grid 图表（累加模式）"""
+        self._chartg_buffer.append({
+            'type': chart_type,
+            'data': data,
+            'height': height,
+            'kwargs': kwargs
+        })
+        return self
+    
+    def _add_cell(self, cell: CellLike, title: str = None):
         """
         添加单元格并返回self以支持链式调用
 
@@ -89,6 +119,7 @@ class Notebook:
         2. 如果不在 with 内但有 title -> 自动创建 Section（Cell 无 title）
         3. 如果不在 with 内且无 title -> 普通 Cell 添加到顶层
         """
+        self._flush_chartg()
         self._cell_counter += 1
 
         if self._section_stack:
@@ -103,7 +134,7 @@ class Notebook:
 
         return self
     
-    def section(self, title: str, collapsed: bool = None) -> SectionContext:
+    def section(self, title: str, collapsed: bool = None):
         """
         创建 Section 容器（上下文管理器）
         
@@ -129,25 +160,25 @@ class Notebook:
     
     # ========== 标题和文本 ==========
     
-    def title(self, text: str, level: int = 1) -> 'Notebook':
+    def title(self, text: str, level: int = 1):
         """添加标题"""
         return self._add_cell(CellBuilder.title(text, level))
     
-    def text(self, text: str, style: str = 'normal') -> 'Notebook':
+    def text(self, text: str, style: str = 'normal'):
         """添加文本"""
         return self._add_cell(CellBuilder.text(text, style))
     
-    def markdown(self, text: str) -> 'Notebook':
+    def markdown(self, text: str):
         """添加Markdown内容"""
         return self._add_cell(CellBuilder.markdown(text))
     
-    def divider(self) -> 'Notebook':
+    def divider(self):
         """添加分隔线"""
         return self._add_cell(CellBuilder.divider())
     
     # ========== 代码 ==========
     
-    def code(self, code: str, language: str = 'python', output: str = None) -> 'Notebook':
+    def code(self, code: str, language: str = 'python', output: str = None):
         """添加代码块"""
         return self._add_cell(CellBuilder.code(code, language, output))
     
@@ -206,7 +237,7 @@ class Notebook:
     
     # ========== 指标卡片 ==========
     
-    def metrics(self, data, title: str = None, columns: int = 4) -> 'Notebook':
+    def metrics(self, data, title: str = None, columns: int = 4):
         """
         添加指标卡片
 
@@ -333,7 +364,7 @@ class Notebook:
         """导出为JSON"""
         return json.dumps(self.to_dict(), ensure_ascii=False, indent=2)
     
-    def export_html(self, name: str = None, template_path: str = None) -> str:
+    def export_html(self, name: str = None, template_path: str = None):
         """
         导出为HTML文件
         
@@ -341,6 +372,7 @@ class Notebook:
         :param template_path: 自定义模板路径
         :return: 输出文件路径
         """
+        self._flush_chartg()
         if name is None:
             name = self.nb_title.replace('/', '_').replace('\\', '_')
         
