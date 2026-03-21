@@ -90,7 +90,7 @@ class Notebook:
         total_height = sum(heights)
         option_dict = _build_grid(self._chartg_buffer, total_height)
         cell = Cell(
-            CellType.PYECHARTS,
+            CellType.CHART,
             {"charts": option_dict, "width": "100%", "height": f"{total_height}px"}
         )
         self._chartg_buffer.clear()
