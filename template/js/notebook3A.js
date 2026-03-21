@@ -30,6 +30,10 @@ const CellRenderer = {
         const pieShowValue = ref(true);
         const pieShowPercent = ref(true);
         const pieRawData = ref(null);
+        const stackNormalize = ref(false);
+        const stackShowRaw = ref(true);
+        const stackShowPercent = ref(false);
+        const stackRawData = ref(null);
 
         // -----------------------------------------------------------------------------
         // 2. 工具函数
@@ -86,6 +90,13 @@ const CellRenderer = {
             return content.charts?.series?.[0]?.type || null;
         };
 
+        const isStackedChart = (content) => {
+            const chartType = getChartType(content);
+            if (!['bar', 'line'].includes(chartType)) return false;
+            const series = content.charts?.series || [];
+            return series.some(s => s.stack);
+        };
+
         // -----------------------------------------------------------------------------
         // 3. 图表数据提取与配色
         // -----------------------------------------------------------------------------
@@ -137,14 +148,21 @@ const CellRenderer = {
             const chartType = extracted.chart_type;
             const plugin = chartPlugins[chartType];
             
-            // 统一获取配色（heatmap 除外）
             if (chartType !== 'heatmap') {
                 options.colors = getChartColors(chartType);
             }
             
+            const isStacked = extracted.series.some(s => s.stack);
+            if (['bar', 'line'].includes(chartType) && isStacked) {
+                const option = processStackedChart(extracted, options);
+                if (!option.tooltip) {
+                    option.tooltip = {};
+                }
+                return option;
+            }
+            
             const option = plugin ? plugin(extracted, options) : buildGenericOption(extracted, options);
             
-            // 统一添加默认 tooltip（如果插件未指定）
             if (!option.tooltip) {
                 option.tooltip = {};
             }
@@ -313,6 +331,150 @@ const CellRenderer = {
             };
         };
 
+        const processStackedChart = (extracted, options) => {
+            const colors = options.colors || getChartColors(extracted.chart_type);
+            const chartType = extracted.chart_type;
+            const series = extracted.series || [];
+            const { normalize = false, showRaw = true, showPercentStack = false } = options;
+
+            const rawData = series.map(s => [...(s.data || [])]);
+            const dataLength = rawData[0]?.length || 0;
+            const totals = new Array(dataLength).fill(0);
+            rawData.forEach(sData => {
+                sData.forEach((v, i) => {
+                    totals[i] = (totals[i] || 0) + (v || 0);
+                });
+            });
+
+            let displaySeries;
+            let yAxisConfig;
+
+            if (normalize) {
+                displaySeries = series.map((s, i) => ({
+                    ...s,
+                    data: rawData[i].map((v, j) => totals[j] > 0 ? (v / totals[j] * 100) : 0),
+                    type: chartType === 'area' ? 'line' : chartType
+                }));
+                yAxisConfig = {
+                    type: 'value',
+                    min: 0,
+                    max: 100,
+                    axisLabel: {
+                        formatter: '{value}%'
+                    }
+                };
+            } else {
+                displaySeries = series.map((s, i) => ({
+                    ...s,
+                    data: [...rawData[i]],
+                    type: chartType === 'area' ? 'line' : chartType
+                }));
+                yAxisConfig = {
+                    type: 'value',
+                    scale: true,
+                    boundaryGap: ['10%', '10%']
+                };
+            }
+
+            const buildLabelFormatter = (seriesIndex) => {
+                return function(params) {
+                    const rawValue = rawData[seriesIndex][params.dataIndex];
+                    const total = totals[params.dataIndex];
+                    const percent = total > 0 ? (rawValue / total * 100).toFixed(1) : 0;
+                    
+                    if (showRaw && showPercentStack) {
+                        return `${rawValue}\n(${percent}%)`;
+                    } else if (showRaw) {
+                        return String(rawValue);
+                    } else if (showPercentStack) {
+                        return `${percent}%`;
+                    }
+                    return '';
+                };
+            };
+
+            const tooltipFormatter = function(params) {
+                const xValue = params[0].axisValue;
+                const total = totals[params[0].dataIndex];
+                let result = `<strong>${xValue}</strong><br/>`;
+                result += `<div style="color:#666;margin-bottom:4px;">总计: ${total}</div>`;
+                params.forEach(p => {
+                    const rawValue = rawData[p.seriesIndex][p.dataIndex];
+                    const percent = total > 0 ? (rawValue / total * 100).toFixed(1) : 0;
+                    let label = `${p.seriesName}: `;
+                    if (showRaw && showPercentStack) {
+                        label += `${rawValue} (${percent}%)`;
+                    } else if (showRaw) {
+                        label += rawValue;
+                    } else if (showPercentStack) {
+                        label += `${percent}%`;
+                    } else {
+                        label += rawValue;
+                    }
+                    result += `${p.marker} ${label}<br/>`;
+                });
+                return result;
+            };
+
+            const isBarChart = chartType === 'bar';
+            
+            const option = {
+                color: colors,
+                xAxis: {
+                    type: 'category',
+                    boundaryGap: isBarChart,
+                    data: extracted.xAxis
+                },
+                yAxis: yAxisConfig,
+                grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true },
+                legend: {
+                    data: series.map(s => ({ name: s.name, icon: 'rect' })),
+                    top: 5
+                },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: tooltipFormatter
+                },
+                series: displaySeries.map((s, i) => {
+                    const baseOption = {
+                        name: s.name,
+                        type: chartType === 'area' ? 'line' : chartType,
+                        data: s.data,
+                        stack: s.stack,
+                        label: {
+                            show: showRaw || showPercentStack,
+                            position: 'inside',
+                            formatter: buildLabelFormatter(i)
+                        }
+                    };
+                    if (chartType === 'line' || chartType === 'area') {
+                        baseOption.smooth = true;
+                        if (chartType === 'area') {
+                            baseOption.areaStyle = {
+                                color: {
+                                    type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                                    colorStops: [
+                                        { offset: 0, color: colors[i % colors.length] + '60' },
+                                        { offset: 1, color: colors[i % colors.length] + '10' }
+                                    ]
+                                }
+                            };
+                        }
+                    }
+                    if (isBarChart) {
+                        baseOption.itemStyle = {
+                            color: colors[i % colors.length],
+                            borderRadius: [4, 4, 0, 0]
+                        };
+                    }
+                    return baseOption;
+                })
+            };
+
+            return option;
+        };
+
         // -----------------------------------------------------------------------------
         // 8. 图表初始化与更新
         // -----------------------------------------------------------------------------
@@ -347,11 +509,23 @@ const CellRenderer = {
                 heatmapRawData.value = extracted;
                 heatmapMultiplier.value = 1;
             }
+            
+            const isStacked = extracted.series.some(s => s.stack);
+            if (['bar', 'line'].includes(chartType) && isStacked) {
+                stackRawData.value = extracted;
+                stackNormalize.value = false;
+                stackShowRaw.value = true;
+                stackShowPercent.value = false;
+                lastNormalizeState = false;
+            }
 
             const options = {
                 multiplier: heatmapMultiplier.value,
                 showValue: pieShowValue.value,
-                showPercent: pieShowPercent.value
+                showPercent: pieShowPercent.value,
+                normalize: stackNormalize.value,
+                showRaw: stackShowRaw.value,
+                showPercentStack: stackShowPercent.value
             };
             const option = processChart(extracted, options);
             chartInstance.setOption(option);
@@ -370,6 +544,95 @@ const CellRenderer = {
                 showPercent: pieShowPercent.value
             });
             chartInstance.setOption(option);
+        };
+
+        let lastNormalizeState = false;
+
+        const updateStack = () => {
+            if (!chartInstance || !stackRawData.value) return;
+            
+            const normalizeChanged = lastNormalizeState !== stackNormalize.value;
+            lastNormalizeState = stackNormalize.value;
+            
+            if (!normalizeChanged) {
+                // 只切换显示选项，不切换归一化，只更新 label
+                const rawData = stackRawData.value.series.map(s => [...(s.data || [])]);
+                const dataLength = rawData[0]?.length || 0;
+                const totals = new Array(dataLength).fill(0);
+                rawData.forEach(sData => {
+                    sData.forEach((v, i) => {
+                        totals[i] = (totals[i] || 0) + (v || 0);
+                    });
+                });
+                
+                const showRaw = stackShowRaw.value;
+                const showPercent = stackShowPercent.value;
+                
+                const buildLabelFormatter = (seriesIndex) => {
+                    return function(params) {
+                        const rawValue = rawData[seriesIndex][params.dataIndex];
+                        const total = totals[params.dataIndex];
+                        const percent = total > 0 ? (rawValue / total * 100).toFixed(1) : 0;
+                        
+                        if (showRaw && showPercent) {
+                            return `${rawValue}\n(${percent}%)`;
+                        } else if (showRaw) {
+                            return String(rawValue);
+                        } else if (showPercent) {
+                            return `${percent}%`;
+                        }
+                        return '';
+                    };
+                };
+                
+                const tooltipFormatter = function(params) {
+                    const xValue = params[0].axisValue;
+                    const total = totals[params[0].dataIndex];
+                    let result = `<strong>${xValue}</strong><br/>`;
+                    result += `<div style="color:#666;margin-bottom:4px;">总计: ${total}</div>`;
+                    params.forEach(p => {
+                        const rawValue = rawData[p.seriesIndex][p.dataIndex];
+                        const percent = total > 0 ? (rawValue / total * 100).toFixed(1) : 0;
+                        let label = `${p.seriesName}: `;
+                        if (showRaw && showPercent) {
+                            label += `${rawValue} (${percent}%)`;
+                        } else if (showRaw) {
+                            label += rawValue;
+                        } else if (showPercent) {
+                            label += `${percent}%`;
+                        } else {
+                            label += rawValue;
+                        }
+                        result += `${p.marker} ${label}<br/>`;
+                    });
+                    return result;
+                };
+                
+                const series = stackRawData.value.series.map((s, i) => ({
+                    label: {
+                        show: showRaw || showPercent,
+                        position: 'inside',
+                        formatter: buildLabelFormatter(i)
+                    }
+                }));
+                
+                chartInstance.setOption({
+                    series: series,
+                    tooltip: {
+                        trigger: 'axis',
+                        axisPointer: { type: 'shadow' },
+                        formatter: tooltipFormatter
+                    }
+                });
+            } else {
+                // 切换归一化，需要完整刷新
+                const option = processChart(stackRawData.value, {
+                    normalize: stackNormalize.value,
+                    showRaw: stackShowRaw.value,
+                    showPercentStack: stackShowPercent.value
+                });
+                chartInstance.setOption(option, { replaceMerge: ['yAxis', 'series'] });
+            }
         };
 
         const handleResize = () => {
@@ -408,11 +671,16 @@ const CellRenderer = {
             pieShowValue,
             pieShowPercent,
             updatePie,
+            stackNormalize,
+            stackShowRaw,
+            stackShowPercent,
+            updateStack,
             renderMarkdown,
             getMetricClass,
             getTableCols,
             getTableOptions,
-            getChartType
+            getChartType,
+            isStackedChart
         };
     },
 
@@ -576,6 +844,50 @@ const CellRenderer = {
                                 @click="heatmapMultiplier = m; updateHeatmap()">
                                 1/{{ m === 0.1 ? 10 : 100 }}
                             </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 堆叠图（带显示模式控制） -->
+            <div v-else-if="cell.content?.charts && isStackedChart(cell.content)"
+                 class="cell-chart stack-with-control">
+                <h3 v-if="cell.title">{{ cell.title }}</h3>
+                <div class="pie-wrapper">
+                    <div ref="chartRef"
+                         class="chart-container"
+                         :style="{
+                             width: cell.content?.width || '100%',
+                             height: typeof (cell.content?.height || cell.options?.height) === 'string' ? (cell.content?.height || cell.options?.height) : (cell.content?.height || cell.options?.height || 400) + 'px'
+                         }">
+                    </div>
+                    <div class="pie-control">
+                        <div class="control-label">归一化</div>
+                        <div class="checkbox-group">
+                            <label class="checkbox-item">
+                                <input
+                                    type="checkbox"
+                                    v-model="stackNormalize"
+                                    @change="updateStack">
+                                <span>启用</span>
+                            </label>
+                        </div>
+                        <div class="control-label" style="margin-top: 12px;">显示选项</div>
+                        <div class="checkbox-group">
+                            <label class="checkbox-item">
+                                <input
+                                    type="checkbox"
+                                    v-model="stackShowRaw"
+                                    @change="updateStack">
+                                <span>原始数据</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input
+                                    type="checkbox"
+                                    v-model="stackShowPercent"
+                                    @change="updateStack">
+                                <span>百分比</span>
+                            </label>
                         </div>
                     </div>
                 </div>
