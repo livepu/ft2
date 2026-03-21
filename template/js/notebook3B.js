@@ -22,16 +22,19 @@ const CHART_STRATEGIES = {
     // 交互控件配置
     interactives: {
         pie: {
+            layout: 'side',  // 'side' = 右侧, 'bottom' = 下方
             showValue: { type: 'checkbox', label: '原始数据', default: true },
             showPercent: { type: 'checkbox', label: '百分比', default: true }
         },
         heatmap: {
-            multiplier: { type: 'buttons', label: '缩放', default: 1, options: [1000, 100, 10, 1, 0.1, 0.01] }
+            layout: 'bottom',  // 下方
+            multiplier: { type: 'buttons', label: '数据缩放', options: [1000, 100, 10, 1] }
         },
         stacked: {
+            layout: 'side',  // 右侧
+            normalize: { type: 'checkbox', label: '启用', default: false },
             showRaw: { type: 'checkbox', label: '原始数据', default: true },
-            showPercent: { type: 'checkbox', label: '百分比', default: false },
-            normalize: { type: 'checkbox', label: '归一化', default: false }
+            showPercent: { type: 'checkbox', label: '百分比', default: false }
         }
     },
 
@@ -334,12 +337,17 @@ const CellRenderer = {
 
         // 检测是否是堆叠图
         const isStackedChart = () => {
-            return chartType.value === 'stacked';
+            return getChartType() === 'stacked';
         };
+
+        // 当前图表类型（用于模板渲染）
+        const currentChartType = computed(() => {
+            return getChartType() || 'generic';
+        });
 
         // 获取交互控件配置
         const getCurrentInteractives = () => {
-            return CHART_STRATEGIES.interactives[chartType.value] || {};
+            return CHART_STRATEGIES.interactives[currentChartType.value] || {};
         };
 
         // 构建图表配置
@@ -412,7 +420,7 @@ const CellRenderer = {
 
         return {
             chartRef,
-            chartType,
+            currentChartType,
             interactiveState,
             renderMarkdown,
             getMetricClass,
@@ -515,41 +523,98 @@ const CellRenderer = {
 
             <!-- 图表（统一入口） -->
             <div v-else-if="(cell.type === 'chart' || cell.type === 'pyecharts') && cell.content?.charts"
-                 class="cell-chart">
+                 class="cell-chart"
+                 :class="currentChartType === 'pie' || currentChartType === 'stacked' ? currentChartType + '-with-control' : ''">
+
                 <h3 v-if="cell.title">{{ cell.title }}</h3>
 
-                <!-- 交互控件（根据图表类型动态渲染） -->
-                <div class="chart-controls" v-if="Object.keys(getCurrentInteractives()).length">
-                    <template v-for="(config, key) in getCurrentInteractives()" :key="key">
-                        <!-- Checkbox 控件 -->
-                        <label v-if="config.type === 'checkbox'" class="checkbox-item">
-                            <input type="checkbox" v-model="interactiveState[key]">
-                            <span>{{ config.label }}</span>
-                        </label>
-                        <!-- Buttons 控件（如 heatmap 倍数选择） -->
-                        <div v-else-if="config.type === 'buttons'" class="multiplier-buttons">
-                            <span class="control-label">{{ config.label }}:</span>
-                            <button
-                                v-for="opt in config.options"
-                                :key="opt"
-                                :class="{ active: interactiveState[key] === opt }"
-                                @click="interactiveState[key] = opt">
-                                {{ opt >= 1 ? '×' + opt : '1/' + (1/opt) }}
-                            </button>
+                <!-- 交互控件（side 布局 - pie/stacked） -->
+                <template v-if="getCurrentInteractives().layout === 'side'">
+                    <div class="pie-wrapper">
+                        <div ref="chartRef"
+                             class="chart-container"
+                             :style="{
+                                 width: cell.content?.width || '100%',
+                                 height: typeof (cell.content?.height || cell.options?.height) === 'string'
+                                     ? (cell.content?.height || cell.options?.height)
+                                     : (cell.content?.height || cell.options?.height || 400) + 'px'
+                             }">
                         </div>
-                    </template>
-                </div>
+                        <div class="pie-control">
+                            <!-- 归一化（仅 stacked 显示） -->
+                            <template v-if="getCurrentInteractives().normalize !== undefined">
+                                <div class="control-label">归一化</div>
+                                <div class="checkbox-group">
+                                    <label class="checkbox-item">
+                                        <input type="checkbox" v-model="interactiveState.normalize">
+                                        <span>启用</span>
+                                    </label>
+                                </div>
+                            </template>
+                            <!-- 显示选项 -->
+                            <template v-if="getCurrentInteractives().showValue !== undefined || getCurrentInteractives().showRaw !== undefined">
+                                <div class="control-label" :style="getCurrentInteractives().normalize !== undefined ? 'margin-top: 12px;' : ''">显示选项</div>
+                                <div class="checkbox-group">
+                                    <label v-if="getCurrentInteractives().showValue !== undefined" class="checkbox-item">
+                                        <input type="checkbox" v-model="interactiveState.showValue">
+                                        <span>原始数据</span>
+                                    </label>
+                                    <label v-if="getCurrentInteractives().showRaw !== undefined" class="checkbox-item">
+                                        <input type="checkbox" v-model="interactiveState.showRaw">
+                                        <span>原始数据</span>
+                                    </label>
+                                    <label v-if="getCurrentInteractives().showPercent !== undefined" class="checkbox-item">
+                                        <input type="checkbox" v-model="interactiveState.showPercent">
+                                        <span>百分比</span>
+                                    </label>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
 
-                <!-- 图表容器 -->
-                <div ref="chartRef"
-                     class="chart-container"
-                     :style="{
-                         width: cell.content?.width || '100%',
-                         height: typeof (cell.content?.height || cell.options?.height) === 'string'
-                             ? (cell.content?.height || cell.options?.height)
-                             : (cell.content?.height || cell.options?.height || 400) + 'px'
-                     }">
-                </div>
+                <!-- 交互控件（bottom 布局 - heatmap 等） -->
+                <template v-else-if="getCurrentInteractives().layout === 'bottom'">
+                    <div ref="chartRef"
+                         class="chart-container"
+                         :style="{
+                             width: cell.content?.width || '100%',
+                             height: typeof (cell.content?.height || cell.options?.height) === 'string'
+                                 ? (cell.content?.height || cell.options?.height)
+                                 : (cell.content?.height || cell.options?.height || 400) + 'px'
+                         }">
+                    </div>
+                    <div class="chart-controls" v-if="Object.keys(getCurrentInteractives()).length">
+                        <template v-for="(config, key) in getCurrentInteractives()" :key="key">
+                            <template v-if="key !== 'layout'">
+                                <div v-if="config.type === 'buttons'" class="multiplier-buttons">
+                                    <span class="control-label">{{ config.label }}:</span>
+                                    <span class="current-multiplier">×{{ interactiveState[key] }}</span>
+                                    <button
+                                        v-for="opt in config.options"
+                                        :key="opt"
+                                        :class="{ active: interactiveState[key] === opt }"
+                                        @click="interactiveState[key] = opt">
+                                        {{ opt >= 1 ? '×' + opt : '1/' + (1/opt) }}
+                                    </button>
+                                </div>
+                            </template>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- 无特殊布局（generic 等） -->
+                <template v-else>
+                    <div ref="chartRef"
+                         class="chart-container"
+                         :style="{
+                             width: cell.content?.width || '100%',
+                             height: typeof (cell.content?.height || cell.options?.height) === 'string'
+                                 ? (cell.content?.height || cell.options?.height)
+                                 : (cell.content?.height || cell.options?.height || 400) + 'px'
+                         }">
+                    </div>
+                </template>
             </div>
 
             <!-- HTML -->
