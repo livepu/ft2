@@ -222,18 +222,24 @@ def _build_xy_chart(ChartClass, data, series_opts, is_area=False):
         else:
             df = pd.DataFrame(data)
         
-        # 处理 RangeIndex：如果第一列是序号列，设为索引
-        if isinstance(df.index, pd.RangeIndex) and len(df.columns) > 1:
-            df = df.set_index(df.columns[0])
+        # 【DataFrame转换逻辑】
+        # 简化设计：第一列 → xAxis，其余列 → series
+        # 无论索引类型如何，始终使用第一列作为X轴
         
-        # 转换为标准格式
-        x_axis = df.index.tolist()
+        if len(df.columns) == 0:
+            raise ValueError("DataFrame 没有列")
+        
+        # 第一列作为 xAxis
+        x_axis = df.iloc[:, 0].astype(str).tolist()
+        
+        # 其余列作为 series
         series_list = []
-        for col in df.columns:
+        for col in df.columns[1:]:  # 从第二列开始
             series_list.append({
                 'name': str(col),
                 'data': df[col].tolist()
             })
+        
         data = {
             'xAxis': x_axis,
             'series': series_list
@@ -303,7 +309,7 @@ def _build_kline(data, series_opts):
     
     支持两种数据格式：
     1. 标准格式: {'xAxis': [...], 'series': [{'name': '', 'data': [[开,收,低,高], ...]}]}
-    2. DataFrame: 自动识别 open/close/low/high 字段（支持中文和英文）
+    2. DataFrame: 第一列 → X轴（日期），自动识别 open/close/low/high 字段
     
     Args:
         data: 图表数据
@@ -325,12 +331,9 @@ def _build_kline(data, series_opts):
         else:
             df = pd.DataFrame(data)
         
-        # 处理 RangeIndex：如果第一列是日期/时间列，设为索引
-        if isinstance(df.index, pd.RangeIndex) and len(df.columns) > 1:
-            # 检查第一列是否为日期类型
-            first_col = df.columns[0]
-            if pd.api.types.is_datetime64_any_dtype(df[first_col]):
-                df = df.set_index(first_col)
+        # 【DataFrame转换逻辑】第一列 → X轴（日期），指定字段 → K线数据
+        if len(df.columns) < 5:
+            raise ValueError("K线DataFrame需要至少5列：日期 + open/close/low/high")
         
         # 字段映射：支持中英文
         field_map = {
@@ -354,7 +357,8 @@ def _build_kline(data, series_opts):
         high_col = find_field(field_map['high'])
         
         # 构建 xAxis 和 K线数据
-        x_axis = df.index.tolist()
+        # 【统一规范】第一列 → X轴（日期）
+        x_axis = df.iloc[:, 0].astype(str).tolist()
         kline_data = []
         for _, row in df.iterrows():
             kline_data.append([
@@ -390,8 +394,12 @@ def _build_pie(data, series_opts):
     """
     饼图构建器
     
+    支持两种数据格式：
+    1. 标准格式: [{'name': '类别', 'value': 数值}, ...]
+    2. DataFrame: 第一列 → name，第二列 → value
+    
     Args:
-        data: 数据格式 [{'name': '类别', 'value': 数值}, ...]
+        data: 图表数据
         series_opts: 系列配置选项
     
     Returns:
@@ -399,6 +407,14 @@ def _build_pie(data, series_opts):
     """
     from pyecharts.charts import Pie
     chart = Pie()
+    
+    # DataFrame 转换：第一列 → name，第二列 → value
+    if isinstance(data, pd.DataFrame):
+        names = data.iloc[:, 0].astype(str).tolist()
+        values = data.iloc[:, 1].tolist()
+        data = [{'name': name, 'value': value} for name, value in zip(names, values)]
+    
+    # 构建图表
     data_pair = [(item['name'], item['value']) for item in data]
     chart.add('', data_pair, **series_opts)
     return chart
@@ -426,20 +442,24 @@ def _build_heatmap(data, series_opts):
     else:
         df = pd.DataFrame(data)
     
-    # 处理 RangeIndex
-    if isinstance(df.index, pd.RangeIndex) and len(df.columns) > 1:
-        df = df.set_index(df.columns[0])
+    # 【DataFrame转换逻辑】统一：第一列 → X轴，其余列 → Y轴
+    if len(df.columns) == 0:
+        raise ValueError("DataFrame 没有列")
     
-    # 构建坐标轴数据
-    xaxis_data = [str(x) for x in df.index]
-    yaxis_data = [str(y) for y in df.columns]
+    # 第一列作为 X 轴
+    xaxis_data = df.iloc[:, 0].astype(str).tolist()
+    # 其余列作为 Y 轴
+    yaxis_data = df.columns[1:].astype(str).tolist()
     
-    # 构建坐标映射
-    x_map = {str(x): i for i, x in enumerate(df.index)}
-    y_map = {str(y): i for i, y in enumerate(df.columns)}
+    # 重新构建 DataFrame（第一列为索引，便于 stack() 处理）
+    df_heatmap = df.set_index(df.columns[0])
+    
+    # 构建坐标映射（使用 df_heatmap）
+    x_map = {str(x): i for i, x in enumerate(df_heatmap.index)}
+    y_map = {str(y): i for i, y in enumerate(df_heatmap.columns)}
     
     # 使用 stack() 优化数据转换
-    stacked = df.stack()
+    stacked = df_heatmap.stack()
     values = [[x_map[str(x)], y_map[str(y)], v] for (x, y), v in stacked.items()]
     
     # 构建图表
@@ -473,9 +493,12 @@ class CellBuilder:
         return Cell(CellType.TITLE, text, options={"level": level})
     
     @staticmethod
-    def text(text: str, style: str = 'normal') -> Cell:
-        """创建文本单元格"""
-        return Cell(CellType.TEXT, text, options={"style": style})
+    def text(text: str, color: str = None) -> Cell:
+        """创建文本单元格，color支持: red, green, blue, yellow, orange, purple, gray等"""
+        opts = {}
+        if color:
+            opts["color"] = color
+        return Cell(CellType.TEXT, text, options=opts)
     
     @staticmethod
     def markdown(text: str) -> Cell:

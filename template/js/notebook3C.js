@@ -532,7 +532,7 @@ const CellRenderer = {
             </div>
 
             <!-- 文本 -->
-            <div v-else-if="cell.type === 'text'" class="cell-text" :class="'text-' + (cell.options?.style || 'normal')">{{ cell.content }}</div>
+            <div v-else-if="cell.type === 'text'" class="cell-text" :style="cell.options?.color ? { color: cell.options.color } : {}">{{ cell.content }}</div>
 
             <!-- Markdown -->
             <div v-else-if="cell.type === 'markdown'" class="markdown-content" v-html="renderMarkdown(cell.content)"></div>

@@ -1,9 +1,9 @@
 # Notebook 使用说明
 
-> 快速构建专业数据分析报告的 Python 工具  
+> 快速构建专业数据分析报告的 Python 工具\
 > 支持表格、图表、指标卡片、章节组织等多种组件
 
----
+***
 
 ## 目录
 
@@ -16,7 +16,7 @@
 7. [完整示例](#七完整示例)
 8. [最佳实践](#八最佳实践)
 
----
+***
 
 ## 一、快速开始
 
@@ -56,11 +56,12 @@ print(f"报告已生成: {output}")
 ```
 
 **输出效果**：
+
 - 一个包含标题、文本、三个指标卡片的 HTML 报告
 - 自动应用配色方案和响应式布局
 - 支持截图和目录导航
 
----
+***
 
 ## 二、核心概念
 
@@ -75,19 +76,19 @@ print(f"报告已生成: {output}")
 
 ### 2.2 组件类型概览
 
-| 组件 | 方法 | 用途 |
-|------|------|------|
-| **标题** | `title()` | 章节标题，支持层级 |
-| **文本** | `text()` | 说明文字，支持样式 |
-| **表格** | `table()` | 数据表格，支持冻结列 |
-| **图表** | `chart()` | 单图表（line/bar/area/pie/heatmap/kline/scatter） |
-| **网格图** | `chartg()` | 多图表垂直组合 |
-| **指标** | `metrics()` | 关键指标卡片 |
-| **章节** | `section()` | 内容分组，支持折叠 |
-| **分隔线** | `divider()` | 视觉分隔 |
-| **Markdown** | `markdown()` | Markdown 格式文本 |
-| **代码** | `code()` | 代码块 |
-| **HTML** | `html()` | 原始 HTML |
+| 组件           | 方法           | 用途                                           |
+| ------------ | ------------ | -------------------------------------------- |
+| **标题**       | `title()`    | 章节标题，支持层级                                    |
+| **文本**       | `text()`     | 说明文字，支持样式                                    |
+| **表格**       | `table()`    | 数据表格，支持冻结列                                   |
+| **图表**       | `chart()`    | 单图表（line/bar/area/pie/heatmap/kline/scatter） |
+| **网格图**      | `chartg()`   | 多图表垂直组合                                      |
+| **指标**       | `metrics()`  | 关键指标卡片                                       |
+| **章节**       | `section()`  | 内容分组，支持折叠                                    |
+| **分隔线**      | `divider()`  | 视觉分隔                                         |
+| **Markdown** | `markdown()` | Markdown 格式文本                                |
+| **代码**       | `code()`     | 代码块                                          |
+| **HTML**     | `html()`     | 原始 HTML                                      |
 
 ### 2.3 链式调用
 
@@ -98,7 +99,7 @@ nb = Notebook("链式调用示例")
 nb.title("报告标题").text("说明文字").metrics([...]).export_html("output")
 ```
 
----
+***
 
 ## 三、基础组件
 
@@ -118,17 +119,23 @@ nb.title("月度详情", level=3)
 ### 3.2 文本（Text）
 
 ```python
-# 普通文本
-nb.text("这是普通文本内容", style="normal")
+# 普通文本（默认颜色）
+nb.text("这是普通文本内容")
 
-# 强调文本（蓝色）
-nb.text("这是需要强调的内容", style="emphasis")
+# 红色文本
+nb.text("错误信息", color="red")
 
-# 警告文本（橙色）
-nb.text("注意：数据存在延迟", style="warning")
+# 绿色文本
+nb.text("操作成功完成", color="green")
 
-# 成功文本（绿色）
-nb.text("操作成功完成", style="success")
+# 蓝色文本
+nb.text("这是需要强调的内容", color="blue")
+
+# 橙色/黄色文本
+nb.text("注意：数据存在延迟", color="orange")
+
+# 也支持十六进制颜色
+nb.text("自定义颜色", color="#ff6600")
 ```
 
 ### 3.3 表格（Table）
@@ -190,7 +197,7 @@ nb.metrics([
 nb.text("第一部分内容").divider().text("第二部分内容")
 ```
 
----
+***
 
 ## 四、图表组件
 
@@ -202,37 +209,37 @@ nb.chart(chart_type, data, title=None, height='400px', **kwargs)
 
 **参数说明：**
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `chart_type` | str | 是 | 图表类型：`line`, `bar`, `area`, `pie`, `heatmap`, `kline`, `scatter` |
-| `data` | dict/DataFrame | 是 | 图表数据，格式因类型而异 |
-| `title` | str | 否 | 图表标题 |
-| `height` | str | 否 | 容器高度，默认 `'400px'` |
-| `width` | str | 否 | 容器宽度，默认 `'100%'`（通过 kwargs 传入） |
+| 参数           | 类型             | 必填 | 说明                                                               |
+| ------------ | -------------- | -- | ---------------------------------------------------------------- |
+| `chart_type` | str            | 是  | 图表类型：`line`, `bar`, `area`, `pie`, `heatmap`, `kline`, `scatter` |
+| `data`       | dict/DataFrame | 是  | 图表数据，格式因类型而异                                                     |
+| `title`      | str            | 否  | 图表标题                                                             |
+| `height`     | str            | 否  | 容器高度，默认 `'400px'`                                                |
+| `width`      | str            | 否  | 容器宽度，默认 `'100%'`（通过 kwargs 传入）                                   |
 
 **kwargs 可选参数：**
 
-| 参数 | 说明 |
-|------|------|
-| `series_opts` | 系列配置，统一应用到所有系列 |
-| `title_opts` | 标题配置（pyecharts 规范） |
-| `legend_opts` | 图例配置（pyecharts 规范） |
-| `tooltip_opts` | 提示框配置（pyecharts 规范） |
-| `xaxis_opts` | X轴配置（pyecharts 规范） |
-| `yaxis_opts` | Y轴配置（pyecharts 规范） |
-| `datazoom_opts` | 数据缩放配置（pyecharts 规范） |
+| 参数               | 说明                   |
+| ---------------- | -------------------- |
+| `series_opts`    | 系列配置，统一应用到所有系列       |
+| `title_opts`     | 标题配置（pyecharts 规范）   |
+| `legend_opts`    | 图例配置（pyecharts 规范）   |
+| `tooltip_opts`   | 提示框配置（pyecharts 规范）  |
+| `xaxis_opts`     | X轴配置（pyecharts 规范）   |
+| `yaxis_opts`     | Y轴配置（pyecharts 规范）   |
+| `datazoom_opts`  | 数据缩放配置（pyecharts 规范） |
 | `visualmap_opts` | 视觉映射配置（pyecharts 规范） |
-| `grid_opts` | 网格配置（pyecharts 规范） |
+| `grid_opts`      | 网格配置（pyecharts 规范）   |
 
 **数据格式规范：**
 
-| 图表类型 | 数据格式 | DataFrame 支持 |
-|----------|----------|---------------|
-| `line/bar/area` | `{'xAxis': [...], 'series': [{'name': '', 'data': []}]}` 或 DataFrame | ✅ 支持（索引→X轴，列→系列） |
-| `scatter` | `{'xAxis': [...], 'series': [{'name': '', 'data': [[x,y], ...]}]}` | ❌ **不支持** |
-| `kline` | `{'xAxis': [...], 'series': [{'name': '', 'data': [[开,收,低,高], ...]}]}` 或 DataFrame | ✅ 支持（需含 open/close/low/high 字段） |
-| `pie` | `[{'name': '', 'value': 0}, ...]` | ❌ 不支持 |
-| `heatmap` | DataFrame 或嵌套字典 `{y: {x: v}}` | ✅ 支持（索引→X轴，列→Y轴，值→热力值） |
+| 图表类型            | 标准格式                                                                   | DataFrame 格式 | DataFrame 转换规则                          |
+| --------------- | ---------------------------------------------------------------------- | ------------ | --------------------------------------- |
+| `line/bar/area` | `{'xAxis': [...], 'series': [{'name': '', 'data': []}]}`               | ✅ 支持         | 第1列→xAxis，第2列及以后→series                 |
+| `scatter`       | `{'xAxis': [...], 'series': [{'name': '', 'data': [[x,y], ...]}]}`     | ❌ **不支持**    | -                                       |
+| `kline`         | `{'xAxis': [...], 'series': [{'name': '', 'data': [[开,收,低,高], ...]}]}` | ✅ 支持         | 第1列→xAxis（日期），open/close/low/high列→K线数据 |
+| `pie`           | `[{'name': '', 'value': 0}, ...]`                                      | ❌ 不支持        | -                                       |
+| `heatmap`       | 嵌套字典 `{y: {x: value}}`                                                 | ✅ 支持         | 第1列→xAxis，第2列及以后→yAxis维度，值→热力值          |
 
 ### 4.1 折线图（Line）
 
@@ -267,11 +274,19 @@ df = pd.DataFrame({
     "策略A": [1.0, 1.05, 1.08, 1.12, 1.15],
     "策略B": [1.0, 1.03, 1.06, 1.08, 1.10],
 })
-df = df.set_index("日期")
+print(df)
+#        日期  策略A   策略B
+# 0  2024-01   1.0  1.00
+# 1  2024-02   1.05 1.03
+# 2  2024-03   1.08 1.06
+# 3  2024-04   1.12 1.08
+# 4  2024-05   1.15 1.10
 nb.chart("line", df, title="策略对比")
+# DataFrame 转换规则：第1列（日期）→ xAxis，第2、3列 → series
 ```
 
 **前端交互**：
+
 - 悬停显示 tooltip
 - 点击 legend 切换显示/隐藏
 - 支持配色方案切换
@@ -301,6 +316,7 @@ nb.chart("bar", data_stack, title="资产配置", height="350px",
 ```
 
 **前端交互**：
+
 - 支持显示数值标签
 - 支持百分比/原始数据切换
 
@@ -320,17 +336,24 @@ nb.chart("area", data, title="累计收益走势", height="400px")
 ### 4.4 饼图（Pie）
 
 ```python
-data = [
-    {"name": "股票", "value": 45},
-    {"name": "债券", "value": 30},
-    {"name": "现金", "value": 15},
-    {"name": "其他", "value": 10},
-]
+import pandas as pd
+df = pd.DataFrame({
+    "资产类型": ["股票", "债券", "现金", "其他"],
+    "占比": [45, 30, 15, 10],
+})
+print(df)
+#   资产类型  占比
+# 0   股票  45
+# 1   债券  30
+# 2   现金  15
+# 3   其他  10
 
-nb.chart("pie", data, title="资产配置", height="400px")
+nb.chart("pie", df, title="资产配置", height="400px")
+# DataFrame 转换规则：第1列（资产类型）→ name，第2列（占比）→ value
 ```
 
 **前端交互**：
+
 - 显示选项：原始数据 / 百分比 / 同时显示
 - 悬停高亮
 - 点击图例切换
@@ -349,14 +372,27 @@ correlation = (correlation + correlation.T) / 2  # 对称矩阵
 np.fill_diagonal(correlation, 1)
 
 df = pd.DataFrame(correlation, index=assets, columns=assets)
+df = df.reset_index()  # 将索引变为第1列
+df.columns = ["资产"] + assets  # 重命名列
+print(df)
+#      资产   股票   债券   黄金   原油   现金
+# 0   股票  1.00  0.30  0.20  0.15  0.10
+# 1   债券  0.30  1.00  0.40  0.25  0.20
+# ...
 nb.chart("heatmap", df, title="资产相关性矩阵", height="450px")
+# DataFrame 转换规则：第1列 → xAxis，其余列名 → yAxis，值 → 热力值
 
 # 方式2：使用嵌套字典
-data_dict = df.to_dict()
+data_dict = {
+    "股票": {"股票": 1.0, "债券": 0.3, "黄金": 0.2},
+    "债券": {"股票": 0.3, "债券": 1.0, "黄金": 0.4},
+    "黄金": {"股票": 0.2, "债券": 0.4, "黄金": 1.0},
+}
 nb.chart("heatmap", data_dict, title="资产相关性矩阵")
 ```
 
 **前端交互**：
+
 - visualMap 显示数值范围
 - 悬停显示具体数值
 
@@ -395,6 +431,7 @@ nb.chartg("line", drawdown_data, height=150)
 ```
 
 **特点**：
+
 - 多个图表垂直排列
 - 适合 K线+成交量+指标 的组合
 - 简化处理，不支持复杂交互
@@ -431,11 +468,18 @@ df = pd.DataFrame({
     "low": [2287.3, 2288.26, 2295.35, 2337.35, 2347.89],
     "high": [2362.94, 2308.38, 2346.92, 2363.8, 2383.76],
 })
+print(df)
+#         date    open   close     low    high
+# 0 2024-01-01 2320.26 2302.60 2287.30 2362.94
+# 1 2024-01-02 2300.00 2291.30 2288.26 2308.38
+# ...
 
 nb.chart("kline", df, title="K线图", height="400px")
+# DataFrame 转换规则：第1列 → xAxis，open/close/low/high 字段 → K线数据
 ```
 
 **支持的字段名：**
+
 - 开盘：`open`, `开盘`, `Open`, `OPEN`, `o`, `O`
 - 收盘：`close`, `收盘`, `Close`, `CLOSE`, `c`, `C`
 - 最低：`low`, `最低`, `Low`, `LOW`, `l`, `L`
@@ -470,10 +514,11 @@ nb.chart("scatter", data, title="数值散点图", height="400px")
 ```
 
 **数据格式说明：**
+
 - 类目散点图：`data` 为数值数组，X轴使用 `xAxis` 类目
 - 数值散点图：`data` 为 `[[x, y], ...]` 坐标对数组，`xAxis` 为空列表
 
----
+***
 
 ## 五、章节与布局
 
@@ -535,7 +580,7 @@ with nb.section("策略分析", level=1):
         nb.metrics([...])
 ```
 
----
+***
 
 ## 六、高级功能
 
@@ -583,7 +628,7 @@ nb.markdown("""
 """)
 ```
 
----
+***
 
 ## 七、完整示例
 
@@ -599,7 +644,7 @@ nb = Notebook("量化策略分析报告")
 
 # ========== 报告标题 ==========
 nb.title("双均线策略分析报告", level=1)
-nb.text("报告生成时间：2024年6月", style="emphasis")
+nb.text("报告生成时间：2024年6月", color="blue")
 nb.divider()
 
 # ========== 策略概述 ==========
@@ -711,7 +756,7 @@ nb.chartg("line", drawdown_data, height=150)
 output = nb.export_html("dashboard")
 ```
 
----
+***
 
 ## 八、最佳实践
 
@@ -736,16 +781,17 @@ output = nb.export_html("dashboard")
 
 ### 8.3 配色建议
 
-| 场景 | 推荐配色 |
-|------|---------|
-| 正式报告 | 暖冷渐变系 |
-| 数据对比 | 高对比度系 |
-| 演示展示 | 大红大紫系 |
+| 场景   | 推荐配色      |
+| ---- | --------- |
+| 正式报告 | 暖冷渐变系     |
+| 数据对比 | 高对比度系     |
+| 演示展示 | 大红大紫系     |
 | 默认兼容 | ECharts默认 |
 
 ### 8.4 常见问题
 
 **Q: 表格列宽如何调整？**
+
 ```python
 columns = [
     {"field": "name", "title": "名称", "width": 150},
@@ -755,11 +801,13 @@ nb.table(data, columns=columns)
 ```
 
 **Q: 图表高度如何设置？**
+
 ```python
 nb.chart("line", data, height="500px")  # 默认 "400px"
 ```
 
 **Q: 如何添加多个表格？**
+
 ```python
 with nb.section("表格对比"):
     nb.table(data1, title="表1")
@@ -767,19 +815,20 @@ with nb.section("表格对比"):
 ```
 
 **Q: 导出后如何查看？**
+
 ```python
 output = nb.export_html("report")
 # 使用浏览器打开 output 文件
 ```
 
----
+***
 
 ## 附录
 
 ### A. 版本记录
 
-| 版本 | 日期 | 变更 |
-|------|------|------|
+| 版本   | 日期         | 变更               |
+| ---- | ---------- | ---------------- |
 | V1.0 | 2024-03-22 | 初始版本，包含完整使用说明和示例 |
 
 ### B. 相关文档
@@ -790,9 +839,10 @@ output = nb.export_html("report")
 ### C. 反馈与支持
 
 如有问题或建议，请通过以下方式反馈：
+
 - 提交 Issue
 - 联系开发团队
 
----
+***
 
 **Happy Analyzing! 📊**

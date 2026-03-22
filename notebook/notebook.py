@@ -165,9 +165,9 @@ class Notebook:
         """添加标题"""
         return self._add_cell(CellBuilder.title(text, level))
     
-    def text(self, text: str, style: str = 'normal'):
-        """添加文本"""
-        return self._add_cell(CellBuilder.text(text, style))
+    def text(self, text: str, color: str = None):
+        """添加文本，color支持: red, green, blue, yellow, orange, purple, gray等"""
+        return self._add_cell(CellBuilder.text(text, color))
     
     def markdown(self, text: str):
         """添加Markdown内容"""
