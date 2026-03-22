@@ -1,3 +1,14 @@
+"""
+Cell 模块 - Notebook 的单元格类型定义和构建器
+
+本模块包含：
+1. 单元格类型枚举 (CellType)
+2. 数据类定义 (Cell, Section)
+3. 图表构建器注册表和构建函数
+4. 单元格构建器 (CellBuilder)
+5. 网格布局构建器 (_build_grid)
+"""
+
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
@@ -5,9 +16,12 @@ import json
 import pandas as pd
 
 
-# ========== 类型定义 ==========
+# =============================================================================
+# 第一部分：类型定义
+# =============================================================================
 
 class CellType(Enum):
+    """单元格类型枚举"""
     # 文本类
     TITLE = "title"
     TEXT = "text"
@@ -31,7 +45,7 @@ CONTAINER_TYPES = {CellType.SECTION}
 
 @dataclass
 class Cell:
-    """原子类型 Cell"""
+    """原子类型 Cell - 表示一个不可再分的单元格"""
     type: CellType
     content: Any
     title: Optional[str] = None
@@ -48,7 +62,7 @@ class Cell:
 
 @dataclass
 class Section:
-    """容器类型（Section）"""
+    """容器类型 Section - 可以包含多个 Cell 的章节"""
     children: List[Union[Cell, 'Section']] = field(default_factory=list)
     title: Optional[str] = None
     options: Dict = field(default_factory=dict)
@@ -72,10 +86,21 @@ class Section:
 CellLike = Union[Cell, 'Section']
 
 
-# ========== 图表构建辅助函数 ==========
+# =============================================================================
+# 第二部分：图表配置转换辅助函数
+# =============================================================================
 
 def _create_opts(opts_name: str, opts_dict: dict):
-    """将 dict 转换为 pyecharts opts 对象"""
+    """
+    将 dict 转换为 pyecharts opts 对象
+    
+    Args:
+        opts_name: 配置项名称，如 'title_opts', 'xaxis_opts' 等
+        opts_dict: 配置字典
+    
+    Returns:
+        pyecharts options 对象
+    """
     from pyecharts import options as opts
     
     opts_map = {
@@ -95,12 +120,25 @@ def _create_opts(opts_name: str, opts_dict: dict):
     return OptClass(**opts_dict) if OptClass else opts_dict
 
 
-# ========== 图表注册表 ==========
+# =============================================================================
+# 第三部分：图表注册表
+# =============================================================================
 
 CHART_REGISTRY = None
 
+
 def _init_chart_registry():
-    """延迟初始化图表注册表，避免 pyecharts 导入开销"""
+    """
+    延迟初始化图表注册表，避免 pyecharts 导入开销
+    
+    注册表结构：
+    {
+        'chart_type': {
+            'class': ChartClass,
+            'builder': builder_function
+        }
+    }
+    """
     global CHART_REGISTRY
     if CHART_REGISTRY is not None:
         return
@@ -108,7 +146,7 @@ def _init_chart_registry():
     from pyecharts.charts import Line, Bar, Pie, HeatMap, Kline, Scatter
     
     CHART_REGISTRY = {
-        # ---------- 通用 XY 轴系列（统一处理）----------
+        # ---------- XY 轴系列（通用构建器）----------
         'line': {
             'class': Line,
             'builder': lambda data, opts: _build_xy_chart(Line, data, opts)
@@ -123,14 +161,14 @@ def _init_chart_registry():
         },
         'scatter': {
             'class': Scatter,
-            'builder': lambda data, opts: _build_xy_chart(Scatter, data, opts)
+            'builder': _build_scatter
         },
         'kline': {
             'class': Kline,
-            'builder': lambda data, opts: _build_xy_chart(Kline, data, opts)
+            'builder': _build_kline
         },
         
-        # ---------- 特殊类型（转换+构建合并）----------
+        # ---------- 特殊类型（独立构建器）----------
         'pie': {
             'class': Pie,
             'builder': _build_pie
@@ -142,26 +180,53 @@ def _init_chart_registry():
     }
 
 
-# ========== 通用构建器（XY 轴系列）----------
+def get_chart_registry():
+    """获取图表注册表（自动初始化）"""
+    _init_chart_registry()
+    return CHART_REGISTRY
+
+
+# =============================================================================
+# 第四部分：图表构建器实现
+# =============================================================================
+
+# ---------- 4.1 通用 XY 轴图表构建器 ----------
 
 def _build_xy_chart(ChartClass, data, series_opts, is_area=False):
-    """通用 XY 轴图表构建器（转换+构建合并）"""
+    """
+    通用 XY 轴图表构建器
+    
+    支持图表类型：line, bar, area, scatter, kline
+    
+    Args:
+        ChartClass: pyecharts 图表类
+        data: 图表数据，支持两种格式：
+              1. 标准格式: {'xAxis': [...], 'series': [{'name': '', 'data': []}]}
+              2. DataFrame 或嵌套字典（自动转换）
+        series_opts: 系列配置选项
+        is_area: 是否为面积图（仅对 Line 有效）
+    
+    Returns:
+        pyecharts Chart 对象
+    """
     from pyecharts import options as opts
     chart = ChartClass()
     
-    # 判断格式
+    # 判断是否为标准格式
     is_standard_format = isinstance(data, dict) and 'xAxis' in data and 'series' in data
     
     if not is_standard_format:
-        # 处理非标准格式：{y: {x: v}} 或 DataFrame
+        # 处理非标准格式：DataFrame 或嵌套字典
         if isinstance(data, pd.DataFrame):
             df = data.copy()
         else:
-            # 嵌套 dict 转 DataFrame
             df = pd.DataFrame(data)
         
+        # 处理 RangeIndex：如果第一列是序号列，设为索引
         if isinstance(df.index, pd.RangeIndex) and len(df.columns) > 1:
             df = df.set_index(df.columns[0])
+        
+        # 转换为标准格式
         x_axis = df.index.tolist()
         series_list = []
         for col in df.columns:
@@ -174,32 +239,188 @@ def _build_xy_chart(ChartClass, data, series_opts, is_area=False):
             'series': series_list
         }
     
+    # 构建图表
     chart.add_xaxis(data['xAxis'])
     for s in data['series']:
         params = {'series_name': s.get('name', ''), 'y_axis': s['data'], **series_opts}
         if is_area:
             params['areastyle_opts'] = opts.AreaStyleOpts(opacity=0.3)
         chart.add_yaxis(**params)
+    
     return chart
 
 
-# ========== 特殊构建器（转换+构建合并）----------
+# ---------- 4.2 散点图构建器 ----------
+
+def _build_scatter(data, series_opts):
+    """
+    散点图构建器
+    
+    注意：散点图不支持 DataFrame 自动转换，请使用标准格式
+    
+    支持的数据格式：
+    1. 类目散点图: {'xAxis': ['A','B','C'], 'series': [{'name': '', 'data': [10,20,30]}]}
+    2. 数值散点图: {'xAxis': [], 'series': [{'name': '', 'data': [[1,10], [2,20]]}]}
+    
+    Args:
+        data: 图表数据（仅支持标准格式 dict）
+        series_opts: 系列配置选项
+    
+    Returns:
+        pyecharts Scatter 对象
+    """
+    from pyecharts.charts import Scatter
+    from pyecharts import options as opts
+    
+    chart = Scatter()
+    
+    # 散点图仅支持标准格式
+    if not (isinstance(data, dict) and 'xAxis' in data and 'series' in data):
+        raise ValueError(
+            "散点图不支持 DataFrame 自动转换，请使用标准格式:\n"
+            "1. 类目散点图: {'xAxis': ['A','B'], 'series': [{'name': '', 'data': [10,20]}]}\n"
+            "2. 数值散点图: {'xAxis': [], 'series': [{'name': '', 'data': [[1,10], [2,20]]}]}"
+        )
+    
+    # 构建图表
+    chart.add_xaxis(data['xAxis'])
+    for s in data['series']:
+        params = {
+            'series_name': s.get('name', ''),
+            'y_axis': s['data'],
+            **series_opts
+        }
+        chart.add_yaxis(**params)
+    
+    return chart
+
+
+# ---------- 4.3 K线图构建器 ----------
+
+def _build_kline(data, series_opts):
+    """
+    K线图构建器
+    
+    支持两种数据格式：
+    1. 标准格式: {'xAxis': [...], 'series': [{'name': '', 'data': [[开,收,低,高], ...]}]}
+    2. DataFrame: 自动识别 open/close/low/high 字段（支持中文和英文）
+    
+    Args:
+        data: 图表数据
+        series_opts: 系列配置选项
+    
+    Returns:
+        pyecharts Kline 对象
+    """
+    from pyecharts.charts import Kline
+    chart = Kline()
+    
+    # 判断是否为标准格式
+    is_standard_format = isinstance(data, dict) and 'xAxis' in data and 'series' in data
+    
+    if not is_standard_format:
+        # DataFrame 格式转换
+        if isinstance(data, pd.DataFrame):
+            df = data.copy()
+        else:
+            df = pd.DataFrame(data)
+        
+        # 处理 RangeIndex：如果第一列是日期/时间列，设为索引
+        if isinstance(df.index, pd.RangeIndex) and len(df.columns) > 1:
+            # 检查第一列是否为日期类型
+            first_col = df.columns[0]
+            if pd.api.types.is_datetime64_any_dtype(df[first_col]):
+                df = df.set_index(first_col)
+        
+        # 字段映射：支持中英文
+        field_map = {
+            'open': ['open', '开盘', 'Open', 'OPEN', 'o', 'O'],
+            'close': ['close', '收盘', 'Close', 'CLOSE', 'c', 'C'],
+            'low': ['low', '最低', 'Low', 'LOW', 'l', 'L'],
+            'high': ['high', '最高', 'High', 'HIGH', 'h', 'H']
+        }
+        
+        # 自动查找字段
+        def find_field(candidates):
+            for c in candidates:
+                if c in df.columns:
+                    return c
+            available = list(df.columns)
+            raise ValueError(f"找不到字段，候选: {candidates}，可用: {available}")
+        
+        open_col = find_field(field_map['open'])
+        close_col = find_field(field_map['close'])
+        low_col = find_field(field_map['low'])
+        high_col = find_field(field_map['high'])
+        
+        # 构建 xAxis 和 K线数据
+        x_axis = df.index.tolist()
+        kline_data = []
+        for _, row in df.iterrows():
+            kline_data.append([
+                row[open_col],
+                row[close_col],
+                row[low_col],
+                row[high_col]
+            ])
+        
+        data = {
+            'xAxis': x_axis,
+            'series': [{
+                'name': series_opts.get('name', 'K线'),
+                'data': kline_data
+            }]
+        }
+    
+    # 构建图表
+    chart.add_xaxis(data['xAxis'])
+    for s in data['series']:
+        chart.add_yaxis(
+            series_name=s.get('name', ''),
+            y_axis=s['data'],
+            **series_opts
+        )
+    
+    return chart
+
+
+# ---------- 4.4 饼图构建器 ----------
 
 def _build_pie(data, series_opts):
-    """饼图构建器（转换+构建合并）"""
+    """
+    饼图构建器
+    
+    Args:
+        data: 数据格式 [{'name': '类别', 'value': 数值}, ...]
+        series_opts: 系列配置选项
+    
+    Returns:
+        pyecharts Pie 对象
+    """
     from pyecharts.charts import Pie
     chart = Pie()
-    data_pair = [(item['name'], item['value']) for item in data]  # 转换
-    chart.add('', data_pair, **series_opts)  # 构建
+    data_pair = [(item['name'], item['value']) for item in data]
+    chart.add('', data_pair, **series_opts)
     return chart
 
 
+# ---------- 4.5 热力图构建器 ----------
+
 def _build_heatmap(data, series_opts):
-    """热力图构建器（转换+构建合并）"""
+    """
+    热力图构建器
+    
+    Args:
+        data: DataFrame 或嵌套字典 {y: {x: value}}
+        series_opts: 系列配置选项
+    
+    Returns:
+        pyecharts HeatMap 对象
+    """
     from pyecharts.charts import HeatMap
     chart = HeatMap()
     
-    # 统一转成 DataFrame
+    # 统一转为 DataFrame
     if isinstance(data, pd.DataFrame):
         df = data.copy()
     else:
@@ -209,54 +430,80 @@ def _build_heatmap(data, series_opts):
     if isinstance(df.index, pd.RangeIndex) and len(df.columns) > 1:
         df = df.set_index(df.columns[0])
     
-    # 用 stack() 优化
+    # 构建坐标轴数据
     xaxis_data = [str(x) for x in df.index]
     yaxis_data = [str(y) for y in df.columns]
     
+    # 构建坐标映射
     x_map = {str(x): i for i, x in enumerate(df.index)}
     y_map = {str(y): i for i, y in enumerate(df.columns)}
     
+    # 使用 stack() 优化数据转换
     stacked = df.stack()
     values = [[x_map[str(x)], y_map[str(y)], v] for (x, y), v in stacked.items()]
     
-    # 构建
+    # 构建图表
     chart.add_xaxis(xaxis_data)
     chart.add_yaxis('', yaxis_data, values, **series_opts)
+    
     return chart
 
 
-# ========== Cell 构建器 ==========
+# =============================================================================
+# 第五部分：单元格构建器
+# =============================================================================
 
 class CellBuilder:
-    """单元格构建器"""
+    """
+    单元格构建器 - 提供静态方法创建各种类型的 Cell
     
-    # 文本类
+    分类：
+    - 文本类：title, text, markdown
+    - 代码类：code
+    - 数据类：table, metrics
+    - 图表类：chart, pyecharts
+    - 布局类：divider, html, section
+    """
+    
+    # ---------- 5.1 文本类 ----------
     
     @staticmethod
     def title(text: str, level: int = 1) -> Cell:
+        """创建标题单元格"""
         return Cell(CellType.TITLE, text, options={"level": level})
     
     @staticmethod
     def text(text: str, style: str = 'normal') -> Cell:
+        """创建文本单元格"""
         return Cell(CellType.TEXT, text, options={"style": style})
     
     @staticmethod
     def markdown(text: str) -> Cell:
+        """创建 Markdown 单元格"""
         return Cell(CellType.MARKDOWN, text)
     
-    # 代码类
+    # ---------- 5.2 代码类 ----------
     
     @staticmethod
     def code(code: str, language: str = 'python', output: str = None) -> Cell:
+        """创建代码块单元格"""
         return Cell(
             CellType.CODE,
             {"code": code, "language": language, "output": output}
         )
     
-    # 数据类
+    # ---------- 5.3 数据类 ----------
     
     @staticmethod
     def table(data: List[Dict], columns: List[str] = None, options: dict = None) -> Cell:
+        """
+        创建表格单元格
+        
+        Args:
+            data: 表格数据（List[dict]）
+            columns: 列名列表，如 ["代码", "名称"]
+            options: 额外选项，如 freeze, page, heatmap 等
+        """
         # 将字符串数组转换为对象数组格式
         # 输入: ["代码", "名称"]
         # 输出: [{"field": "代码", "title": "代码"}, {"field": "名称", "title": "名称"}]
@@ -272,38 +519,53 @@ class CellBuilder:
     
     @staticmethod
     def metrics(data: List[Dict], columns: int = 4) -> Cell:
+        """创建指标卡片单元格"""
         return Cell(CellType.METRICS, data, options={"columns": columns})
     
-    # 图表类
+    # ---------- 5.4 图表类 ----------
     
     @staticmethod
     def chart(chart_type: str, data, height: str = '400px', **kwargs) -> Cell:
+        """
+        创建图表单元格（简化封装）
+        
+        Args:
+            chart_type: 图表类型，如 'line', 'bar', 'pie' 等
+            data: 图表数据
+            height: 容器高度，默认 '400px'
+            **kwargs: 额外配置选项
+        
+        Returns:
+            Cell 对象
+        """
         width = kwargs.pop('width', '100%')
         
-        # 1. 初始化注册表
+        # 初始化注册表
         _init_chart_registry()
         
-        # 2. 查表
+        # 查找图表构建器
         spec = CHART_REGISTRY.get(chart_type)
         if not spec:
             supported = list(CHART_REGISTRY.keys())
             raise ValueError(f"不支持的图表类型: {chart_type}，可用: {supported}")
         
-        # 3. 提取参数
-        global_opts_keys = ['title_opts', 'legend_opts', 'tooltip_opts',
-                            'xaxis_opts', 'yaxis_opts', 'datazoom_opts',
-                            'visualmap_opts', 'grid_opts']
+        # 提取全局配置和系列配置
+        global_opts_keys = [
+            'title_opts', 'legend_opts', 'tooltip_opts',
+            'xaxis_opts', 'yaxis_opts', 'datazoom_opts',
+            'visualmap_opts', 'grid_opts'
+        ]
         global_opts = {k: kwargs.pop(k) for k in global_opts_keys if k in kwargs}
         series_opts = kwargs.pop('series_opts', {})
         
-        # 4. 构建图表
+        # 构建图表
         chart = spec['builder'](data, series_opts)
         
-        # 5. 全局配置
+        # 应用全局配置
         if global_opts:
             chart.set_global_opts(**{k: _create_opts(k, v) for k, v in global_opts.items()})
         
-        # 6. 输出
+        # 输出为字典
         option_dict = json.loads(chart.dump_options())
         return Cell(
             CellType.CHART,
@@ -312,6 +574,14 @@ class CellBuilder:
     
     @staticmethod
     def pyecharts(chart, height: str = '400px', width: str = '100%') -> Cell:
+        """
+        创建 pyecharts 图表单元格（高级需求）
+        
+        Args:
+            chart: pyecharts 图表对象
+            height: 容器高度
+            width: 容器宽度
+        """
         option_dict = json.loads(chart.dump_options())
         
         return Cell(
@@ -323,43 +593,80 @@ class CellBuilder:
             }
         )
     
-    # 布局类
+    # ---------- 5.5 布局类 ----------
     
     @staticmethod
     def divider() -> Cell:
+        """创建分隔线单元格"""
         return Cell(CellType.DIVIDER, None)
     
     @staticmethod
     def html(html_content: str) -> Cell:
+        """创建 HTML 单元格"""
         return Cell(CellType.HTML, html_content)
     
     @staticmethod
     def section(title: str, children: List[CellLike] = None,
                 level: int = 1, collapsed: bool = None) -> Section:
+        """
+        创建章节容器
+        
+        Args:
+            title: 章节标题
+            children: 子单元格列表
+            level: 层级（1-3）
+            collapsed: 折叠状态（None=不可折叠, True=默认折叠, False=默认展开）
+        """
         opts = {"level": level}
         if collapsed is not None:
             opts["collapsed"] = collapsed
         return Section(children or [], title, opts)
 
 
+# =============================================================================
+# 第六部分：网格布局构建器
+# =============================================================================
+
 def _build_grid(charts_config, total_height=600):
+    """
+    构建网格布局（多个图表垂直排列）
+    
+    Args:
+        charts_config: 图表配置列表
+            [
+                {'type': 'line', 'data': {...}, 'height': 300, 'kwargs': {...}},
+                ...
+            ]
+        total_height: 总高度
+    
+    Returns:
+        ECharts option 字典
+    """
     import json
+    
     heights = [c['height'] for c in charts_config]
     total = sum(heights)
     chart_options_list = []
-    for i, cfg in enumerate(charts_config):
+    
+    # 构建每个图表的 option
+    for cfg in charts_config:
         chart_type = cfg['type']
         data = cfg['data']
         kwargs = cfg.get('kwargs', {})
         series_opts = kwargs.pop('series_opts', {})
+        
         spec = CHART_REGISTRY.get(chart_type)
         if not spec:
             raise ValueError(f"不支持的图表类型: {chart_type}")
+        
         chart = spec['builder'](data, series_opts)
         
-        global_opts_keys = ['title_opts', 'legend_opts', 'tooltip_opts',
-                            'xaxis_opts', 'yaxis_opts', 'datazoom_opts',
-                            'visualmap_opts', 'grid_opts']
+        # 应用全局配置
+        global_opts_keys = [
+            'title_opts', 'legend_opts', 'tooltip_opts',
+            'xaxis_opts', 'yaxis_opts', 'datazoom_opts',
+            'visualmap_opts', 'grid_opts'
+        ]
         global_opts = {k: kwargs.pop(k) for k in global_opts_keys if k in kwargs}
         if global_opts:
             chart.set_global_opts(**{k: _create_opts(k, v) for k, v in global_opts.items()})
@@ -367,6 +674,7 @@ def _build_grid(charts_config, total_height=600):
         chart_options = json.loads(chart.dump_options())
         chart_options_list.append(chart_options)
     
+    # 合并为 grid 布局
     option = {
         'grid': [],
         'xAxis': [],
@@ -382,12 +690,14 @@ def _build_grid(charts_config, total_height=600):
         grid_height = heights[i]
         height_percent = grid_height / total * 100
         
+        # Grid 配置
         option['grid'].append({
             'top': f"{top}%",
             'height': f"{height_percent - 5}%",
             'containLabel': True
         })
         
+        # 标题配置
         titles = chart_opt.get('title', [])
         if not isinstance(titles, list):
             titles = [titles] if titles else []
@@ -396,6 +706,7 @@ def _build_grid(charts_config, total_height=600):
             title_copy['top'] = f"{top}%"
             option['title'].append(title_copy)
         
+        # 图例配置
         legends = chart_opt.get('legend', [])
         if not isinstance(legends, list):
             legends = [legends]
@@ -404,16 +715,19 @@ def _build_grid(charts_config, total_height=600):
             legend_copy['top'] = f"{top}%"
             option['legend'].append(legend_copy)
         
+        # X轴配置
         for xaxis in chart_opt.get('xAxis', []):
             xaxis_copy = xaxis.copy()
             xaxis_copy['gridIndex'] = i
             option['xAxis'].append(xaxis_copy)
         
+        # Y轴配置
         for yaxis in chart_opt.get('yAxis', []):
             yaxis_copy = yaxis.copy()
             yaxis_copy['gridIndex'] = i
             option['yAxis'].append(yaxis_copy)
         
+        # 系列配置
         for series in chart_opt.get('series', []):
             series_copy = series.copy()
             series_copy['xAxisIndex'] = i

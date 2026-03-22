@@ -183,7 +183,7 @@ const HeatmapChart = {
     setup(props) {
         const heatmapMultiplier = ref(1);
 
-        const { chartRef, extractData } = useChart(props, {
+        const { chartRef, updateChart } = useChart(props, {
             buildOption: (extracted, colors) => {
                 const rawData = extracted.series[0]?.data || [];
                 const multiplier = heatmapMultiplier.value;
@@ -206,19 +206,26 @@ const HeatmapChart = {
             }
         });
 
+        watch(heatmapMultiplier, () => {
+            updateChart();
+        });
+
         return { chartRef, heatmapMultiplier };
     },
     template: `
-        <div class="cell-chart">
+        <div class="cell-chart heatmap-with-control">
             <h3 v-if="cell.title">{{ cell.title }}</h3>
-            <div ref="chartRef" class="chart-container"
-                 :style="{ width: cell.content?.width || '100%', height: cell.content?.height || '400px' }"></div>
-            <div class="heatmap-control">
-                <div class="control-label">数据缩放</div>
-                <div class="current-multiplier">×{{ heatmapMultiplier }}</div>
-                <div class="multiplier-buttons">
-                    <button v-for="m in [1000, 100, 10]" :key="m" :class="{ active: heatmapMultiplier === m }" @click="heatmapMultiplier = m">{{ m >= 1 ? '×' + m : '1/' + (1/m) }}</button>
-                    <button :class="{ active: heatmapMultiplier === 1 }" @click="heatmapMultiplier = 1">×1</button>
+            <div class="heatmap-wrapper">
+                <div ref="chartRef" class="chart-container"
+                     :style="{ width: cell.content?.width || '100%', height: cell.content?.height || '400px' }"></div>
+                <div class="heatmap-control">
+                    <div class="control-label">数据缩放</div>
+                    <div class="current-multiplier">×{{ heatmapMultiplier }}</div>
+                    <div class="multiplier-buttons">
+                        <button v-for="m in [1000, 100, 10]" :key="m" :class="{ active: heatmapMultiplier === m }" @click="heatmapMultiplier = m">×{{ m }}</button>
+                        <button :class="{ active: heatmapMultiplier === 1 }" @click="heatmapMultiplier = 1">原始</button>
+                        <button v-for="m in [0.1, 0.01]" :key="m" :class="{ active: heatmapMultiplier === m }" @click="heatmapMultiplier = m">1/{{ m === 0.1 ? 10 : 100 }}</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -327,17 +334,72 @@ const GridChart = {
         const chartRef = ref(null);
         let chartInstance = null;
 
-        onMounted(() => {
+        const getColors = () => {
+            const colorPalettes = window.colorPalettes;
+            if (!colorPalettes) return ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa'];
+            const paletteKey = colorPalettes.groups?.chart || colorPalettes.global;
+            const palette = colorPalettes.palettes?.[paletteKey];
+            return palette ? palette.colors : ['#e74c3c', '#f39c12', '#af7ac5', '#5499c7', '#f4d03f', '#82e0aa'];
+        };
+
+        const buildGridOption = () => {
+            const charts = props.cell.content?.charts;
+            if (!charts) return {};
+            const colors = getColors();
+            const option = JSON.parse(JSON.stringify(charts));
+            // 应用全局配色方案
+            option.color = colors;
+            // 优化 grid 布局，使用更宽的边距
+            if (option.grid && Array.isArray(option.grid)) {
+                option.grid = option.grid.map(g => ({
+                    ...g,
+                    left: 8,
+                    right: 8,
+                    containLabel: true
+                }));
+            }
+            // y轴自动适应（scale: true）
+            if (option.yAxis && Array.isArray(option.yAxis)) {
+                option.yAxis = option.yAxis.map(y => ({
+                    ...y,
+                    scale: true,
+                    boundaryGap: ['10%', '10%']
+                }));
+            }
+            // 添加 smooth 效果
+            if (option.series && Array.isArray(option.series)) {
+                option.series.forEach(s => {
+                    if (s.type === 'line') {
+                        s.smooth = true;
+                    }
+                });
+            }
+            if (option.legend && Array.isArray(option.legend)) {
+                option.legend = option.legend.map(leg => ({ ...leg, icon: 'rect' }));
+            } else if (option.legend) {
+                option.legend.icon = 'rect';
+            }
+            return option;
+        };
+
+        const initChart = () => {
             if (!chartRef.value || !props.cell.content?.charts) return;
+            if (chartInstance) chartInstance.dispose();
             chartInstance = echarts.init(chartRef.value);
-            chartInstance.setOption(props.cell.content.charts);
-            window.addEventListener('resize', () => chartInstance?.resize());
-            window.addEventListener('colorSchemeChanged', () => {
-                if (chartInstance) chartInstance.setOption(props.cell.content.charts);
-            });
+            chartInstance.setOption(buildGridOption());
+        };
+
+        const handleResize = () => chartInstance?.resize();
+
+        onMounted(() => {
+            nextTick(() => initChart());
+            window.addEventListener('resize', handleResize);
+            window.addEventListener('colorSchemeChanged', initChart);
         });
 
         onUnmounted(() => {
+            window.removeEventListener('resize', handleResize);
+            window.removeEventListener('colorSchemeChanged', initChart);
             chartInstance?.dispose();
         });
 
