@@ -1,5 +1,5 @@
 /**
- * FT Table Component v1.5.20260322-1
+ * FT Table Component v1.5.20260323-1
  * 版本号说明：主版本。次版本。日期（YYYYMMDD）-修订号
  * */
 
@@ -343,49 +343,61 @@ const FtTable = {
 
     // ========== 方法 ==========
 
-    // 获取当前可见的第一列和最后一列索引（排除冻结列）
-    const getVisibleColIndices = () => {
-      if (!tableContainer.value) return { first: -1, last: -1 };
+    // 获取冻结列宽度
+    const getFreezeWidths = (thElements) => {
+      const leftCount = props.freeze?.left || 0;
+      const rightCount = props.freeze?.right || 0;
+      let leftWidth = 0;
+      let rightWidth = 0;
 
-      const containerRect = tableContainer.value.getBoundingClientRect();
+      for (let i = 0; i < leftCount && i < thElements.length; i++) {
+        leftWidth += thElements[i].offsetWidth;
+      }
+      for (let i = 0; i < rightCount && i < thElements.length; i++) {
+        rightWidth += thElements[thElements.length - 1 - i].offsetWidth;
+      }
+      return { leftWidth, rightWidth };
+    };
+
+    // 滚动确保列可见
+    const scrollColumnIntoView = (colIndex) => {
+      if (!tableContainer.value) return;
+
       const thElements = tableContainer.value.querySelectorAll('thead th');
-      let firstVisibleIndex = -1;
-      let lastVisibleIndex = -1;
+      const targetTh = thElements[colIndex];
+      if (!targetTh) return;
 
-      // 获取冻结列数量
-      const leftFreezeCount = props.freeze?.left || 0;
-      const rightFreezeCount = props.freeze?.right || 0;
-      const totalCols = thElements.length;
+      const containerWidth = tableContainer.value.clientWidth;
+      const scrollLeft = tableContainer.value.scrollLeft;
+      const colLeft = targetTh.offsetLeft;
+      const colRight = colLeft + targetTh.offsetWidth;
 
-      thElements.forEach((th, index) => {
-        // 跳过冻结列
-        if (index < leftFreezeCount || index >= totalCols - rightFreezeCount) {
-          return;
-        }
+      const { leftWidth: freezeLeftWidth, rightWidth: freezeRightWidth } = getFreezeWidths(thElements);
 
-        const thRect = th.getBoundingClientRect();
-        // 判断列是否在可见区域内（考虑部分可见的情况）
-        if (thRect.left < containerRect.right && thRect.right > containerRect.left) {
-          if (firstVisibleIndex === -1) {
-            firstVisibleIndex = index;
-          }
-          lastVisibleIndex = index;
-        }
-      });
+      // 实际可视区域（扣除冻结列）
+      const actualViewLeft = scrollLeft + freezeLeftWidth;
+      const actualViewRight = scrollLeft + containerWidth - freezeRightWidth;
 
-      return { first: firstVisibleIndex, last: lastVisibleIndex };
+      // 计算左右遮挡量
+      const leftOverlap = actualViewLeft - colLeft;
+      const rightOverlap = colRight - actualViewRight;
+
+      // 优先处理遮挡更严重的一侧
+      if (leftOverlap > 10 && leftOverlap >= rightOverlap) {
+        // 向左滚动，让列紧贴左侧冻结列
+        const newScrollLeft = Math.max(0, colLeft - freezeLeftWidth);
+        tableContainer.value.scrollLeft = newScrollLeft;
+      } else if (rightOverlap > 10 && rightOverlap > leftOverlap) {
+        // 向右滚动，让列紧贴右侧冻结列
+        tableContainer.value.scrollLeft = colRight - containerWidth + freezeRightWidth + 20;
+      }
     };
 
     // 排序处理 - 按点击顺序形成优先级
     const handleSort = (col) => {
       const field = col.field;
       const existingIndex = multiSort.value.findIndex(s => s.field === field);
-
-      // 获取当前点击列的索引
       const colIndex = displayCols.value.findIndex(c => c.field === field);
-      // 判断是否是当前可见区域的第一列或最后一列
-      const { first: firstVisibleIndex, last: lastVisibleIndex } = getVisibleColIndices();
-      const isEdgeVisibleCol = (colIndex === firstVisibleIndex || colIndex === lastVisibleIndex) && colIndex >= 0;
 
       if (existingIndex >= 0) {
         const existing = multiSort.value[existingIndex];
@@ -404,59 +416,7 @@ const FtTable = {
       currentPage.value = 1;
 
       // 自动滚动确保排序图标可见
-      if (tableContainer.value) {
-        nextTick(() => {
-          const thElements = tableContainer.value.querySelectorAll('thead th');
-          const targetTh = thElements[colIndex];
-          if (targetTh) {
-            const containerWidth = tableContainer.value.clientWidth;
-            const scrollLeft = tableContainer.value.scrollLeft;
-            const colLeft = targetTh.offsetLeft;
-            const colRight = colLeft + targetTh.offsetWidth;
-            
-            // 可视区域的左右边界
-            const viewLeft = scrollLeft;
-            const viewRight = scrollLeft + containerWidth;
-            
-            // 获取左侧冻结列的总宽度
-            const leftFreezeCount = props.freeze?.left || 0;
-            let freezeLeftWidth = 0;
-            for (let i = 0; i < leftFreezeCount && i < thElements.length; i++) {
-              freezeLeftWidth += thElements[i].offsetWidth;
-            }
-            
-            // 获取右侧冻结列的总宽度
-            const rightFreezeCount = props.freeze?.right || 0;
-            let freezeRightWidth = 0;
-            for (let i = 0; i < rightFreezeCount && i < thElements.length; i++) {
-              freezeRightWidth += thElements[thElements.length - 1 - i].offsetWidth;
-            }
-            
-            // 实际可视区域（扣除冻结列）
-            const actualViewLeft = viewLeft + freezeLeftWidth;
-            const actualViewRight = viewRight - freezeRightWidth;
-            
-            // 检测左侧是否被遮挡
-            const leftOverlap = actualViewLeft - colLeft; // 左侧遮挡的像素
-            // 检测右侧是否被遮挡
-            const rightOverlap = colRight - actualViewRight; // 右侧遮挡的像素
-            
-            // 优先处理遮挡更严重的一侧，或者只处理被遮挡的一侧
-            if (leftOverlap > 10 && leftOverlap >= rightOverlap) {
-              // 左侧被遮挡更多，向左滚动
-              // 策略：让列紧贴左侧冻结列显示
-              tableContainer.value.scrollLeft = colLeft - freezeLeftWidth;
-              if (tableContainer.value.scrollLeft < 0) {
-                tableContainer.value.scrollLeft = 0;
-              }
-            } else if (rightOverlap > 10 && rightOverlap > leftOverlap) {
-              // 右侧被遮挡更多，向右滚动
-              // 策略：让列紧贴右侧冻结列显示
-              tableContainer.value.scrollLeft = colRight - containerWidth + freezeRightWidth + 20;
-            }
-          }
-        });
-      }
+      nextTick(() => scrollColumnIntoView(colIndex));
     };
 
     // 获取排序指示器（返回对象供模板使用）
