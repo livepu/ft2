@@ -24,6 +24,7 @@ class SectionContext:
         return self.notebook
     
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        self.notebook._flush_chartg()  # 先 flush，此时 section_stack 还有当前 section
         self.notebook._pop_section()
         section = CellBuilder.section(self.title, self.children, self.level, self.collapsed)
         self.notebook._add_cell(section)
@@ -187,7 +188,7 @@ class Notebook:
     def table(self, data, columns=None, title=None, **options):
         """
         添加表格
-        
+
         核心参数:
             data: 表格数据（List[dict] 或 DataFrame）
                 - List[dict]: [{'code': '000001', 'name': '基金A'}, ...]
@@ -196,7 +197,7 @@ class Notebook:
                 - ['code', 'name', 'type']  # 只显示这3列，按此顺序
                 - None 时显示数据中的所有列
             title: 标题
-        
+
         可选参数 (**options):
             freeze: 冻结列配置
                 - dict: {'left': n, 'right': m}
@@ -209,7 +210,7 @@ class Notebook:
                 - 全局: {'start': 2, 'end': 5, 'axis': 'column', 'colors': [...]}
                 - 列级别: 在 columns 数组中每列单独配置
                 - 详细说明见 ft-table.js 注释
-        
+
         Examples:
             nb.table(data)                      # 默认分页，每页 10 条
             nb.table(data, columns=['code', 'name'], title='基金列表')
