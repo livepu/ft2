@@ -420,10 +420,12 @@ const CellRenderer = {
                     data: [...rawData[i]],
                     type: chartType === 'area' ? 'line' : chartType
                 }));
+                // 堆叠柱状图必须从0开始，否则小数值系列会被压缩看不见
+                const isBarChart = chartType === 'bar';
                 yAxisConfig = {
                     type: 'value',
-                    scale: true,
-                    boundaryGap: ['10%', '10%']
+                    scale: !isBarChart,
+                    boundaryGap: isBarChart ? [0, '10%'] : ['10%', '10%']
                 };
             }
 

@@ -233,6 +233,8 @@ const HeatmapChart = {
 };
 
 // ---------- StackedChart ----------
+// 【识别逻辑】父组件 ChartContainer 检测到 series 中有 stack 属性时，使用此组件
+// 【关键问题】堆叠柱状图必须使用 scale: false 强制从0开始，否则小数值系列会被压缩看不见
 const StackedChart = {
     name: 'StackedChart',
     props: { cell: { type: Object, required: true } },
@@ -246,10 +248,14 @@ const StackedChart = {
                 const chartType = extracted.chart_type;
                 const series = extracted.series || [];
                 const { normalize, showRaw, showPercentStack } = { normalize: stackNormalize.value, showRaw: stackShowRaw.value, showPercentStack: stackShowPercent.value };
+                
+                // 【数据处理】提取原始数据并计算每列总和（用于百分比计算）
                 const rawData = series.map(s => [...(s.data || [])]);
                 const dataLength = rawData[0]?.length || 0;
                 const totals = new Array(dataLength).fill(0);
                 rawData.forEach(sData => { sData.forEach((v, i) => { totals[i] = (totals[i] || 0) + (v || 0); }); });
+                
+                // 【标签格式化】支持显示原始值、百分比或两者
                 const buildLabelFormatter = (rawData, totals, showRaw, showPercent) => (seriesIndex) => (params) => {
                     const rawValue = rawData[seriesIndex][params.dataIndex];
                     const total = totals[params.dataIndex];
@@ -259,6 +265,8 @@ const StackedChart = {
                     else if (showPercent) return `${percent}%`;
                     return '';
                 };
+                
+                // 【提示框格式化】显示总计和各系列详情
                 const buildTooltipFormatter = (rawData, totals, showRaw, showPercent) => (params) => {
                     const xValue = params[0].axisValue;
                     const total = totals[params[0].dataIndex];
@@ -275,15 +283,28 @@ const StackedChart = {
                     });
                     return result;
                 };
+                
                 const labelFormatter = buildLabelFormatter(rawData, totals, showRaw, showPercentStack);
                 const tooltipFormatter = buildTooltipFormatter(rawData, totals, showRaw, showPercentStack);
+                
                 let displaySeries, yAxisConfig;
+                
                 if (normalize) {
+                    // 【归一化模式】数据转为百分比，Y轴固定0-100
                     displaySeries = series.map((s, i) => ({ ...s, data: rawData[i].map((v, j) => totals[j] > 0 ? (v / totals[j] * 100) : 0), type: chartType === 'area' ? 'line' : chartType }));
                     yAxisConfig = { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value}%' } };
                 } else {
+                    // 【原始数据模式】关键：柱状图必须从0开始
                     displaySeries = series.map((s, i) => ({ ...s, data: [...rawData[i]], type: chartType === 'area' ? 'line' : chartType }));
-                    yAxisConfig = { type: 'value', scale: true, boundaryGap: ['10%', '10%'] };
+                    
+                    // 【关键修复】堆叠柱状图必须强制从0开始，否则小数值系列（如72 vs 172）会被压缩看不见
+                    // scale: true 会让Y轴自适应最小值，导致小数值几乎不可见
+                    const isBarChart = chartType === 'bar';
+                    yAxisConfig = { 
+                        type: 'value', 
+                        scale: !isBarChart,              // 柱状图禁用自适应，强制从0开始
+                        boundaryGap: isBarChart ? [0, '10%'] : ['10%', '10%']  // 柱状图底部无间隙
+                    };
                 }
                 const isBarChart = chartType === 'bar';
                 const option = { color: colors, xAxis: { type: 'category', boundaryGap: isBarChart, data: extracted.xAxis }, yAxis: yAxisConfig, grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true }, legend: { data: series.map(s => ({ name: s.name, icon: 'rect' })), top: 5 }, tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: tooltipFormatter }, series: displaySeries.map((s, i) => { const baseOption = { name: s.name, type: chartType === 'area' ? 'line' : chartType, data: s.data, stack: s.stack, label: { show: showRaw || showPercentStack, position: 'inside', formatter: labelFormatter(i) } }; if (chartType === 'line' || chartType === 'area') { baseOption.smooth = true; if (chartType === 'area') baseOption.areaStyle = { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: colors[i % colors.length] + '60' }, { offset: 1, color: colors[i % colors.length] + '10' }] } }; } if (isBarChart) baseOption.itemStyle = { color: colors[i % colors.length], borderRadius: [4, 4, 0, 0] }; return baseOption; }) };
