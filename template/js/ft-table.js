@@ -388,7 +388,7 @@ const FtTable = {
         const newScrollLeft = Math.max(0, colLeft - freezeLeftWidth);
         tableContainer.value.scrollLeft = newScrollLeft;
       } else if (rightOverlap > 10 && rightOverlap > leftOverlap) {
-        // 向右滚动，让列紧贴右侧冻结列
+        // 向右滚动，让列紧贴右侧冻结列（预留 20px 显示排序图标）
         tableContainer.value.scrollLeft = colRight - containerWidth + freezeRightWidth + 20;
       }
     };

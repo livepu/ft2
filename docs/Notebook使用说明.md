@@ -41,7 +41,7 @@ nb = Notebook("我的第一个报告")
 nb.title("数据分析结果", level=1)
 
 # 添加文本
-nb.text("这是报告的正文内容，支持普通、强调、警告等多种样式。", style="normal")
+nb.text("这是报告的正文内容，支持普通、强调、警告等多种样式。")
 
 # 添加指标卡片
 nb.metrics([
@@ -78,17 +78,17 @@ print(f"报告已生成: {output}")
 
 | 组件           | 方法           | 用途                                           |
 | ------------ | ------------ | -------------------------------------------- |
-| **标题**       | `title()`    | 章节标题，支持层级                                    |
-| **文本**       | `text()`     | 说明文字，支持样式                                    |
-| **表格**       | `table()`    | 数据表格，支持冻结列                                   |
-| **图表**       | `chart()`    | 单图表（line/bar/area/pie/heatmap/kline/scatter） |
-| **网格图**      | `chartg()`   | 多图表垂直组合                                      |
-| **指标**       | `metrics()`  | 关键指标卡片                                       |
-| **章节**       | `section()`  | 内容分组，支持折叠                                    |
-| **分隔线**      | `divider()`  | 视觉分隔                                         |
-| **Markdown** | `markdown()` | Markdown 格式文本                                |
+| ⭐ **章节**       | `section()`  | 内容分组，支持折叠                                    |
+| ⭐ **标题**       | `title()`    | 章节标题，支持层级                                    |
+| ⭐ **Markdown** | `markdown()` | Markdown 格式文本（推荐）                          |
+| **文本**       | `text()`     | 说明文字，支持颜色设置                                |
 | **代码**       | `code()`     | 代码块                                          |
 | **HTML**     | `html()`     | 原始 HTML                                      |
+| **分隔线**      | `divider()`  | 视觉分隔                                         |
+| ⭐ **指标**       | `metrics()`  | 关键指标卡片                                       |
+| ⭐ **表格**       | `table()`    | 数据表格，支持冻结列                                   |
+| ⭐ **图表**       | `chart()`    | 单图表（line/bar/area/pie/heatmap/kline/scatter） |
+| **网格图**      | `chartg()`   | 多图表垂直组合                                      |
 
 ### 2.3 链式调用
 
@@ -116,29 +116,48 @@ nb.title("收益分析", level=2)
 nb.title("月度详情", level=3)
 ```
 
-### 3.2 文本（Text）
+### 3.2 Markdown 文本（推荐）
 
 ```python
-# 普通文本（默认颜色）
-nb.text("这是普通文本内容")
+# 基础 Markdown
+nb.markdown("""
+**加粗文本** 和 *斜体文本*
 
-# 红色文本
-nb.text("错误信息", color="red")
+- 列表项1
+- 列表项2
+- 列表项3
 
-# 绿色文本
-nb.text("操作成功完成", color="green")
+`行内代码` 和代码块：
+```python
+print("Hello World")
+```
+""")
 
-# 蓝色文本
-nb.text("这是需要强调的内容", color="blue")
+# 带标题的 Markdown
+nb.markdown("""
+### 分析结论
 
-# 橙色/黄色文本
-nb.text("注意：数据存在延迟", color="orange")
+1. **收益表现**：策略年化收益 **15.3%**，跑赢基准
+2. **风险控制**：最大回撤控制在 **-5.2%** 以内
+3. **夏普比率**：达到 **1.85**，风险调整后收益优秀
 
-# 也支持十六进制颜色
-nb.text("自定义颜色", color="#ff6600")
+> 注：以上数据基于2020-2024年回测结果
+""")
 ```
 
-### 3.3 表格（Table）
+### 3.3 普通文本（Text）
+
+```python
+# 简单文本（默认颜色）
+nb.text("这是普通文本内容")
+
+# 带颜色的文本
+nb.text("错误信息", color="red")
+nb.text("操作成功", color="green")
+nb.text("提示信息", color="blue")
+```
+
+### 3.4 表格（Table）
 
 ```python
 import pandas as pd
@@ -167,7 +186,7 @@ columns = [
 nb.table(data, title="自定义列", columns=columns)
 ```
 
-### 3.4 指标卡片（Metrics）
+### 3.5 指标卡片（Metrics）
 
 ```python
 # 基础指标
@@ -191,7 +210,7 @@ nb.metrics([
 ])
 ```
 
-### 3.5 分隔线（Divider）
+### 3.6 分隔线（Divider）
 
 ```python
 nb.text("第一部分内容").divider().text("第二部分内容")
@@ -237,8 +256,8 @@ nb.chart(chart_type, data, title=None, height='400px', **kwargs)
 | --------------- | ---------------------------------------------------------------------- | ------------ | --------------------------------------- |
 | `line/bar/area` | `{'xAxis': [...], 'series': [{'name': '', 'data': []}]}`               | ✅ 支持         | 第1列→xAxis，第2列及以后→series                 |
 | `scatter`       | `{'xAxis': [...], 'series': [{'name': '', 'data': [[x,y], ...]}]}`     | ❌ **不支持**    | -                                       |
-| `kline`         | `{'xAxis': [...], 'series': [{'name': '', 'data': [[开,收,低,高], ...]}]}` | ✅ 支持         | 第1列→xAxis（日期），open/close/low/high列→K线数据 |
-| `pie`           | `[{'name': '', 'value': 0}, ...]`                                      | ❌ 不支持        | -                                       |
+| `kline`         | `{'xAxis': [...], 'series': [{'name': '', 'data': [[开,收,低,高], ...]}]}` | ✅ 支持         | 第1列→xAxis（日期），自动识别 open/close/low/high 字段 → K线数据 |
+| `pie`           | `[{'name': '', 'value': 0}, ...]`                                      | ✅ 支持         | 第1列→name，第2列→value                      |
 | `heatmap`       | 嵌套字典 `{y: {x: value}}`                                                 | ✅ 支持         | 第1列→xAxis，第2列及以后→yAxis维度，值→热力值          |
 
 ### 4.1 折线图（Line）
@@ -547,36 +566,38 @@ with nb.section("核心指标", collapsed=False):
 
 ### 5.3 章节层级
 
+章节层级根据嵌套深度自动计算，无需手动指定：
+
 ```python
-# 一级章节
-with nb.section("第一部分：策略概述", level=1):
+# 一级章节（最外层）
+with nb.section("第一部分：策略概述"):
     nb.text("策略基本信息...")
     
-    # 二级章节
-    with nb.section("1.1 策略逻辑", level=2):
+    # 二级章节（嵌套在一级章节内）
+    with nb.section("1.1 策略逻辑"):
         nb.text("策略的核心逻辑...")
         
-    with nb.section("1.2 参数设置", level=2):
+    with nb.section("1.2 参数设置"):
         nb.text("策略参数说明...")
 
 # 另一个一级章节
-with nb.section("第二部分：回测结果", level=1):
+with nb.section("第二部分：回测结果"):
     nb.chart("line", data, title="净值曲线")
 ```
 
 ### 5.4 章节嵌套
 
 ```python
-with nb.section("策略分析", level=1):
+with nb.section("策略分析"):
     nb.text("整体分析...")
     
-    with nb.section("收益分析", level=2):
+    with nb.section("收益分析"):
         nb.chart("line", nav_data)
         
-        with nb.section("月度收益", level=3):
+        with nb.section("月度收益"):
             nb.chart("bar", monthly_data)
     
-    with nb.section("风险分析", level=2):
+    with nb.section("风险分析"):
         nb.metrics([...])
 ```
 
@@ -648,7 +669,7 @@ nb.text("报告生成时间：2024年6月", color="blue")
 nb.divider()
 
 # ========== 策略概述 ==========
-with nb.section("一、策略概述", level=1):
+with nb.section("一、策略概述"):
     nb.text("""
     本策略采用双均线交叉作为交易信号：
     - 短期均线（5日）上穿长期均线（20日）时买入
@@ -662,7 +683,7 @@ with nb.section("一、策略概述", level=1):
     ], columns=3)
 
 # ========== 收益分析 ==========
-with nb.section("二、收益分析", level=1):
+with nb.section("二、收益分析"):
     
     # 生成模拟数据
     dates = pd.date_range("2020-01-01", "2024-05-31", freq="M").strftime("%Y-%m").tolist()
@@ -689,7 +710,7 @@ with nb.section("二、收益分析", level=1):
     ], title="核心绩效指标", columns=3)
 
 # ========== 月度收益 ==========
-with nb.section("三、月度收益分析", level=1):
+with nb.section("三、月度收益分析"):
     
     months = ["1月", "2月", "3月", "4月", "5月", "6月", 
               "7月", "8月", "9月", "10月", "11月", "12月"]
@@ -704,7 +725,7 @@ with nb.section("三、月度收益分析", level=1):
     nb.chart("bar", bar_data, title="2024年月度收益", height="350px")
 
 # ========== 资产配置 ==========
-with nb.section("四、资产配置", level=1):
+with nb.section("四、资产配置"):
     
     pie_data = [
         {"name": "股票", "value": 60},
@@ -716,7 +737,7 @@ with nb.section("四、资产配置", level=1):
     nb.chart("pie", pie_data, title="当前资产配置", height="400px")
 
 # ========== 详细数据（可折叠） ==========
-with nb.section("五、详细交易记录", level=1, collapsed=True):
+with nb.section("五、详细交易记录", collapsed=True):
     
     trades = pd.DataFrame({
         "日期": ["2024-01-15", "2024-02-20", "2024-03-10", "2024-04-05"],
