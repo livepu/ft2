@@ -1,9 +1,48 @@
 #这个类是带东八时区的，逐一其他数据要时区一致
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 import pandas as pd
 from .storage import context
+
+
+# ============================================================================
+# 枚举常量 - 参考掘金SDK规范
+# ============================================================================
+
+class OrderSide:
+    """买卖方向"""
+    Unknown = 0
+    Buy = 1      # 买入
+    Sell = 2     # 卖出
+
+    @staticmethod
+    def to_str(side: int) -> str:
+        """转换为字符串"""
+        return 'buy' if side == OrderSide.Buy else 'sell'
+
+
+class PositionEffect:
+    """开平标志"""
+    Unknown = 0
+    Open = 1           # 开仓
+    Close = 2          # 平仓
+    CloseToday = 3      # 平今仓
+    CloseYesterday = 4  # 平昨仓
+
+
+class PositionSide:
+    """持仓方向"""
+    Unknown = 0
+    Long = 1     # 多方向
+    Short = 2    # 空方向
+
+
+class OrderType:
+    """委托类型"""
+    Unknown = 0
+    Limit = 1          # 限价委托
+    Market = 2         # 市价委托
 
 
 # ============================================================================
@@ -31,14 +70,19 @@ class AccountSnapshot:
 
 @dataclass
 class TradeRecord:
-    """成交记录数据类"""
+    """成交记录数据类 - 兼容掘金规范"""
     created_at: datetime
     symbol: str
     price: float
     volume: float
-    side: str
-    fee: float
-    order_id: str
+    side: int                        # 买卖方向: 1=买入, 2=卖出
+    position_effect: int             # 开平标志: 1=开仓, 2=平仓
+    position_side: int = PositionSide.Long  # 持仓方向: 1=多, 2=空
+    order_type: int = OrderType.Limit  # 委托类型: 1=限价, 2=市价
+    fee: float = 0.0
+    order_id: str = ''
+    filled_volume: float = 0.0        # 已成交数量
+    amount: float = 0.0              # 成交金额
 
 
 # ============================================================================
@@ -137,34 +181,37 @@ class AccountManager:
         self,
         symbol: str,
         percent: float,
+        side: int,
+        position_effect: int = PositionEffect.Open,
+        order_type: int = OrderType.Limit,
         price: float = None,
     ) -> str:
         """
-        按账户净值比例下单
-        
+        按账户净值比例委托
+
         Args:
             symbol: 交易品种代码
-            percent: 下单比例，正数为买入，负数为卖出，范围[-1, 1]
-            price: 下单价格，默认为当前价格
-            
+            percent: 委托比例，0-1之间（正数）
+            side: 买卖方向，OrderSide.Buy=1买入, OrderSide.Sell=2卖出
+            position_effect: 开平标志，PositionEffect.Open=开仓, PositionEffect.Close=平仓
+            order_type: 委托类型，OrderType.Limit=限价, OrderType.Market=市价
+            price: 委托价格，默认为当前价格
+
         Returns:
             str: 订单ID
-            
-        Raises:
-            ValueError: 比例不在[-1, 1]范围内，或计算出的数量为0
-        """
-        if not -1 <= percent <= 1:
-            raise ValueError("Percent must be between -1 and 1")
 
-        if percent == 0:
-            raise ValueError("Order percent cannot be zero")
+        Raises:
+            ValueError: 比例超出范围，或计算出的数量为0
+        """
+        if not 0 < abs(percent) <= 1:
+            raise ValueError("Percent must be between -1 and 1 (non-zero)")
 
         account_info = self.get_account()
         nav = account_info['nav']
 
         order_amount = nav * abs(percent)
 
-        if percent > 0:
+        if side == OrderSide.Buy:
             available_amount = self.cash
             if order_amount > available_amount:
                 order_amount = available_amount
@@ -173,7 +220,7 @@ class AccountManager:
         if price <= 0:
             raise ValueError(f"Invalid price {price} for {symbol}")
 
-        if percent > 0:
+        if side == OrderSide.Buy:
             commission = max(
                 round(order_amount * self.fee_config['commission_rate'], 2),
                 self.fee_config['min_commission']
@@ -182,35 +229,44 @@ class AccountManager:
             volume = int(available_amount / price)
         else:
             current_pos = self.positions.get(symbol, {'volume': 0})
-            volume = -int(current_pos['volume'] * abs(percent))
+            volume = int(current_pos['volume'] * abs(percent))
 
         if volume == 0:
             raise ValueError("Calculated order volume is zero")
 
-        return self.order_volume(symbol, volume, price)
+        return self.order_volume(symbol, volume, side, position_effect, order_type, price)
 
     def order_volume(
         self,
         symbol: str,
         volume: int,
+        side: int,
+        position_effect: int = PositionEffect.Open,
+        order_type: int = OrderType.Limit,
         price: float = None,
     ) -> str:
         """
-        按指定数量下单
-        
+        按指定数量委托
+
         Args:
             symbol: 交易品种代码
-            volume: 下单数量，正数为买入，负数为卖出
-            price: 下单价格，默认为当前价格
-            
+            volume: 委托数量（正数）
+            side: 买卖方向，OrderSide.Buy=1买入, OrderSide.Sell=2卖出
+            position_effect: 开平标志，PositionEffect.Open=开仓, PositionEffect.Close=平仓
+            order_type: 委托类型，OrderType.Limit=限价, OrderType.Market=市价（回测中实际无区别）
+            price: 委托价格，默认为当前价格
+
         Returns:
             str: 订单ID
-            
+
         Raises:
             ValueError: 数量为0或价格无效
         """
         if volume == 0:
             raise ValueError("Order volume cannot be zero")
+
+        if side not in (OrderSide.Buy, OrderSide.Sell):
+            raise ValueError(f"Invalid side value: {side}, must be OrderSide.Buy or OrderSide.Sell")
 
         price = price or self._get_price(symbol)
         if price <= 0:
@@ -218,7 +274,9 @@ class AccountManager:
 
         order_id = f"order_{len(self._trade_records)+1}"
 
-        executed_volume = self._process_order(symbol, volume, price, order_id)
+        executed_volume = self._process_order(
+            symbol, volume, side, position_effect, order_type, price, order_id
+        )
 
         if executed_volume != 0:
             self.take_snapshot()
@@ -228,72 +286,84 @@ class AccountManager:
         self,
         symbol: str,
         volume: int,
+        side: int,
+        position_effect: int,
+        order_type: int,
         price: float,
         order_id: str,
     ) -> int:
         """
         处理订单执行
-        
+
         Args:
             symbol: 交易品种代码
-            volume: 下单数量
-            price: 下单价格
+            volume: 委托数量（正数）
+            side: 买卖方向，OrderSide.Buy=1, OrderSide.Sell=2
+            position_effect: 开平标志
+            order_type: 委托类型
+            price: 委托价格
             order_id: 订单ID
-            
+
         Returns:
             int: 实际成交数量，0表示未成交
         """
         commission = max(
-            round(price * abs(volume) * self.fee_config['commission_rate'], 2),
+            round(price * volume * self.fee_config['commission_rate'], 2),
             self.fee_config['min_commission']
         )
-        stamp_tax = round(price * abs(volume) * self.fee_config['stamp_tax_rate'], 2) if volume < 0 else 0
+        stamp_tax = round(price * volume * self.fee_config['stamp_tax_rate'], 2) if side == OrderSide.Sell else 0
         total_fee = round(commission + stamp_tax, 2)
 
-        if volume > 0:
+        if side == OrderSide.Buy:
             total_cost = round(volume * price + total_fee, 2)
             if self.cash < total_cost:
                 print(f"订单 {order_id} 买入 {symbol} 失败，资金不足。需要 {total_cost}，可用资金 {self.cash}")
                 return 0
             self.cash = round(self.cash - total_cost, 2)
+            self._update_position(symbol, volume, price, total_fee, OrderSide.Buy)
         else:
             current_pos = self.positions.get(symbol, {'volume': 0})
-            if current_pos['volume'] < abs(volume):
-                print(f"订单 {order_id} 卖出 {symbol} 失败，持仓不足。需要 {abs(volume)}，当前持仓 {current_pos['volume']}")
+            if current_pos['volume'] < volume:
+                print(f"订单 {order_id} 卖出 {symbol} 失败，持仓不足。需要 {volume}，当前持仓 {current_pos['volume']}")
                 return 0
-            self.cash = round(self.cash + abs(volume) * price - total_fee, 2)
-
-        self._update_position(symbol, volume, price, total_fee)
+            self.cash = round(self.cash + volume * price - total_fee, 2)
+            self._update_position(symbol, volume, price, total_fee, OrderSide.Sell)
 
         self._trade_records.append(TradeRecord(
-            symbol=symbol,
-            volume=volume,
-            price=price,
-            side='buy' if volume > 0 else 'sell',
             created_at=context.now,
+            symbol=symbol,
+            price=price,
+            volume=volume,
+            side=side,
+            position_effect=position_effect,
+            position_side=PositionSide.Long,
+            order_type=order_type,
+            fee=total_fee,
             order_id=order_id,
-            fee=total_fee
+            filled_volume=volume,
+            amount=price * volume,
         ))
         return volume
 
-    def _update_position(self, symbol: str, volume: int, price: float, total_fee: float):
+    def _update_position(self, symbol: str, volume: int, price: float, total_fee: float, side: int):
         """
         更新持仓信息
-        
+
         Args:
             symbol: 交易品种代码
-            volume: 成交数量
+            volume: 成交数量（正数）
             price: 成交价格
             total_fee: 总费用
+            side: 买卖方向，OrderSide.Buy=1, OrderSide.Sell=2
         """
         pos = self.positions.get(symbol, {'volume': 0, 'cost_price': 0})
-        if volume > 0:
+        if side == OrderSide.Buy:
             new_volume = pos['volume'] + volume
             total_purchase_cost = pos['volume'] * pos['cost_price'] + volume * price + total_fee
             new_cost = total_purchase_cost / new_volume
             pos.update(volume=new_volume, cost_price=round(new_cost, 3))
         else:
-            pos['volume'] += volume
+            pos['volume'] -= volume
             if pos['volume'] == 0:
                 del self.positions[symbol]
                 return
