@@ -361,7 +361,8 @@ class AccountManager:
             new_volume = pos['volume'] + volume
             total_purchase_cost = pos['volume'] * pos['cost_price'] + volume * price + total_fee
             new_cost = total_purchase_cost / new_volume
-            pos.update(volume=new_volume, cost_price=round(new_cost, 3))
+            pos['volume'] = new_volume
+            pos['cost_price'] = round(new_cost, 3)
         else:
             pos['volume'] -= volume
             if pos['volume'] == 0:

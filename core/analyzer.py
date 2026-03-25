@@ -163,7 +163,7 @@ class AccountAnalyzer:
             self._trade_profits = []
         elif account:
             self._daily_assets = self._aggregate_daily_assets(account.snapshots)
-            self._trade_profits = self._calculate_profit(account._trade_records)
+            self._trade_profits = self._calculate_profit(account.trade_records)
         else:
             self._daily_assets = {}
             self._trade_profits = []
