@@ -108,7 +108,7 @@ class AccountManager:
         """
         self.cash = round(init_cash, 2)
         self.positions: Dict[str, Dict] = {}
-        self._trade_records: List[TradeRecord] = []
+        self.trade_records: List[TradeRecord] = []
         self.snapshots: List[AccountSnapshot] = []
         self.fee_config = fee_config or {
             'commission_rate': 0.0003,
@@ -452,7 +452,7 @@ class AccountManager:
         Returns:
             List[TradeRecord]: 成交记录列表
         """
-        trades = self._trade_records
+        trades = self.trade_records
 
         if start_query_time:
             trades = [t for t in trades if t.created_at >= start_query_time]

@@ -1,4 +1,35 @@
 #通过 account 的快照，分析结果
+"""
+账户分析器模块
+
+设计思路:
+---------
+1. 数据初始化
+   - 传入 AccountManager 实例，自动聚合快照为日数据(_daily_assets)
+   - 计算交易盈亏记录(_trade_profits)
+   - 数据在初始化时固化，后续计算基于此数据
+
+2. 时间区间切片
+   - sliced_data: 缓存当前区间的切片数据
+   - getTimeRange(period): 设置时间区间，更新缓存
+   - _ensure_sliced_data(): 确保切片数据已初始化
+
+3. 使用方式
+   - 默认使用全数据: 直接调用指标方法，自动初始化
+   - 指定区间: 先调用 getTimeRange('3m')，再调用指标方法
+   - 切换区间: 再次调用 getTimeRange() 即可
+
+   示例:
+   >>> analyzer = AccountAnalyzer(account=my_account)
+   >>> analyzer.volatility()           # 使用全数据
+   >>> analyzer.getTimeRange('3m')     # 设置近3月区间
+   >>> analyzer.volatility()           # 使用近3月数据
+   >>> analyzer.sharpe_ratio()         # 复用缓存的近3月数据
+
+4. 指标分类
+   - 资产类指标: 支持区间切片（收益率、波动率、夏普比率等）
+   - 交易类指标: 暂不支持区间切片（胜率、盈亏比等）
+"""
 from collections import defaultdict
 from dateutil.relativedelta import relativedelta
 import math
@@ -44,25 +75,6 @@ def metric(name: str = None, desc: str = '', type: str = 'float', order: int = 9
         wrapper._metric_order = order
         return wrapper
     return decorator
-
-
-# ============================================================================
-# 时间区间配置
-# ============================================================================
-
-@dataclass
-class TimeRange:
-    """时间区间配置
-    
-    Attributes:
-        start: 开始日期，None 表示使用数据起始日
-        end: 结束日期，None 表示使用数据结束日
-        period: 时间周期标识，可选值：'1m', '3m', '6m', '1y', '2y', '3y', '5y', 'all'
-               如果设置了 period，则 start 和 end 会被自动计算
-    """
-    start: Optional[date] = None
-    end: Optional[date] = None
-    period: Optional[str] = None
 
 
 # ============================================================================
@@ -140,7 +152,7 @@ class AccountAnalyzer:
         self.account = account
         self._metrics = {}
         self.risk_free_rate = 0.02
-        self._current_range = None
+        self.sliced_data = None
         
         if daily_assets is not None:
             if isinstance(daily_assets, dict):
@@ -236,70 +248,121 @@ class AccountAnalyzer:
         'all': None
     }
 
-    def range(self, period_or_start, end=None):
+    def _ensure_sliced_data(self) -> Optional[Dict]:
         """
-        设置分析区间（支持链式调用）
+        确保切片数据已初始化
+        
+        如果 sliced_data 为 None，自动调用 getTimeRange() 初始化全数据
+        
+        Returns:
+            Dict: 切片数据，格式为：
+                {
+                    'startDate': date,
+                    'endDate': date,
+                    'baseDate': date,
+                    'daily_assets': Dict
+                }
+                数据不足时返回 None
+        """
+        if self.sliced_data is None:
+            self.getTimeRange()
+        return self.sliced_data
+
+    def getTimeRange(self, period_or_start=None, end=None) -> Optional[Dict]:
+        """
+        获取时间区间信息并缓存切片数据
         
         Args:
             period_or_start: 
+                - None: 使用全部数据
                 - str: 周期字符串，如 '1m', '3m', '6m', '1y', 'all'
                 - date: 自定义开始日期
             end: 结束日期（当 period_or_start 为 date 时使用）
         
         Returns:
-            self: 返回自身以支持链式调用
-        
+            Dict: 时间区间信息，格式为：
+                {
+                    'startDate': date,      # 区间起始日期
+                    'endDate': date,        # 区间结束日期
+                    'baseDate': date,       # 基准日日期
+                    'daily_assets': Dict    # 切片后的日资产数据
+                }
+                数据不足时返回 None
+            
         Example:
-            >>> analyzer.range('3m').return_rate()
-            >>> analyzer.range(date(2024,1,1), date(2024,6,30)).return_rate()
+            >>> timeRange = analyzer.getTimeRange('3m')
+            >>> print(timeRange['startDate'], timeRange['endDate'])
+            >>> timeRange = analyzer.getTimeRange(date(2024,1,1), date(2024,6,30))
         """
-        if isinstance(period_or_start, str):
-            self._current_range = TimeRange(period=period_or_start)
-        else:
-            self._current_range = TimeRange(start=period_or_start, end=end)
-        return self
-
-    def _get_benchmark_and_range(self, time_range: TimeRange = None):
-        """根据区间获取基准日和计算区间"""
+        if not self._daily_assets:
+            return None
+        
         dates = sorted(self._daily_assets.keys())
         if len(dates) < 2:
-            return dates[0], dates[0], dates[-1] if dates else (None, None, None)
+            return None
         
         all_benchmark = dates[0]
         all_start = dates[1]
+        all_end = dates[-1]
         
-        if time_range is None:
-            return all_benchmark, all_start, dates[-1]
-        
-        if time_range.period:
-            if time_range.period == 'all':
-                return all_benchmark, all_start, dates[-1]
-            
-            delta = self._periods_map.get(time_range.period)
-            if delta is None:
-                return all_benchmark, all_start, dates[-1]
-            
-            calculated_start = dates[-1] - delta
-            valid_dates = [d for d in dates if d <= calculated_start]
-            raw_start = max(valid_dates) if valid_dates else all_start
-            
-            if raw_start == all_start:
-                return all_benchmark, all_start, dates[-1]
-            
-            prev_dates = [d for d in dates if d < raw_start]
-            benchmark = max(prev_dates) if prev_dates else all_benchmark
-            return benchmark, raw_start, dates[-1]
+        if period_or_start is None:
+            start_date = all_start
+            end_date = all_end
+            benchmark_date = all_benchmark
+        elif isinstance(period_or_start, str):
+            if period_or_start == 'all':
+                start_date = all_start
+                end_date = all_end
+                benchmark_date = all_benchmark
+            else:
+                delta = self._periods_map.get(period_or_start)
+                if delta is None:
+                    start_date = all_start
+                    end_date = all_end
+                    benchmark_date = all_benchmark
+                else:
+                    calculated_start = dates[-1] - delta
+                    valid_dates = [d for d in dates if d <= calculated_start]
+                    raw_start = max(valid_dates) if valid_dates else all_start
+                    
+                    if raw_start == all_start:
+                        start_date = all_start
+                        end_date = all_end
+                        benchmark_date = all_benchmark
+                    else:
+                        prev_dates = [d for d in dates if d < raw_start]
+                        benchmark_date = max(prev_dates) if prev_dates else all_benchmark
+                        start_date = raw_start
+                        end_date = all_end
         else:
-            raw_start = time_range.start or all_start
+            raw_start = period_or_start or all_start
+            raw_end = end or all_end
+            
             if raw_start < all_start:
                 raw_start = all_start
             
             prev_dates = [d for d in dates if d < raw_start]
             if prev_dates:
-                benchmark = max(prev_dates)
-                return benchmark, raw_start, time_range.end or dates[-1]
+                benchmark_date = max(prev_dates)
             else:
-                return all_benchmark, all_start, time_range.end or dates[-1]
+                benchmark_date = all_benchmark
+            
+            start_date = raw_start
+            end_date = raw_end
+        
+        sliced_assets = {
+            d: v for d, v in self._daily_assets.items()
+            if benchmark_date <= d <= end_date
+        }
+        
+        self.sliced_data = {
+            'startDate': start_date,
+            'endDate': end_date,
+            'baseDate': benchmark_date,
+            'daily_assets': sliced_assets
+        }
+        
+        return self.sliced_data
 
     @metric(name='累计收益率', desc='统计期间内的总收益率', type='float', order=10)
     def return_rate(self) -> Optional[float]:
@@ -307,12 +370,11 @@ class AccountAnalyzer:
         if not self._daily_assets:
             return None
         
-        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        sliced_data_info = self._ensure_sliced_data()
+        if sliced_data_info is None:
+            return None
         
-        sliced_data = {
-            d: v for d, v in self._daily_assets.items()
-            if benchmark_date <= d <= end_date
-        }
+        sliced_data = sliced_data_info['daily_assets']
         
         if len(sliced_data) < 2:
             return None
@@ -333,12 +395,11 @@ class AccountAnalyzer:
         if interval_return is None:
             return None
         
-        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        sliced_data_info = self._ensure_sliced_data()
+        if sliced_data_info is None:
+            return None
         
-        sliced_data = {
-            d: v for d, v in self._daily_assets.items()
-            if benchmark_date <= d <= end_date
-        }
+        sliced_data = sliced_data_info['daily_assets']
         
         dates = sorted(sliced_data.keys())
         days = (dates[-1] - dates[0]).days
@@ -356,12 +417,11 @@ class AccountAnalyzer:
         if not self._daily_assets:
             return None
         
-        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        sliced_data_info = self._ensure_sliced_data()
+        if sliced_data_info is None:
+            return None
         
-        sliced_data = {
-            d: v for d, v in self._daily_assets.items()
-            if benchmark_date <= d <= end_date
-        }
+        sliced_data = sliced_data_info['daily_assets']
         
         if len(sliced_data) < 2:
             return None
@@ -400,12 +460,11 @@ class AccountAnalyzer:
         if not self._daily_assets:
             return None
         
-        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        sliced_data_info = self._ensure_sliced_data()
+        if sliced_data_info is None:
+            return None
         
-        sliced_data = {
-            d: v for d, v in self._daily_assets.items()
-            if benchmark_date <= d <= end_date
-        }
+        sliced_data = sliced_data_info['daily_assets']
         
         if not sliced_data:
             return None
@@ -436,12 +495,11 @@ class AccountAnalyzer:
         if not self._daily_assets:
             return None
         
-        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        sliced_data_info = self._ensure_sliced_data()
+        if sliced_data_info is None:
+            return None
         
-        sliced_data = {
-            d: v for d, v in self._daily_assets.items()
-            if benchmark_date <= d <= end_date
-        }
+        sliced_data = sliced_data_info['daily_assets']
         
         daily_returns = []
         dates = sorted(sliced_data.keys())
@@ -467,12 +525,11 @@ class AccountAnalyzer:
         if not self._daily_assets:
             return None
         
-        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        sliced_data_info = self._ensure_sliced_data()
+        if sliced_data_info is None:
+            return None
         
-        sliced_data = {
-            d: v for d, v in self._daily_assets.items()
-            if benchmark_date <= d <= end_date
-        }
+        sliced_data = sliced_data_info['daily_assets']
         
         daily_returns = []
         dates = sorted(sliced_data.keys())
@@ -499,12 +556,11 @@ class AccountAnalyzer:
         if not self._daily_assets:
             return None
         
-        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        sliced_data_info = self._ensure_sliced_data()
+        if sliced_data_info is None:
+            return None
         
-        sliced_data = {
-            d: v for d, v in self._daily_assets.items()
-            if benchmark_date <= d <= end_date
-        }
+        sliced_data = sliced_data_info['daily_assets']
         
         dates = sorted(sliced_data.keys())
         if len(dates) < 2:
@@ -517,7 +573,7 @@ class AccountAnalyzer:
             value = sliced_data[current_date]
             if value > peak:
                 peak = value
-            drawdown_pct = (peak - value) / peak * 100
+            drawdown_pct = (peak - value) / peak
             squared_drawdowns.append(drawdown_pct ** 2)
         
         return math.sqrt(sum(squared_drawdowns) / len(squared_drawdowns))
@@ -532,12 +588,11 @@ class AccountAnalyzer:
         if not self._daily_assets:
             return None
         
-        benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
+        sliced_data_info = self._ensure_sliced_data()
+        if sliced_data_info is None:
+            return None
         
-        sliced_data = {
-            d: v for d, v in self._daily_assets.items()
-            if benchmark_date <= d <= end_date
-        }
+        sliced_data = sliced_data_info['daily_assets']
         
         daily_returns = []
         dates = sorted(sliced_data.keys())
@@ -580,34 +635,8 @@ class AccountAnalyzer:
         if not self._trade_profits:
             return None
         
-        if self._current_range is not None:
-            benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
-            
-            sliced_data = {
-                d: v for d, v in self._daily_assets.items()
-                if start_date <= d <= end_date
-            }
-            
-            if not sliced_data:
-                return None
-            
-            actual_start = min(sliced_data.keys())
-            actual_end = max(sliced_data.keys())
-            
-            filtered_trades = [
-                t for t in self._trade_profits
-                if actual_start <= t['close_time'].date() <= actual_end
-            ]
-            
-            if not filtered_trades:
-                return None
-            
-            trades_to_calc = filtered_trades
-        else:
-            trades_to_calc = self._trade_profits
-        
-        wins = sum(1 for t in trades_to_calc if t['profit'] > 0)
-        return wins / len(trades_to_calc)
+        wins = sum(1 for t in self._trade_profits if t['profit'] > 0)
+        return wins / len(self._trade_profits)
 
     def avg_profit(self, mode: str = 'amount') -> Optional[float]:
         """
@@ -625,28 +654,6 @@ class AccountAnalyzer:
         profitable_trades = [t for t in self._trade_profits if t['profit'] > 0]
         if not profitable_trades:
             return None
-        
-        if self._current_range is not None:
-            benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
-            
-            sliced_data = {
-                d: v for d, v in self._daily_assets.items()
-                if start_date <= d <= end_date
-            }
-            
-            if not sliced_data:
-                return None
-            
-            actual_start = min(sliced_data.keys())
-            actual_end = max(sliced_data.keys())
-            
-            profitable_trades = [
-                t for t in profitable_trades
-                if actual_start <= t['close_time'].date() <= actual_end
-            ]
-            
-            if not profitable_trades:
-                return None
         
         if mode == 'amount':
             profits = [t['profit'] for t in profitable_trades]
@@ -677,28 +684,6 @@ class AccountAnalyzer:
         if not loss_trades:
             return None
         
-        if self._current_range is not None:
-            benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
-            
-            sliced_data = {
-                d: v for d, v in self._daily_assets.items()
-                if start_date <= d <= end_date
-            }
-            
-            if not sliced_data:
-                return None
-            
-            actual_start = min(sliced_data.keys())
-            actual_end = max(sliced_data.keys())
-            
-            loss_trades = [
-                t for t in loss_trades
-                if actual_start <= t['close_time'].date() <= actual_end
-            ]
-            
-            if not loss_trades:
-                return None
-        
         if mode == 'amount':
             losses = [t['profit'] for t in loss_trades]
         elif mode == 'percentage':
@@ -728,34 +713,8 @@ class AccountAnalyzer:
         if not self._trade_profits:
             return None
         
-        if self._current_range is not None:
-            benchmark_date, start_date, end_date = self._get_benchmark_and_range(self._current_range)
-            
-            sliced_data = {
-                d: v for d, v in self._daily_assets.items()
-                if start_date <= d <= end_date
-            }
-            
-            if not sliced_data:
-                return None
-            
-            actual_start = min(sliced_data.keys())
-            actual_end = max(sliced_data.keys())
-            
-            filtered_trades = [
-                t for t in self._trade_profits
-                if actual_start <= t['close_time'].date() <= actual_end
-            ]
-            
-            if not filtered_trades:
-                return None
-            
-            trades_to_calc = filtered_trades
-        else:
-            trades_to_calc = self._trade_profits
-        
-        total_days = sum((t['close_time'] - t['open_time']).days for t in trades_to_calc)
-        return total_days / len(trades_to_calc)
+        total_days = sum((t['close_time'] - t['open_time']).days for t in self._trade_profits)
+        return total_days / len(self._trade_profits)
 
     @metric(name='凯利公式最优仓位', desc='根据胜率和盈亏比计算的最优仓位比例', type='float', order=50)
     def kelly_criterion(self) -> Optional[float]:
@@ -819,10 +778,21 @@ class AccountAnalyzer:
         result = {}
         
         for p in period_list:
-            original_range = self._current_range
-            self._current_range = TimeRange(period=p)
-            result[p] = self.return_rate()
-            self._current_range = original_range
+            timeRange = self.getTimeRange(p)
+            if timeRange:
+                sliced_data = timeRange['daily_assets']
+                if len(sliced_data) >= 2:
+                    dates = sorted(sliced_data.keys())
+                    benchmark_value = sliced_data[dates[0]]
+                    end_value = sliced_data[dates[-1]]
+                    if benchmark_value != 0:
+                        result[p] = (end_value - benchmark_value) / benchmark_value
+                    else:
+                        result[p] = None
+                else:
+                    result[p] = None
+            else:
+                result[p] = None
         
         return result
 
@@ -901,7 +871,7 @@ class AccountAnalyzer:
     # 导出方法
     # ------------------------------------------------------------------------
 
-    def export_html(self, report_name: str = "回测报告", output_dir: str = ".", time_range: TimeRange = None):
+    def export_html(self, report_name: str = "回测报告", output_dir: str = "."):
         """
         导出 HTML 回测报告
         
@@ -913,8 +883,6 @@ class AccountAnalyzer:
                         格式：{report_name}_{YYYYMMDD_HHMM}.html
             output_dir: 输出目录（相对路径，基于调用者所在目录）
                        默认为 "." 表示调用者当前目录
-            time_range: TimeRange 对象，指定统计区间
-                       None 表示使用全部数据
             
         Output:
             生成 HTML 文件，包含：
@@ -928,23 +896,9 @@ class AccountAnalyzer:
             - 盈利最大和亏损最大的前 20 笔交易
             
         Example:
-            >>> # 导出全部区间的报告
             >>> analyzer.export_html("策略回测")
-            >>> 
-            >>> # 导出最近 6 个月的报告
-            >>> analyzer.export_html("近 6 月表现", time_range=TimeRange(period='6m'))
-            >>> 
-            >>> # 导出到指定目录
             >>> analyzer.export_html("年度报告", output_dir="reports/2024")
         """
-        if time_range is not None:
-            if time_range.period:
-                self.range(time_range.period)
-            else:
-                self.range(time_range.start, time_range.end)
-        else:
-            self._current_range = None
-        
         collected_metrics = self.metrics()
         
         initial_cash = self.account.snapshots[0].cash if self.account and self.account.snapshots else 0
@@ -983,7 +937,7 @@ class AccountAnalyzer:
                 {'date': d.strftime('%Y-%m-%d'), 'assets': v} 
                 for d, v in self._daily_assets.items()
             ],
-            'trades': [self._to_dict(t) for t in self.account._trade_records],
+            'trades': [self._to_dict(t) for t in self.account.trade_records],
             'topProfits': [self._to_dict(t, exclude='original_trade') for t in self.get_largest_profit_trades(20)],
             'topLosses': [self._to_dict(t, exclude='original_trade') for t in self.get_largest_loss_trades(20)],
         }

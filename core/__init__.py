@@ -9,13 +9,20 @@ ft2.core - 核心回测模块
 """
 
 from .engine import engine, Engine
-from .storage import context, Context, _Cache
-from .account import account, AccountManager, PositionSnapshot, AccountSnapshot, TradeRecord
-from .analyzer import AccountAnalyzer, TimeRange, metric
+from .storage import context
+from .account import (
+    account, AccountManager,
+    OrderSide, PositionEffect, PositionSide, OrderType
+)
+from .analyzer import AccountAnalyzer
 
 __all__ = [
     'engine', 'Engine',
-    'context', 'Context', '_Cache',
-    'account', 'AccountManager', 'PositionSnapshot', 'AccountSnapshot', 'TradeRecord',
-    'AccountAnalyzer', 'Analyzer', 'TimeRange', 'metric',
+    'context',
+    'account', 'AccountManager',
+    'OrderSide',       # 买卖方向: OrderSide.Buy, OrderSide.Sell
+    'PositionEffect',  # 开平标志: PositionEffect.Open, PositionEffect.Close
+    'PositionSide',    # 持仓方向: PositionSide.Long, PositionSide.Short
+    'OrderType',       # 委托类型: OrderType.Limit, OrderType.Market
+    'AccountAnalyzer',
 ]

@@ -487,7 +487,7 @@ class AccountAnalyzer {
     /**
      * 计算 Ulcer Index
      * @param {Object} timeRange - 时间区间对象
-     * @returns {number}
+     * @returns {number} 小数形式，如 0.0567 表示 5.67%
      */
     calcUlcerIndex(timeRange) {
         if (!timeRange) timeRange = this.getTimeRange('all');
@@ -499,7 +499,7 @@ class AccountAnalyzer {
 
         for (let i = startIndex; i <= endIndex; i++) {
             if (assets[i] > peak) peak = assets[i];
-            const drawdownPct = ((peak - assets[i]) / peak) * 100;
+            const drawdownPct = (peak - assets[i]) / peak;
             squaredDrawdowns.push(Math.pow(drawdownPct, 2));
         }
 
@@ -515,7 +515,7 @@ class AccountAnalyzer {
     calcUpi(timeRange, riskFreeRate = 0.02) {
         const annualizedReturn = this.calcAnnualizedReturn(timeRange);
         const ulcerIndex = this.calcUlcerIndex(timeRange);
-        return ulcerIndex !== 0 ? (annualizedReturn - riskFreeRate) / (ulcerIndex / 100) : 0;
+        return ulcerIndex !== 0 ? (annualizedReturn - riskFreeRate) / ulcerIndex : 0;
     }
 
     // ==================== 基准相关计算 ====================
