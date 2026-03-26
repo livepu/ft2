@@ -1,31 +1,16 @@
 """
-ft2 - 量化回测框架
+ft2 - 量化框架
 
-模块结构：
-- core: 核心回测模块（引擎、存储、账户、分析）
-- notebook: Notebook风格输出模块
+推荐导入方式：
+    from ft2.notebook import Notebook
+    from ft2.core import Engine, AccountManager
+    from ft2.core.account import AccountManager
 """
 
-# 核心模块
-from .core import (
-    engine, Engine,
-    context,
-    account, AccountManager,
-    AccountAnalyzer,
-    OrderSide, PositionEffect, PositionSide, OrderType,
-)
+# 不再主动导出模块，避免导入时触发所有模块加载
+# 直接使用时按需导入：
+#     from ft2.notebook import Notebook
+#     from ft2.core import Engine
+#     from ft2.core.analyzer import AccountAnalyzer
 
-# Notebook模块
-from .notebook import Notebook
-
-__all__ = [
-    'engine', 'Engine',
-    'context',
-    'account', 'AccountManager',
-    'OrderSide',       # 买卖方向: OrderSide.Buy, OrderSide.Sell
-    'PositionEffect',  # 开平标志: PositionEffect.Open, PositionEffect.Close
-    'PositionSide',    # 持仓方向: PositionSide.Long, PositionSide.Short
-    'OrderType',       # 委托类型: OrderType.Limit, OrderType.Market
-    'AccountAnalyzer',
-    'Notebook',
-]
+__all__ = []

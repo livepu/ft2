@@ -972,7 +972,7 @@ class AccountAnalyzer:
             for snapshot_date, snaps in daily_snapshots.items()
         }
 
-    def _slice_data_by_range(self, time_range: TimeRange = None, include_benchmark: bool = False) -> Dict[date, float]:
+    def _slice_data_by_range(self, time_range: Optional[Dict] = None, include_benchmark: bool = False) -> Dict[date, float]:
         """
         根据时间区间截取数据
         
@@ -984,11 +984,10 @@ class AccountAnalyzer:
         3. 可选择是否包含基准日数据（用于计算收益率）
         
         Args:
-            time_range: TimeRange 对象，包含以下配置：
-                       - start: 开始日期，None 表示使用数据起始日
-                       - end: 结束日期，None 表示使用数据结束日
-                       - period: 时间周期标识，可选值：
-                                '1m', '3m', '6m', '1y', '2y', '3y', '5y', 'all'
+            time_range: 时间区间配置（Dict），可选：
+                       - None: 使用全部数据
+                       - {'period': '3m'}: 使用预设周期
+                       - {'start': date, 'end': date}: 指定日期区间
             include_benchmark: 是否包含基准日数据
                               - True: 返回包含基准日的完整数据（用于计算）
                               - False: 只返回计算区间的数据（用于展示）
@@ -1017,10 +1016,10 @@ class AccountAnalyzer:
             
         Example:
             >>> # 只返回计算区间（用于展示）
-            >>> data = analyzer._slice_data_by_range(TimeRange(period='3m'), include_benchmark=False)
-            >>> 
+            >>> data = analyzer._slice_data_by_range({'period': '3m'}, include_benchmark=False)
+            >>>
             >>> # 返回包含基准日的数据（用于计算收益率）
-            >>> data_with_base = analyzer._slice_data_by_range(TimeRange(period='3m'), include_benchmark=True)
+            >>> data_with_base = analyzer._slice_data_by_range({'period': '3m'}, include_benchmark=True)
             >>> start_value = data_with_base[benchmark_date]  # 基准日的值
         """
         if not self._daily_assets:

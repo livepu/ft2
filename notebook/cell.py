@@ -436,35 +436,59 @@ def _build_heatmap(data, series_opts):
     from pyecharts.charts import HeatMap
     chart = HeatMap()
     
-    # 统一转为 DataFrame
+    # 【核心逻辑】
+    # 1. 字典格式：{Y: {X: value}} → 提取 X/Y 轴，转换为 [[x_idx, y_idx, value], ...]
+    # 2. DataFrame 格式：第一列作为 X 轴，其余列作为 Y 轴
+
     if isinstance(data, pd.DataFrame):
-        df = data.copy()
+        # DataFrame 格式：第一列 → X 轴，其余列 → Y 轴
+        if len(data.columns) == 0:
+            raise ValueError("DataFrame 没有列")
+
+        # 提取 X 轴数据（第一列）
+        xaxis_data = data.iloc[:, 0].astype(str).tolist()
+
+        # 提取 Y 轴数据（列名）
+        yaxis_data = data.columns[1:].astype(str).tolist()
+
+        # 重新构建 DataFrame（第一列为索引）
+        df_heatmap = data.set_index(data.columns[0])
+
+        # 构建坐标映射
+        x_map = {str(x): i for i, x in enumerate(df_heatmap.index)}
+        y_map = {str(y): i for i, y in enumerate(df_heatmap.columns)}
+
+        # 转换为 [[x_idx, y_idx, value], ...]
+        values = []
+        for (x, y), v in df_heatmap.stack().items():
+            values.append([x_map[str(x)], y_map[str(y)], v])
+
+        chart.add_xaxis(xaxis_data)
+        chart.add_yaxis('', yaxis_data, values, **series_opts)
+
     else:
-        df = pd.DataFrame(data)
-    
-    # 【DataFrame转换逻辑】统一：第一列 → X轴，其余列 → Y轴
-    if len(df.columns) == 0:
-        raise ValueError("DataFrame 没有列")
-    
-    # 第一列作为 X 轴
-    xaxis_data = df.iloc[:, 0].astype(str).tolist()
-    # 其余列作为 Y 轴
-    yaxis_data = df.columns[1:].astype(str).tolist()
-    
-    # 重新构建 DataFrame（第一列为索引，便于 stack() 处理）
-    df_heatmap = df.set_index(df.columns[0])
-    
-    # 构建坐标映射（使用 df_heatmap）
-    x_map = {str(x): i for i, x in enumerate(df_heatmap.index)}
-    y_map = {str(y): i for i, y in enumerate(df_heatmap.columns)}
-    
-    # 使用 stack() 优化数据转换
-    stacked = df_heatmap.stack()
-    values = [[x_map[str(x)], y_map[str(y)], v] for (x, y), v in stacked.items()]
-    
-    # 构建图表
-    chart.add_xaxis(xaxis_data)
-    chart.add_yaxis('', yaxis_data, values, **series_opts)
+        # 字典格式：{Y: {X: value}}
+        # 提取 Y 轴数据（外层 keys）
+        yaxis_data = list(data.keys())
+
+        # 提取 X 轴数据（内层 keys，去重并保持顺序）
+        x_set = set()
+        for inner_dict in data.values():
+            x_set.update(inner_dict.keys())
+        xaxis_data = list(x_set)
+
+        # 构建坐标映射
+        x_map = {str(x): i for i, x in enumerate(xaxis_data)}
+        y_map = {str(y): i for i, y in enumerate(yaxis_data)}
+
+        # 转换为 [[x_idx, y_idx, value], ...]
+        values = []
+        for y, inner_dict in data.items():
+            for x, v in inner_dict.items():
+                values.append([x_map[str(x)], y_map[str(y)], v])
+
+        chart.add_xaxis(xaxis_data)
+        chart.add_yaxis('', yaxis_data, values, **series_opts)
     
     return chart
 

@@ -252,56 +252,41 @@ nb.chart(chart_type, data, title=None, height='400px', **kwargs)
 
 **数据格式规范：**
 
-| 图表类型            | 标准格式                                                                   | DataFrame 格式 | DataFrame 转换规则                          |
-| --------------- | ---------------------------------------------------------------------- | ------------ | --------------------------------------- |
-| `line/bar/area` | `{'xAxis': [...], 'series': [{'name': '', 'data': []}]}`               | ✅ 支持         | 第1列→xAxis，第2列及以后→series                 |
-| `scatter`       | `{'xAxis': [...], 'series': [{'name': '', 'data': [[x,y], ...]}]}`     | ❌ **不支持**    | -                                       |
-| `kline`         | `{'xAxis': [...], 'series': [{'name': '', 'data': [[开,收,低,高], ...]}]}` | ✅ 支持         | 第1列→xAxis（日期），自动识别 open/close/low/high 字段 → K线数据 |
-| `pie`           | `[{'name': '', 'value': 0}, ...]`                                      | ✅ 支持         | 第1列→name，第2列→value                      |
-| `heatmap`       | 嵌套字典 `{y: {x: value}}`                                                 | ✅ 支持         | 第1列→xAxis，第2列及以后→yAxis维度，值→热力值          |
+| 图表类型 | 标准格式 | DataFrame 格式 | 转换规则 |
+| ------------ | ---------------------------------------------------------------- | ------------------- | ------------------------------------------------------------ |
+| `line/bar/area` | `{'xAxis': [...], 'series': [...]}` | ✅ 支持 | **第一列→X轴，其余列→series** |
+| `scatter` | `{'xAxis': [...], 'series': [...]}` | ❌ **不支持** | - |
+| `kline` | `{'xAxis': [...], 'series': [...]}` | ✅ 支持 | 第一列→X轴（日期），open/close/low/high 字段 → K线 |
+| `pie` | `[{'name': '', 'value': 0}, ...]` | ✅ 支持 | 第一列→name，第二列→value |
+| `heatmap` | 嵌套字典 `{y: {x: value}}` | ✅ 支持 | **第一列→X轴，其余列→Y轴** |
+
+**核心设计理念**：DataFrame 格式与 `print(df)` / `nb.table()` 保持一致性。第一列在表格中是可见的第一列，在图表中是 X 轴，自然对应。
 
 ### 4.1 折线图（Line）
 
 ```python
-# 单系列折线
-dates = ["2024-01", "2024-02", "2024-03", "2024-04", "2024-05"]
-values = [1.0, 1.05, 1.08, 1.12, 1.15]
+# 数据定义
+x_data = ["2024-01", "2024-02", "2024-03", "2024-04", "2024-05"]
+strategy_data = [1.0, 1.05, 1.12, 1.08, 1.15]
+benchmark_data = [1.0, 1.02, 1.04, 1.06, 1.08]
 
-data = {
-    "xAxis": dates,
-    "series": [{"name": "净值", "data": values}]
-}
-
-nb.chart("line", data, title="净值曲线", height="400px")
-
-# 多系列折线
-data_multi = {
-    "xAxis": dates,
-    "series": [
-        {"name": "策略A", "data": [1.0, 1.05, 1.08, 1.12, 1.15]},
-        {"name": "策略B", "data": [1.0, 1.03, 1.06, 1.08, 1.10]},
-        {"name": "基准", "data": [1.0, 1.02, 1.04, 1.05, 1.07]},
+# 字典格式
+nb.chart('line', {
+    'xAxis': x_data,
+    'series': [
+        {"name": "策略", "data": strategy_data},
+        {"name": "基准", "data": benchmark_data}
     ]
-}
+}, title="净值曲线（字典格式）")
 
-nb.chart("line", data_multi, title="策略对比", height="400px")
-
-# 使用 DataFrame（自动转换）
-import pandas as pd
+# DataFrame 格式（与字典完全对应）
 df = pd.DataFrame({
-    "日期": dates,
-    "策略A": [1.0, 1.05, 1.08, 1.12, 1.15],
-    "策略B": [1.0, 1.03, 1.06, 1.08, 1.10],
+    "月份": x_data,              # = xAxis
+    "策略": strategy_data,        # = series[0]["data"]
+    "基准": benchmark_data        # = series[1]["data"]
 })
-print(df)
-#        日期  策略A   策略B
-# 0  2024-01   1.0  1.00
-# 1  2024-02   1.05 1.03
-# 2  2024-03   1.08 1.06
-# 3  2024-04   1.12 1.08
-# 4  2024-05   1.15 1.10
-nb.chart("line", df, title="策略对比")
-# DataFrame 转换规则：第1列（日期）→ xAxis，第2、3列 → series
+nb.chart("line", df, title="净值曲线（DataFrame格式）")
+# DataFrame 转换规则：第一列（月份）→ xAxis，其余列 → series
 ```
 
 **前端交互**：
@@ -383,37 +368,33 @@ nb.chart("pie", df, title="资产配置", height="400px")
 import numpy as np
 import pandas as pd
 
-# 方式1：使用 DataFrame（推荐）
-assets = ["股票", "债券", "黄金", "原油", "现金"]
-n = len(assets)
-correlation = np.random.uniform(-1, 1, (n, n))
-correlation = (correlation + correlation.T) / 2  # 对称矩阵
-np.fill_diagonal(correlation, 1)
-
-df = pd.DataFrame(correlation, index=assets, columns=assets)
-df = df.reset_index()  # 将索引变为第1列
-df.columns = ["资产"] + assets  # 重命名列
-print(df)
-#      资产   股票   债券   黄金   原油   现金
-# 0   股票  1.00  0.30  0.20  0.15  0.10
-# 1   债券  0.30  1.00  0.40  0.25  0.20
-# ...
-nb.chart("heatmap", df, title="资产相关性矩阵", height="450px")
-# DataFrame 转换规则：第1列 → xAxis，其余列名 → yAxis，值 → 热力值
-
-# 方式2：使用嵌套字典
+# 方式1：使用字典（直接格式）
 data_dict = {
-    "股票": {"股票": 1.0, "债券": 0.3, "黄金": 0.2},
-    "债券": {"股票": 0.3, "债券": 1.0, "黄金": 0.4},
-    "黄金": {"股票": 0.2, "债券": 0.4, "黄金": 1.0},
+    "2023": {"01": 0.02, "02": -0.01, "03": 0.03, "04": 0.01, "05": -0.02, "06": 0.04},
+    "2024": {"01": 0.05, "02": -0.02, "03": 0.08, "04": 0.03, "05": 0.06, "06": -0.01}
 }
-nb.chart("heatmap", data_dict, title="资产相关性矩阵")
+# Y轴=年份，X轴=月份
+nb.chart("heatmap", data_dict, title="月度收益热力图（字典格式）")
+
+# 方式2：使用 DataFrame（推荐，与 table 一致）
+month_labels = ["01", "02", "03", "04", "05", "06"]
+y2023 = [0.02, -0.01, 0.03, 0.01, -0.02, 0.04]
+y2024 = [0.05, -0.02, 0.08, 0.03, 0.06, -0.01]
+
+df_heatmap = pd.DataFrame({
+    "月份": month_labels,   # ← 第一列 = X 轴
+    "2023": y2023,           # ← 其余列 = Y 轴
+    "2024": y2024
+})
+nb.chart("heatmap", df_heatmap, title="月度收益热力图（DataFrame格式）")
+# DataFrame 转换规则：第一列（月份）→ X轴，其余列名（2023/2024）→ Y轴
 ```
 
 **前端交互**：
 
 - visualMap 显示数值范围
 - 悬停显示具体数值
+- 数据缩放控件（×1/×10/×100）
 
 ### 4.6 网格图（Grid Chart）
 
