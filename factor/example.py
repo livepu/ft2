@@ -18,7 +18,11 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # 导入因子挖掘模块
-from ft2.factor import (
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from factor import (
     # 基础类
     Factor, FactorMetadata, FactorCategory, FactorFrequency,
     factor_decorator, FactorMeta,

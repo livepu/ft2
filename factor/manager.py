@@ -26,7 +26,13 @@ from enum import Enum
 import pandas as pd
 import numpy as np
 import json
-import yaml
+# 可选依赖：PyYAML
+try:
+    import yaml
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
+    yaml = None
 import pickle
 from pathlib import Path
 import hashlib
@@ -667,6 +673,8 @@ class FactorManager:
                 json.dump(library_data, f, ensure_ascii=False, indent=2, default=str)
                 
         elif format == StorageFormat.YAML:
+            if not HAS_YAML:
+                raise ImportError("PyYAML未安装，无法保存YAML格式。请安装: pip install PyYAML")
             file_path = path / "factor_library.yaml"
             with open(file_path, 'w', encoding='utf-8') as f:
                 yaml.dump(library_data, f, default_flow_style=False, allow_unicode=True)
@@ -708,6 +716,8 @@ class FactorManager:
                     library_data = json.load(f)
                     
         elif format == StorageFormat.YAML:
+            if not HAS_YAML:
+                raise ImportError("PyYAML未安装，无法加载YAML格式。请安装: pip install PyYAML")
             file_path = path / "factor_library.yaml"
             if file_path.exists():
                 with open(file_path, 'r', encoding='utf-8') as f:
@@ -790,6 +800,8 @@ class FactorManager:
                 json.dump(export_data, f, ensure_ascii=False, indent=2, default=str)
                 
         elif format == StorageFormat.YAML:
+            if not HAS_YAML:
+                raise ImportError("PyYAML未安装，无法导出YAML格式。请安装: pip install PyYAML")
             file_path = output_path / f"{filename}.yaml"
             with open(file_path, 'w', encoding='utf-8') as f:
                 yaml.dump(export_data, f, default_flow_style=False, allow_unicode=True)
@@ -832,6 +844,8 @@ class FactorManager:
                 import_data = json.load(f)
                 
         elif format == StorageFormat.YAML:
+            if not HAS_YAML:
+                raise ImportError("PyYAML未安装，无法导入YAML格式。请安装: pip install PyYAML")
             with open(import_path, 'r', encoding='utf-8') as f:
                 import_data = yaml.safe_load(f)
                 

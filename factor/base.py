@@ -112,7 +112,7 @@ class Factor(ABC):
             return False
         if not symbols:
             return False
-        if not dates:
+        if dates is None or len(dates) == 0:
             return False
             
         # 检查数据完整性
@@ -137,7 +137,15 @@ class Factor(ABC):
         Returns:
             str: 缓存键
         """
-        return f"{self.metadata.name}_{'_'.join(symbols[:3])}_{dates[0]}_{dates[-1]}"
+        # 处理日期格式
+        if hasattr(dates[0], 'strftime'):
+            start_date = dates[0].strftime('%Y%m%d')
+            end_date = dates[-1].strftime('%Y%m%d')
+        else:
+            start_date = str(dates[0])
+            end_date = str(dates[-1])
+            
+        return f"{self.metadata.name}_{'_'.join(symbols[:3])}_{start_date}_{end_date}"
     
     def calculate_with_cache(self, data: Dict[str, pd.DataFrame], 
                            symbols: List[str], 
@@ -299,7 +307,7 @@ def factor(name: str = None,
     return decorator
 
 
-class FactorMeta(type):
+class FactorMeta(type(ABC)):
     """因子元类，自动注册因子类"""
     
     def __new__(mcs, name, bases, attrs):

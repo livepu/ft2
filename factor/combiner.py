@@ -25,8 +25,15 @@ from dataclasses import dataclass
 import pandas as pd
 import numpy as np
 from scipy import stats, optimize
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+# 可选依赖：scikit-learn
+try:
+    from sklearn.decomposition import PCA
+    from sklearn.preprocessing import StandardScaler
+    HAS_SKLEARN = True
+except ImportError:
+    HAS_SKLEARN = False
+    PCA = None
+    StandardScaler = None
 import logging
 
 from .base import Factor, FactorMetadata, FactorCategory, FactorFrequency
@@ -309,6 +316,10 @@ class FactorCombiner:
         Returns:
             Dict[str, pd.DataFrame]: PCA正交化后的因子
         """
+        if not HAS_SKLEARN:
+            logger.warning("scikit-learn未安装，跳过PCA正交化，使用原始因子")
+            return {name: factor for name, factor in zip(factor_names, aligned_factors)}
+        
         # 将因子数据堆叠为三维数组 (n_factors, n_dates, n_symbols)
         factor_array = np.stack([f.values for f in aligned_factors])
         
@@ -758,6 +769,11 @@ class FactorCombiner:
         Returns:
             Dict[str, float]: PCA权重
         """
+        if not HAS_SKLEARN:
+            logger.warning("scikit-learn未安装，使用等权组合")
+            weight = 1.0 / len(factor_names)
+            return {name: weight for name in factor_names}
+        
         # 将因子数据堆叠为二维数组
         factor_array = np.stack([f.values for f in aligned_factors])
         n_factors, n_dates, n_symbols = factor_array.shape
