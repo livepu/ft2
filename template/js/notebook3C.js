@@ -153,12 +153,12 @@ const PieChart = {
         return { chartRef, pieShowValue, pieShowPercent };
     },
     template: `
-        <div class="cell-chart pie-with-control">
+        <div class="cell-chart with-control">
             <h3 v-if="cell.title">{{ cell.title }}</h3>
-            <div class="pie-wrapper">
+            <div class="chart-with-control">
                 <div ref="chartRef" class="chart-container"
                      :style="{ width: cell.content?.width || '100%', height: cell.content?.height || '400px' }"></div>
-                <div class="pie-control">
+                <div class="chart-control">
                     <div class="control-label">显示选项</div>
                     <div class="checkbox-group">
                         <label class="checkbox-item">
@@ -181,6 +181,7 @@ const HeatmapChart = {
     name: 'HeatmapChart',
     props: { cell: { type: Object, required: true } },
     setup(props) {
+        const heatmapShowData = ref(true);
         const heatmapMultiplier = ref(1);
 
         const { chartRef, updateChart } = useChart(props, {
@@ -201,24 +202,31 @@ const HeatmapChart = {
                     xAxis: { type: 'category', data: extracted.xAxis, splitArea: { show: true } },
                     yAxis: { type: 'category', data: extracted.yAxis, splitArea: { show: true } },
                     visualMap: { min: visualMin, max: visualMax, range: [visualMin, visualMax], calculable: true, orient: 'vertical', right: '2%', top: 'center', text: [visualMax.toFixed(decimalPlaces) + ' (×' + multiplier + ')', visualMin.toFixed(decimalPlaces) + ' (×' + multiplier + ')'], inRange: { color: HEATMAP_COLORS } },
-                    series: [{ type: 'heatmap', data: displayData, label: { show: true, formatter: params => params.value[2].toFixed(2) }, emphasis: { itemStyle: { shadowBlur: 10 } } }]
+                    series: [{ type: 'heatmap', data: displayData, label: { show: heatmapShowData.value, formatter: params => params.value[2].toFixed(2) }, emphasis: { itemStyle: { shadowBlur: 10 } } }]
                 };
             }
         });
 
-        watch(heatmapMultiplier, () => {
+        watch([heatmapShowData, heatmapMultiplier], () => {
             updateChart();
         });
 
-        return { chartRef, heatmapMultiplier };
+        return { chartRef, heatmapShowData, heatmapMultiplier };
     },
     template: `
-        <div class="cell-chart heatmap-with-control">
+        <div class="cell-chart with-control heatmap">
             <h3 v-if="cell.title">{{ cell.title }}</h3>
-            <div class="heatmap-wrapper">
+            <div class="chart-with-control">
                 <div ref="chartRef" class="chart-container"
                      :style="{ width: cell.content?.width || '100%', height: cell.content?.height || '400px' }"></div>
-                <div class="heatmap-control">
+                <div class="chart-control">
+                    <div class="control-label">显示选项</div>
+                    <div class="checkbox-group">
+                        <label class="checkbox-item">
+                            <input type="checkbox" v-model="heatmapShowData">
+                            <span>显示数据</span>
+                        </label>
+                    </div>
                     <div class="control-label">数据缩放</div>
                     <div class="current-multiplier">×{{ heatmapMultiplier }}</div>
                     <div class="multiplier-buttons">
@@ -317,12 +325,12 @@ const StackedChart = {
         return { chartRef, stackNormalize, stackShowRaw, stackShowPercent };
     },
     template: `
-        <div class="cell-chart stack-with-control">
+        <div class="cell-chart with-control">
             <h3 v-if="cell.title">{{ cell.title }}</h3>
-            <div class="pie-wrapper">
+            <div class="chart-with-control">
                 <div ref="chartRef" class="chart-container"
                      :style="{ width: cell.content?.width || '100%', height: cell.content?.height || '400px' }"></div>
-                <div class="pie-control">
+                <div class="chart-control">
                     <div class="control-label">归一化</div>
                     <div class="checkbox-group">
                         <label class="checkbox-item">
@@ -330,7 +338,7 @@ const StackedChart = {
                             <span>启用</span>
                         </label>
                     </div>
-                    <div class="control-label" style="margin-top: 12px;">显示选项</div>
+                    <div class="control-label">显示选项</div>
                     <div class="checkbox-group">
                         <label class="checkbox-item">
                             <input type="checkbox" v-model="stackShowRaw">

@@ -668,7 +668,29 @@ body {
     margin-bottom: 16px;
 }
 
-/* ========== 饼图控制样式 ========== */
+/* ========== 通用图表控制样式（统一结构） ========== */
+
+.chart-with-control {
+    overflow: hidden;
+    max-width: 100%;
+}
+
+.chart-with-control .chart-container {
+    float: left;
+    width: calc(100% - 160px) !important;
+    max-width: 100%;
+}
+
+.chart-control {
+    float: right;
+    padding: 12px;
+    background: #f7f6f3;
+    border-radius: 6px;
+    min-width: 120px;
+    margin-left: 16px;
+}
+
+/* ========== 饼图控制样式（保留兼容性） ========== */
 
 .pie-wrapper {
     overflow: hidden;
@@ -712,8 +734,13 @@ body {
     cursor: pointer;
 }
 
-/* ========== 热力图控制样式 ========== */
+/* ========== 热力图特殊样式（宽度调整） ========== */
 
+.chart-with-control.heatmap .chart-container {
+    width: calc(100% - 110px) !important;
+}
+
+/* 保留旧类名兼容性 */
 .heatmap-wrapper {
     overflow: hidden;
     max-width: 100%;

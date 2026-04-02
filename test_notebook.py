@@ -36,30 +36,51 @@ def test_comprehensive():
     dates = ["2024-01", "2024-02", "2024-03", "2024-04", "2024-05"]
     
     with nb.section("收益分析"):
-        nb.text("净值曲线与基准对比：")
+        # 数据定义
+        x_data = ["2024-01", "2024-02", "2024-03", "2024-04", "2024-05"]
+        strategy_data = [1.0, 1.05, 1.12, 1.08, 1.15]
+        benchmark_data = [1.0, 1.02, 1.04, 1.06, 1.08]
+
+        # 字典格式：xAxis + series
         nb.chart('line', {
-            'xAxis': dates,
+            'xAxis': x_data,
             'series': [
-                {"name": "策略", "data": [1.0, 1.05, 1.12, 1.08, 1.15]},
-                {"name": "基准", "data": [1.0, 1.02, 1.04, 1.06, 1.08]}
+                {"name": "策略", "data": strategy_data},
+                {"name": "基准", "data": benchmark_data}
             ]
-        }, title="净值曲线（字典格式：xAxis+series）", height='300px')
-        
-        # DataFrame 格式的线图（第一列=X轴，其余列=series）
+        }, title="净值曲线（字典格式：xAxis + series）")
+
+        # DataFrame 格式：第一列=X轴，其余列=series
+        # 与字典格式对应关系：
+        #   xAxis = x_data = df["月份"]
+        #   series[0]["name"] = "策略" = df["策略"].name
+        #   series[0]["data"] = strategy_data = df["策略"].tolist()
         df_line = pd.DataFrame({
-            "月份": ["2024-01", "2024-02", "2024-03", "2024-04", "2024-05"],
-            "策略": [1.0, 1.05, 1.12, 1.08, 1.15],
-            "基准": [1.0, 1.02, 1.04, 1.06, 1.08]
+            "月份": x_data,
+            "策略": strategy_data,
+            "基准": benchmark_data
         })
-        nb.chart('line', df_line, title="净值曲线（DataFrame格式：第一列=X轴，其余列=series）")
+        nb.chart('line', df_line, title="净值曲线（DataFrame格式：第一列=X轴）")
         
-        # 堆叠柱状图测试（通过 series_opts 传递 stack 参数）
-        stack_df = pd.DataFrame({
-            "月份": ["1月", "2月", "3月", "4月", "5月"],
-            "盈利": [100, 150, 80, 200, 120],
-            "亏损": [30, 20, 50, 10, 40]
+        # 堆叠柱状图
+        month_data = ["1月", "2月", "3月", "4月", "5月"]
+        profit_data = [100, 150, 80, 200, 120]
+        loss_data = [30, 20, 50, 10, 40]
+
+        nb.chart('bar', {
+            'xAxis': month_data,
+            'series': [
+                {"name": "盈利", "data": profit_data},
+                {"name": "亏损", "data": loss_data}
+            ]
+        }, title="月度盈亏（字典格式）")
+
+        df_stack = pd.DataFrame({
+            "月份": month_data,
+            "盈利": profit_data,
+            "亏损": loss_data
         })
-        nb.chart('bar', stack_df, series_opts={'stack': 'total'}, title="月度盈亏堆叠图")
+        nb.chart('bar', df_stack, series_opts={'stack': 'total'}, title="月度盈亏（DataFrame格式）")
         
         # 嵌套：月度分析
         with nb.section("月度分析"):
@@ -84,20 +105,24 @@ def test_comprehensive():
             'series': [{"name": "回撤%", "data": [0, -2, -5, -3, -1]}]
         }, title="回撤曲线", height=250)
         
-        # 字典格式：年份→月份→值（Y轴=年份，X轴=月份）
-        heatmap_data = {
+        # 热力图
+        year_month_data = {
             "2023": {"01": 0.02, "02": -0.01, "03": 0.03, "04": 0.01, "05": -0.02, "06": 0.04},
             "2024": {"01": 0.05, "02": -0.02, "03": 0.08, "04": 0.03, "05": 0.06, "06": -0.01}
         }
-        nb.chart('heatmap', heatmap_data, title="月度收益热力图（字典格式：Y轴=年份，X轴=月份）")
+        nb.chart('heatmap', year_month_data, title="月度收益热力图（字典格式：Y轴=年份，X轴=月份）")
 
-        # DataFrame 格式热力图（第一列=X轴=月份，其余列=Y轴=年份）
+        # DataFrame 格式：第一列=X轴，其余列=Y轴
+        month_labels = ["01", "02", "03", "04", "05", "06"]
+        y2023 = [0.02, -0.01, 0.03, 0.01, -0.02, 0.04]
+        y2024 = [0.05, -0.02, 0.08, 0.03, 0.06, -0.01]
+
         df_heatmap = pd.DataFrame({
-            "月份": ["01", "02", "03", "04", "05", "06"],
-            "2023": [0.02, -0.01, 0.03, 0.01, -0.02, 0.04],
-            "2024": [0.05, -0.02, 0.08, 0.03, 0.06, -0.01]
+            "月份": month_labels,
+            "2023": y2023,
+            "2024": y2024
         })
-        nb.chart('heatmap', df_heatmap, title="月度收益热力图（DataFrame格式：第一列=X轴，其余列=Y轴）")
+        nb.chart('heatmap', df_heatmap, title="月度收益热力图（DataFrame格式：第一列=X轴）")
         
         # 嵌套：风险评估
         with nb.section("风险评估", collapsed=True):
