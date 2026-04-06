@@ -93,7 +93,11 @@ const GenericChart = {
                 const option = { color: colors, series: series };
                 if (['line', 'bar', 'area'].includes(chartType)) {
                     const isBarChart = chartType === 'bar';
-                    option.xAxis = { type: 'category', boundaryGap: isBarChart, data: extracted.xAxis };
+                    // 检测xAxis数据是否为日期格式，日期→time轴，数字/文本→category轴
+                    const first = extracted.xAxis[0];
+                    const isDateStr = typeof first === 'string' && /^\d{4}-\d{2}-\d{2}/.test(first);
+                    const xAxisType = isDateStr ? 'time' : 'category';
+                    option.xAxis = { type: xAxisType, boundaryGap: isBarChart, data: extracted.xAxis };
                     option.yAxis = { type: 'value', scale: true, boundaryGap: ['10%', '10%'] };
                     option.grid = { left: 8, right: 8, bottom: 5, top: 28, containLabel: true };
                     option.legend = { data: series.map(s => ({ name: s.name, icon: 'rect' })), top: 5 };

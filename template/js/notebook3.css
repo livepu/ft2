@@ -668,7 +668,7 @@ body {
     margin-bottom: 16px;
 }
 
-/* ========== 通用图表控制样式（统一结构） ========== */
+/* ========== 通用图表控制样式（统一结构）========== */
 
 .chart-with-control {
     overflow: hidden;
@@ -677,110 +677,75 @@ body {
 
 .chart-with-control .chart-container {
     float: left;
-    width: calc(100% - 160px) !important;
+    width: calc(100% - 120px) !important;
     max-width: 100%;
 }
 
 .chart-control {
     float: right;
-    padding: 12px;
+    padding: 8px 10px;
     background: #f7f6f3;
     border-radius: 6px;
-    min-width: 120px;
-    margin-left: 16px;
+    min-width: 90px;
+    margin-left: 12px;
 }
 
-/* ========== 饼图控制样式（保留兼容性） ========== */
-
-.pie-wrapper {
-    overflow: hidden;
-    max-width: 100%;
+/* 热力图单独设置更窄的宽度 */
+.chart-with-control.heatmap .chart-container {
+    width: calc(100% - 85px) !important;
 }
 
-.pie-wrapper .chart-container {
-    float: left;
-    width: calc(100% - 160px) !important;
-    max-width: 100%;
-}
-
-.pie-control {
-    float: right;
-    padding: 12px;
-    background: #f7f6f3;
-    border-radius: 6px;
-    min-width: 120px;
-    margin-left: 16px;
+.chart-with-control.heatmap .chart-control {
+    min-width: 60px;
+    padding: 8px 8px;
 }
 
 .control-label {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: #37352f;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .checkbox-group {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
 }
 
 .checkbox-item {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 13px;
+    gap: 4px;
+    font-size: 12px;
     color: #333;
     cursor: pointer;
 }
 
-/* ========== 热力图特殊样式（宽度调整） ========== */
 
-.chart-with-control.heatmap .chart-container {
-    width: calc(100% - 110px) !important;
-}
 
-/* 保留旧类名兼容性 */
-.heatmap-wrapper {
-    overflow: hidden;
-    max-width: 100%;
-}
 
-.heatmap-wrapper .chart-container {
-    float: left;
-    width: calc(100% - 110px) !important;
-    max-width: 100%;
-}
-
-.heatmap-control {
-    float: right;
-    padding: 12px;
-    background: #f7f6f3;
-    border-radius: 6px;
-    min-width: 70px;
-    margin-left: 16px;
-}
 
 .current-multiplier {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
     color: #9b51e0;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
 .multiplier-buttons {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
 }
 
 .multiplier-buttons button {
-    padding: 4px 8px;
+    padding: 3px 6px;
     border: 1px solid #e5e5e5;
     background: #fff;
-    border-radius: 4px;
+    border-radius: 3px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     color: #666;
     transition: all 0.2s;
 }
