@@ -11,6 +11,8 @@
  * ================================================
  */
 
+/* ========== 1. 全局基础样式 ========== */
+
 /* 最小化全局重置 - 避免影响 ECharts 等第三方库 */
 html, body {
     margin: 0;
@@ -23,7 +25,7 @@ body {
     color: #333;
 }
 
-/* ========== 保护 ECharts 不被全局样式影响 ========== */
+/* 保护 ECharts 不被全局样式影响 */
 /* 只针对 ECharts 图表容器，不影响 tooltip */
 [class*='echarts-instance'],
 [class*='_echarts_instance'] {
@@ -31,58 +33,8 @@ body {
     color: initial;
 }
 
+/* ========== 2. 布局架构 ========== */
 
-/* ========== Toast 提示 ========== */
-.toast-container {
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 9999;
-    pointer-events: none;
-}
-
-.toast {
-    background: #f3e8ff;
-    color: #6b21a8;
-    padding: 12px 24px;
-    border-radius: 6px;
-    font-size: 14px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    animation: toastIn 0.3s ease;
-    border: 1px solid #e9d5ff;
-}
-
-.toast.success {
-    background: #f3e8ff;
-    color: #6b21a8;
-    border-color: #9b51e0;
-}
-
-.toast.error {
-    background: #fdf2f8;
-    color: #be185d;
-    border-color: #ec4899;
-}
-
-.toast.info {
-    background: #f7f6f3;
-    color: #37352f;
-    border-color: #e9e9e9;
-}
-
-@keyframes toastIn {
-    from {
-        opacity: 0;
-        transform: translateY(-20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* ========== 布局架构：左侧浮动菜单 + 主体内容 ========== */
 .notebook-wrapper {
     display: flex;
     justify-content: center;
@@ -98,7 +50,32 @@ body {
     flex: 1;
 }
 
-/* ========== 左侧浮动目录菜单 ========== */
+.notebook-header {
+    background: linear-gradient(90deg, #ffffff 0%, #f3e8ff 100%);
+    border: 1px solid #e9d5ff;
+    padding: 28px 24px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+.notebook-header h1 {
+    font-size: 28px;
+    font-weight: 600;
+    color: #6b21a8;
+    margin: 0 0 10px 0;
+}
+
+.notebook-header .meta {
+    font-size: 13px;
+    color: #a855f7;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ========== 3. 左侧浮动目录菜单 ========== */
+
 .toc-float-menu {
     position: sticky;
     top: 20px;
@@ -301,62 +278,7 @@ body {
     border-color: #db2777;
 }
 
-/* 小屏幕适配 */
-@media (max-width: 768px) {
-    .notebook-wrapper {
-        flex-direction: column;
-        padding: 10px;
-        padding-bottom: 80px;
-    }
-    
-    .notebook-container {
-        margin: 0;
-        padding: 10px;
-    }
-    
-    .toc-float-menu {
-        position: fixed;
-        bottom: 20px;
-        left: 20px;
-        top: auto;
-        max-height: none;
-        z-index: 1002;
-    }
-    
-    .toc-float-menu.expanded {
-        bottom: 80px;
-        width: 280px;
-        max-height: 60vh;
-    }
-}
-
-.notebook-header {
-    background: linear-gradient(90deg, #ffffff 0%, #f3e8ff 100%);
-    border: 1px solid #e9d5ff;
-    padding: 28px 24px;
-    margin-bottom: 12px;
-    border-radius: 8px;
-    box-sizing: border-box;
-}
-
-.notebook-header h1 {
-    font-size: 28px;
-    font-weight: 600;
-    color: #6b21a8;
-    margin: 0 0 10px 0;
-}
-
-.notebook-header .meta {
-    font-size: 13px;
-    color: #a855f7;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-/* 内容区域 */
-
-/* ========== Section 层级规范 - 化繁为简 ========== */
+/* ========== 4. Section 层级规范 ========== */
 
 /* Section L1: 主章节 - 白色卡片 */
 .section {
@@ -452,6 +374,8 @@ body {
     color: #be185d;
     padding: 0 0 8px 0;
 }
+
+/* ========== 5. Cell 组件样式 ========== */
 
 /* 标题 */
 .cell-title h1 { font-size: 20px; color: #37352f; }
@@ -568,8 +492,6 @@ body {
     margin-top: 4px;
 }
 
-/* ========== 图表/表格容器 ========== */
-
 /* cell-metrics 需要一些间距 */
 .cell-metrics {
     padding: 12px;
@@ -653,9 +575,6 @@ body {
     border-radius: 5px;
 }
 
-
-
-
 /* 空状态 */
 .empty-state {
     text-align: center;
@@ -668,7 +587,7 @@ body {
     margin-bottom: 16px;
 }
 
-/* ========== 通用图表控制样式（统一结构）========== */
+/* ========== 6. 通用图表控制样式 ========== */
 
 .chart-with-control {
     overflow: hidden;
@@ -722,10 +641,6 @@ body {
     cursor: pointer;
 }
 
-
-
-
-
 .current-multiplier {
     font-size: 12px;
     font-weight: 600;
@@ -762,7 +677,7 @@ body {
     color: #fff;
 }
 
-/* ========== FT Table 样式（Notion 风格）========== */
+/* ========== 7. FT Table 样式（Notion 风格）========== */
 
 /* 表格容器 */
 .ft-table-container {
@@ -862,7 +777,6 @@ body {
 }
 
 /* 冻结列样式 - 只负责视觉样式 */
-
 .ft-table-freeze .ft-table th,
 .ft-table-freeze .ft-table td {
     white-space: nowrap;
@@ -895,7 +809,8 @@ body {
     font-size: 14px;
 }
 
-/* ========== 配色按钮 - 固定在右下角 ========== */
+/* ========== 8. 配色器组件 ========== */
+
 .color-float-btn {
     position: fixed;
     bottom: 20px;
@@ -925,7 +840,6 @@ body {
     background: #e9d5ff;
 }
 
-/* ========== 配色器抽屉 ========== */
 .drawer-overlay {
     position: fixed;
     top: 0;
@@ -1101,17 +1015,87 @@ body {
     box-shadow: 0 0 0 3px rgba(155, 81, 224, 0.1);
 }
 
-/* 确保配色面板不在截图范围内 */
-@media print {
-    .color-float-btn,
-    .color-drawer,
-    .drawer-overlay {
-        display: none;
+/* ========== 9. Toast 提示 ========== */
+
+.toast-container {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.toast {
+    background: #f3e8ff;
+    color: #6b21a8;
+    padding: 12px 24px;
+    border-radius: 6px;
+    font-size: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    animation: toastIn 0.3s ease;
+    border: 1px solid #e9d5ff;
+}
+
+.toast.success {
+    background: #f3e8ff;
+    color: #6b21a8;
+    border-color: #9b51e0;
+}
+
+.toast.error {
+    background: #fdf2f8;
+    color: #be185d;
+    border-color: #ec4899;
+}
+
+.toast.info {
+    background: #f7f6f3;
+    color: #37352f;
+    border-color: #e9e9e9;
+}
+
+@keyframes toastIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }
 
-/* 移动端优化 */
+/* ========== 10. 媒体查询 ========== */
+
+/* 小屏幕适配 */
 @media (max-width: 768px) {
+    .notebook-wrapper {
+        flex-direction: column;
+        padding: 10px;
+        padding-bottom: 80px;
+    }
+    
+    .notebook-container {
+        margin: 0;
+        padding: 10px;
+    }
+    
+    .toc-float-menu {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        top: auto;
+        max-height: none;
+        z-index: 1002;
+    }
+    
+    .toc-float-menu.expanded {
+        bottom: 80px;
+        width: 280px;
+        max-height: 60vh;
+    }
+    
     .color-float-btn {
         bottom: 20px;
         right: 20px;
@@ -1123,5 +1107,14 @@ body {
         width: calc(100vw - 40px);
         max-width: 280px;
         max-height: 60vh;
+    }
+}
+
+/* 确保配色面板不在截图范围内 */
+@media print {
+    .color-float-btn,
+    .color-drawer,
+    .drawer-overlay {
+        display: none;
     }
 }
