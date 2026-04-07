@@ -400,7 +400,8 @@ class Notebook:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(html_content, encoding='utf-8')
-        
+
+        print(f"输出: {output_path.name}")
         return str(output_path)
     
     def __repr__(self):
