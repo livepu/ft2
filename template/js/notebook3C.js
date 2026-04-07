@@ -106,6 +106,7 @@ const GenericChart = {
                         if (s.stack) baseOption.stack = s.stack;
                         if (chartType === 'line' || chartType === 'area') {
                             baseOption.smooth = true;
+                            baseOption.showSymbol = false;
                             if (chartType === 'area') baseOption.areaStyle = { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: colors[i % colors.length] + '60' }, { offset: 1, color: colors[i % colors.length] + '10' }] } };
                         }
                         if (isBarChart) baseOption.itemStyle = { color: series.length === 1 && !s.stack ? function(params) { return params.value >= 0 ? colors[0] : colors[1]; } : colors[i % colors.length], borderRadius: [4, 4, 0, 0] };
@@ -319,7 +320,7 @@ const StackedChart = {
                     };
                 }
                 const isBarChart = chartType === 'bar';
-                const option = { color: colors, xAxis: { type: 'category', boundaryGap: isBarChart, data: extracted.xAxis }, yAxis: yAxisConfig, grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true }, legend: { data: series.map(s => ({ name: s.name, icon: 'rect' })), top: 5 }, tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: tooltipFormatter }, series: displaySeries.map((s, i) => { const baseOption = { name: s.name, type: chartType === 'area' ? 'line' : chartType, data: s.data, stack: s.stack, label: { show: showRaw || showPercentStack, position: 'inside', formatter: labelFormatter(i) } }; if (chartType === 'line' || chartType === 'area') { baseOption.smooth = true; if (chartType === 'area') baseOption.areaStyle = { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: colors[i % colors.length] + '60' }, { offset: 1, color: colors[i % colors.length] + '10' }] } }; } if (isBarChart) baseOption.itemStyle = { color: colors[i % colors.length], borderRadius: [4, 4, 0, 0] }; return baseOption; }) };
+                const option = { color: colors, xAxis: { type: 'category', boundaryGap: isBarChart, data: extracted.xAxis }, yAxis: yAxisConfig, grid: { left: 8, right: 8, bottom: 5, top: 28, containLabel: true }, legend: { data: series.map(s => ({ name: s.name, icon: 'rect' })), top: 5 }, tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: tooltipFormatter }, series: displaySeries.map((s, i) => { const baseOption = { name: s.name, type: chartType === 'area' ? 'line' : chartType, data: s.data, stack: s.stack, label: { show: showRaw || showPercentStack, position: 'inside', formatter: labelFormatter(i) } }; if (chartType === 'line' || chartType === 'area') { baseOption.smooth = true; baseOption.showSymbol = false; if (chartType === 'area') baseOption.areaStyle = { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: colors[i % colors.length] + '60' }, { offset: 1, color: colors[i % colors.length] + '10' }] } }; } if (isBarChart) baseOption.itemStyle = { color: colors[i % colors.length], borderRadius: [4, 4, 0, 0] }; return baseOption; }) };
                 return option;
             }
         });
@@ -399,11 +400,12 @@ const GridChart = {
                     boundaryGap: ['10%', '10%']
                 }));
             }
-            // 添加 smooth 效果
+            // 添加 smooth 效果和隐藏数据点
             if (option.series && Array.isArray(option.series)) {
                 option.series.forEach(s => {
                     if (s.type === 'line') {
                         s.smooth = true;
+                        s.showSymbol = false;
                     }
                 });
             }
