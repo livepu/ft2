@@ -101,6 +101,7 @@ const GenericChart = {
                     option.yAxis = { type: 'value', scale: true, boundaryGap: ['10%', '10%'] };
                     option.grid = { left: 8, right: 8, bottom: 5, top: 28, containLabel: true };
                     option.legend = { data: series.map(s => ({ name: s.name, icon: 'rect' })), top: 5 };
+                    option.tooltip = { trigger: 'axis', axisPointer: { type: 'shadow' } };
                     option.series = series.map((s, i) => {
                         const baseOption = { name: s.name, type: chartType === 'area' ? 'line' : chartType, data: s.data };
                         if (s.stack) baseOption.stack = s.stack;
@@ -381,9 +382,8 @@ const GridChart = {
             if (!charts) return {};
             const colors = getColors();
             const option = JSON.parse(JSON.stringify(charts));
-            // 应用全局配色方案
             option.color = colors;
-            // 优化 grid 布局，使用更宽的边距
+            option.tooltip = { trigger: 'axis', axisPointer: { type: 'shadow' } };
             if (option.grid && Array.isArray(option.grid)) {
                 option.grid = option.grid.map(g => ({
                     ...g,
