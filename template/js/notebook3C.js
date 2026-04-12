@@ -521,13 +521,22 @@ const CellRenderer = {
             return opts;
         };
 
-        return { renderMarkdown, getMetricClass, getTableCols, getTableOptions };
+        const handleSectionClick = (cell) => {
+            if (cell.options?.collapsed !== undefined) {
+                cell.options.collapsed = !cell.options.collapsed;
+                nextTick(() => {
+                    window.dispatchEvent(new Event('resize'));
+                });
+            }
+        };
+
+        return { renderMarkdown, getMetricClass, getTableCols, getTableOptions, handleSectionClick };
     },
 
     template: `
         <!-- Section -->
         <div v-if="cell.type === 'section'" class="section" :class="{ 'nested-section': level > 0, 'collapsible-section': cell.options?.collapsed !== undefined }" :id="'section-' + cellId">
-            <div v-if="cell.title" class="section-title" :class="{ 'collapsible-header': cell.options?.collapsed !== undefined }" @click="cell.options?.collapsed !== undefined && (cell.options.collapsed = !cell.options.collapsed)">
+            <div v-if="cell.title" class="section-title" :class="{ 'collapsible-header': cell.options?.collapsed !== undefined }" @click="handleSectionClick(cell)">
                 <span>{{ cell.title }}</span>
                 <span v-if="cell.options?.collapsed !== undefined" class="collapse-icon">{{ cell.options?.collapsed ? '▶' : '▼' }}</span>
             </div>
