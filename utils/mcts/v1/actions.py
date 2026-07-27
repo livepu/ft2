@@ -25,7 +25,7 @@ from typing import Optional, List, Dict, Tuple
 
 from .ast_utils import (
     _simplify_ast, _collect_replaceable, _replace_subtree,
-    _parent_map, _walk_nodes,
+    _walk_nodes,
 )
 from .config import ActionConfig
 
@@ -54,15 +54,6 @@ _FUNC_META: Dict[str, Tuple[int, int]] = {
 }
 
 
-def _get_func_name(call: ast.Call) -> Optional[str]:
-    """从 Call 节点提取函数名"""
-    if isinstance(call.func, ast.Name):
-        return call.func.id
-    if isinstance(call.func, ast.Attribute):
-        return call.func.attr
-    return None
-
-
 def _get_func_arity(func_name: str) -> Optional[Tuple[int, int]]:
     """查询函数元数 (n_data_args, n_window_params)"""
     return _FUNC_META.get(func_name.lower())
@@ -82,8 +73,8 @@ def _funcs_with_same_arity(func_name: str,
 def _unary_functions(allowed: set) -> List[str]:
     """找出一元函数（1 数据参数），用于 wrap_function"""
     return [f for f in allowed
-            if _get_func_arity(f) is not None
-            and _get_func_arity(f)[0] == 1]
+            if (meta := _get_func_arity(f)) is not None
+            and meta[0] == 1]
 
 
 # ============================================================
@@ -186,11 +177,13 @@ def change_function(tree: ast.Expression, config: ActionConfig,
     # 50% 概率改 Call，50% 改 BoolOp（如果都有）
     if calls and (not boolops or rng.random() < 0.5):
         target = rng.choice(calls)
-        func_name = target.func.id
+        func_name_node = target.func
+        assert isinstance(func_name_node, ast.Name), "Expected ast.Name for function name"
+        func_name = func_name_node.id
         replacements = _funcs_with_same_arity(func_name, config.allowed_functions)
         if not replacements:
             return None
-        target.func.id = rng.choice(replacements)
+        func_name_node.id = rng.choice(replacements)
     elif boolops:
         target = rng.choice(boolops)
         target.op = ast.Or() if isinstance(target.op, ast.And) else ast.And()
@@ -225,10 +218,13 @@ def wrap_function(tree: ast.Expression, config: ActionConfig,
 
     target = rng.choice(candidates)
     func_name = rng.choice(unary_funcs)
-    n_data, n_window = _get_func_arity(func_name)
+    meta = _get_func_arity(func_name)
+    if meta is None:
+        return None
+    _, n_window = meta
 
     # 构建新的 Call 节点
-    args = [copy.deepcopy(target)]
+    args: list[ast.expr] = [copy.deepcopy(target)]
     if n_window > 0:
         args.append(ast.Constant(value=rng.choice(config.param_windows)))
 
@@ -246,8 +242,8 @@ def wrap_function(tree: ast.Expression, config: ActionConfig,
 # 动作 5: unwrap_function — 去掉外层函数
 # ============================================================
 
-def unwrap_function(tree: ast.Expression, config: ActionConfig,
-                    rng: random.Random) -> Optional[ast.Expression]:
+def unwrap_function(tree: ast.Expression, _config: ActionConfig,
+                    _rng: random.Random) -> Optional[ast.Expression]:
     """去掉最外层的函数调用，暴露其第一个数据参数
 
     如 cs_rank(ts_roc(CLOSE,20)) → ts_roc(CLOSE,20)
@@ -354,7 +350,7 @@ def add_condition(tree: ast.Expression, config: ActionConfig,
 # 动作 7: graft — 嫁接最优池子树
 # ============================================================
 
-def graft(tree: ast.Expression, config: ActionConfig,
+def graft(tree: ast.Expression, _config: ActionConfig,
           rng: random.Random,
           best_pool: List) -> Optional[ast.Expression]:
     """从最优池取子树嫁接到当前树
@@ -423,7 +419,7 @@ def apply_action(action_name: str,
                  tree: ast.Expression,
                  config: ActionConfig,
                  rng: random.Random,
-                 best_pool: List = None) -> Optional[ast.Expression]:
+                 best_pool: Optional[List] = None) -> Optional[ast.Expression]:
     """执行指定动作
 
     Args:
