@@ -354,11 +354,11 @@ class MCTSEngine:
             return False
 
         best_series = self.stats['best_fitness']
-        if len(best_series) < self.config.early_stop_rounds:
+        # 需要至少 2*N 轮历史才能比较"历史最优"和"近期最优"
+        if len(best_series) < self.config.early_stop_rounds * 2:
             return False
 
         recent_best = best_series[-self.config.early_stop_rounds:]
-        # 如果最近 N 轮最优值都没有超过历史最优
         historical_best = max(best_series[:-self.config.early_stop_rounds])
         if max(recent_best) <= historical_best:
             return True

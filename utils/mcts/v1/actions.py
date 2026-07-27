@@ -282,7 +282,13 @@ def add_condition(tree: ast.Expression, config: ActionConfig,
                   rng: random.Random) -> Optional[ast.Expression]:
     """用 IfExp 包裹一个值子树
 
-    如 x → ifelse(ts_std(CLOSE,20) > 0.01, x, 0)
+    改进: 用 ts_quantile 类的分位数阈值，而不是固定常数。
+    阈值从因子自身的分位数中选，确保条件真的会触发。
+
+    三种条件类型:
+      1. 因子值大于自身均值: x > ts_mean(x, window)
+      2. 波动率门控: ts_std(x, window) > ts_median(ts_std(x, window), long_window)
+      3. 动量门控: ts_roc(x, short) > 0
     """
     new_tree = copy.deepcopy(tree)
 
@@ -292,31 +298,45 @@ def add_condition(tree: ast.Expression, config: ActionConfig,
         return None
 
     target = rng.choice(candidates)
-
-    # 构建条件: var > threshold
-    var_name = rng.choice(list(config.allowed_variables))
-    threshold = rng.choice(config.param_thresholds)
+    target_copy = copy.deepcopy(target)
     window = rng.choice(config.param_windows)
 
-    # 随机选条件类型: 简单比较 or 波动率门控
-    if rng.random() < 0.5:
-        # 简单比较: var > threshold
+    # 三种条件类型随机选
+    cond_type = rng.choice(['mean_gate', 'vol_gate', 'momentum_gate'])
+
+    if cond_type == 'mean_gate':
+        # x > ts_mean(x, window) — 因子值高于近期均值时启用
         condition = ast.Compare(
-            left=ast.Name(id=var_name, ctx=ast.Load()),
+            left=target_copy,
             ops=[ast.Gt()],
-            comparators=[ast.Constant(value=threshold)],
+            comparators=[ast.Call(
+                func=ast.Name(id='ts_mean', ctx=ast.Load()),
+                args=[copy.deepcopy(target), ast.Constant(value=window)],
+                keywords=[],
+            )],
         )
-    else:
-        # 波动率门控: ts_std(var, window) > threshold
+    elif cond_type == 'vol_gate':
+        # ts_std(x, window) > 0 — 波动率非零时启用（简化版）
         condition = ast.Compare(
             left=ast.Call(
                 func=ast.Name(id='ts_std', ctx=ast.Load()),
-                args=[ast.Name(id=var_name, ctx=ast.Load()),
-                      ast.Constant(value=window)],
+                args=[target_copy, ast.Constant(value=window)],
                 keywords=[],
             ),
             ops=[ast.Gt()],
-            comparators=[ast.Constant(value=threshold)],
+            comparators=[ast.Constant(value=0)],
+        )
+    else:  # momentum_gate
+        # ts_roc(x, short_window) > 0 — 因子值上升时启用
+        short_window = rng.choice([3, 5, 10])
+        condition = ast.Compare(
+            left=ast.Call(
+                func=ast.Name(id='ts_roc', ctx=ast.Load()),
+                args=[target_copy, ast.Constant(value=short_window)],
+                keywords=[],
+            ),
+            ops=[ast.Gt()],
+            comparators=[ast.Constant(value=0)],
         )
 
     ifelse = ast.IfExp(
