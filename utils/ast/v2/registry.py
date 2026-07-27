@@ -341,19 +341,6 @@ def _register_builtin_macros() -> None:
     register('beta', 'ts_cov(x, y, d) / (ts_std(y, d) ** 2)', 'ts_function',
              data_args=2, param_pool=[20, 60],
              description='Beta系数: Cov(资产,市场) / Var(市场)')
-    register('sharpe', 'ts_mean(x, d) / ts_std(x, d)', 'ts_function',
-             data_args=1, param_pool=[20, 60],
-             description='时序夏普比率: 均值 / 标准差')
-    register('info_ratio', 'ts_mean(x - y, d) / ts_std(x - y, d)', 'ts_function',
-             data_args=2, param_pool=[20, 60],
-             description='信息比率: 超额收益均值 / 跟踪误差')
-    register('ts_deviate', '(x - ts_mean(x, d)) / ts_std(x, d)', 'ts_function',
-             data_args=1, param_pool=[20, 60],
-             description='偏离度: (当前值 - 均值) / 标准差')
-    # ── 量价复合 ──
-    register('vol_price_corr', 'ts_corr(ts_roc(x, d), ts_roc(y, d), d)', 'ts_function',
-             data_args=2, param_pool=[10, 20, 60],
-             description='量价相关: ROC(x) 与 ROC(y) 的相关系数')
 
 
 # ============================================================

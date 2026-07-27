@@ -35,14 +35,14 @@ from utils.ast.v2 import (
 register('my_fn', lambda x, d: ..., category='ts_function', data_args=1, param_pool=[5,10])
 
 # 宏（DSL 字符串，自动编译）
-register('sharpe', 'ts_mean(x,d)/ts_std(x,d)', 'ts_function', data_args=1, param_pool=[20,60])
+register('beta', 'ts_cov(x,y,d)/(ts_std(y,d)**2)', 'ts_function', data_args=2, param_pool=[20,60])
 
 # 变量
 register_variable('MY_VAR', category='自定义', is_prefix=False)
 
 # 注销
 unregister_function('my_fn')
-unregister_macro('sharpe')
+unregister_macro('beta')
 ```
 
 `category` 必须是: `ts_function`, `cs_function`, `math_function`, `ta_function`, `feature_function`。
@@ -66,7 +66,7 @@ unregister_macro('sharpe')
   hv/stddev/var/linearreg/tsf/kama/wma/dema/trima/natr/wilder_smooth
 
 信号: persist(expr,n)
-宏: beta/sharpe/info_ratio/ts_deviate/vol_price_corr
+宏: beta
 ```
 
 ## 注册变量表
@@ -91,7 +91,7 @@ list_macros()         # → {'beta': FunctionSpec, ...}
 macro_to_str('beta')  # → "beta(x,y,d) = ts_cov(x,y,d) / (ts_std(y,d)**2)"
 ```
 
-**内置宏**: beta / sharpe / info_ratio / ts_deviate / vol_price_corr
+**内置宏**: beta
 
 ## 常用 API (dsl.py / spec.py)
 
