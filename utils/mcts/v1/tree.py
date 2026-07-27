@@ -2,55 +2,35 @@
 MCTSTree — MCTS 树管理类
 
 核心职责:
-  1. select()      — 从根按 UCB/贝叶斯增强 UCB 选路到叶节点
-  2. expand()      — 从叶节点生成子节点（变异 + CFG 约束 + 去重）
+  1. select()        — 从根按 UCB/贝叶斯增强 UCB 选路到叶节点
+  2. expand()        — 从叶节点生成子节点（动作 + 约束 + 去重）
   3. backpropagate() — 从叶往根反向传播更新统计
-  4. best_path()   — 回溯最优路径
+  4. best_path()     — 回溯最优路径
 
-选择策略（§4.1）:
+选择策略:
   - standard_ucb  : 标准 UCB1
   - bayesian_ucb  : 贝叶斯增强 UCB（AlphaPROBE，默认推荐）
-  - puct          : PUCT 变体（AlphaCFG，需要策略网络时使用）
+  - puct          : PUCT 变体（AlphaCFG）
 
-依赖:
-  - 复用 v5 tree_gen 变异算子
-  - 复用 v5 ast_utils 工具函数
-  - 复用本地 config.py MutationConfig
+依赖: 本地 actions / ast_utils / config / constraints / dedup
 """
 
 import ast
 import math
 import random
-from typing import Dict, List, Optional, Tuple, Callable
+from typing import Dict, List, Optional
 
 from .node import MCTSNode
 from .constraints import CFGGrammar, SemanticValidator
 from .dedup import SubtreeHasher, FrequentSubtreeMonitor
 
-# 本地模块
-from .mutations import (
-    _mutate_subtree,
-    _mutate_param,
-    _mutate_logic,
-    _mutate_insert_condition,
-)
+from .actions import apply_action, get_available_actions
 from .ast_utils import (
     _simplify_ast,
     _canonicalize_key,
     _expr_str,
-    _replace_subtree,
-    _collect_replaceable,
 )
-from .config import MutationConfig
-
-
-# ── 可用的变异算子 ──
-_MUTATION_OPS = {
-    'subtree': _mutate_subtree,
-    'param': _mutate_param,
-    'logic': _mutate_logic,
-    'condition': _mutate_insert_condition,
-}
+from .config import ActionConfig
 
 
 class MCTSTree:
@@ -199,7 +179,7 @@ class MCTSTree:
     # ─────────────────────────────────────────────
 
     def expand(self, node: MCTSNode,
-               mutation_config: MutationConfig,
+               action_config: ActionConfig,
                n_branches: int = 3,
                max_depth: int = 6,
                cfg: Optional[CFGGrammar] = None,
@@ -211,14 +191,12 @@ class MCTSTree:
         """从叶节点生成 n_branches 个子节点
 
         扩展流程:
-          1. 选择变异策略（从 _MUTATION_OPS 中选取）
-          2. 应用变异 → AST 候选
+          1. 从动作空间中随机选 n_branches 种动作
+          2. 应用动作 → AST 候选
           3. CFG 语法检查 → 过滤无效候选
           4. 语义约束检查 → 过滤冗余表达式
-          5. 深度检查 → 过滤超限候选
-          6. 子树同构去重 → 过滤重复结构
-          7. 频繁子树回避 → 降低拥挤方向权重（不硬拒绝）
-          8. 可选: 嫁接变异
+          5. 子树同构去重 → 过滤重复结构
+          6. 频繁子树回避 → 降低拥挤方向权重
 
         Returns:
           有效子节点列表（可能少于 n_branches）
@@ -229,156 +207,78 @@ class MCTSTree:
         children: List[MCTSNode] = []
         tried_signatures: set = set()
 
-        # 选择变异策略
-        op_names = list(_MUTATION_OPS.keys())
-        rng.shuffle(op_names)
-        selected_ops = op_names[:n_branches]
+        # 获取可用动作列表
+        available = get_available_actions(action_config, enable_graft)
+        if not available:
+            return children
 
-        for op_name in selected_ops:
-            mutate_fn = _MUTATION_OPS[op_name]
+        # 随机选 n_branches 种动作（可重复，因为同一动作在不同位置结果不同）
+        selected_actions = [rng.choice(available) for _ in range(n_branches * 2)]  # 多选一些以防失败
 
+        for action_name in selected_actions:
+            if len(children) >= n_branches:
+                break
+
+            # 应用动作
             try:
-                mutated_tree = mutate_fn(mutation_config, node.tree, max_depth)
+                new_tree = apply_action(
+                    action_name, node.tree, action_config, rng, best_pool,
+                )
             except Exception:
+                continue
+            if new_tree is None:
                 continue
 
             # AST 简化
-            mutated_tree = _simplify_ast(mutated_tree)
+            new_tree = _simplify_ast(new_tree)
 
             # 计算 signature
-            sig = _canonicalize_key(mutated_tree)
+            sig = _canonicalize_key(new_tree)
 
-            # 去重: 跳过已有节点
-            if sig in self.signature_index:
-                continue
-            if sig in tried_signatures:
+            # 去重
+            if sig in self.signature_index or sig in tried_signatures:
                 continue
             tried_signatures.add(sig)
 
             # CFG 语法检查
             if cfg is not None:
-                ok, msg = cfg.is_syntactically_valid(mutated_tree)
+                ok, _ = cfg.is_syntactically_valid(new_tree)
                 if not ok:
                     continue
 
             # 语义约束检查
             if semantic is not None:
-                ok, msg = semantic.check(mutated_tree)
-                if not ok:
-                    continue
-
-            # 频繁子树回避（降低权重但不硬拒绝）
-            if subtree_monitor is not None:
-                hasher = SubtreeHasher()
-                full_hash = hasher.compute_full_tree(mutated_tree)
-                if subtree_monitor.is_frequent(full_hash):
-                    avoid_weight = subtree_monitor.get_avoidance_weight(full_hash)
-                    if rng.random() > avoid_weight:
-                        continue  # 概率性拒绝
-
-            # 创建子节点
-            child = MCTSNode(
-                expression=_expr_str(mutated_tree),
-                tree=mutated_tree,
-                parent=node,
-                depth=node.depth + 1,
-                generation=self.total_evaluations + len(children) + 1,
-                expression_str=_expr_str(mutated_tree),
-                signature=sig,
-                edge=op_name,
-            )
-
-            # 注册索引
-            self.all_nodes[sig] = child
-            self.signature_index[sig] = child
-            node.children.append(child)
-            children.append(child)
-
-        # 可选: 嫁接变异（从最优池摘取子树）
-        if enable_graft and best_pool and len(best_pool) > 1 and len(children) < n_branches:
-            graft_child = self._graft_mutation(
-                node, best_pool, mutation_config,
-                cfg=cfg, semantic=semantic, rng=rng,
-            )
-            if graft_child is not None:
-                children.append(graft_child)
-
-        return children
-
-    def _graft_mutation(self, node: MCTSNode, best_pool: List[MCTSNode],
-                        cfg_config: MutationConfig,
-                        cfg: Optional[CFGGrammar] = None,
-                        semantic: Optional[SemanticValidator] = None,
-                        max_tries: int = 5,
-                        rng: Optional[random.Random] = None) -> Optional[MCTSNode]:
-        """嫁接变异: 从全局最优池取子树嫁接到当前节点
-
-        这是 MCTS 下对"交叉"的最优替代：
-          - GP 交叉: 两个个体的子树随机交换
-          - MCTS 嫁接: 最优池的子树 → 当前路径的叶节点
-        """
-        if rng is None:
-            rng = random.Random()
-
-        for _ in range(max_tries):
-            donor = rng.choice(best_pool)
-            if donor is node or donor.tree is None:
-                continue
-
-            # 从当前节点收集可替换位置
-            replaceable = _collect_replaceable(node.tree, mode='any')
-            if not replaceable:
-                continue
-            graft_point = rng.choice(replaceable)
-
-            # 从捐赠者收集可摘取的子树
-            donor_replaceable = _collect_replaceable(donor.tree, mode='any')
-            if not donor_replaceable:
-                continue
-            donor_subtree = rng.choice(donor_replaceable)
-
-            # 执行替换
-            try:
-                new_tree = node.tree
-                ok = _replace_subtree(new_tree, graft_point, donor_subtree)
-                if not ok:
-                    continue
-                new_tree = _simplify_ast(new_tree)
-            except Exception:
-                continue
-
-            # 计算签名并去重
-            sig = _canonicalize_key(new_tree)
-            if sig in self.signature_index:
-                continue
-
-            # 约束检查
-            if cfg is not None:
-                ok, _ = cfg.is_syntactically_valid(new_tree)
-                if not ok:
-                    continue
-            if semantic is not None:
                 ok, _ = semantic.check(new_tree)
                 if not ok:
                     continue
 
+            # 频繁子树回避
+            if subtree_monitor is not None:
+                hasher = SubtreeHasher()
+                full_hash = hasher.compute_full_tree(new_tree)
+                if subtree_monitor.is_frequent(full_hash):
+                    avoid_weight = subtree_monitor.get_avoidance_weight(full_hash)
+                    if rng.random() > avoid_weight:
+                        continue
+
+            # 创建子节点
             child = MCTSNode(
                 expression=_expr_str(new_tree),
                 tree=new_tree,
                 parent=node,
                 depth=node.depth + 1,
-                generation=self.total_evaluations + 1,
+                generation=self.total_evaluations + len(children) + 1,
                 expression_str=_expr_str(new_tree),
                 signature=sig,
-                edge=f'graft_from_{donor.signature[:8]}',
+                edge=action_name,
             )
 
             self.all_nodes[sig] = child
             self.signature_index[sig] = child
             node.children.append(child)
-            return child
+            children.append(child)
 
-        return None
+        return children
 
     # ─────────────────────────────────────────────
     # Step 4: Backpropagation

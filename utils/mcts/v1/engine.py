@@ -10,11 +10,11 @@ MCTSEngine — MCTS 因子搜索引擎主循环
 定位:
   - 不是 GP（无种群/交叉/选择），是树搜索
   - 适合深挖掘（对已有种子深度优化），不适合从零宽探索
-  - LLM-free: 核心循环不依赖 LLM，变异由本地规则算子完成
+  - LLM-free: 核心循环不依赖 LLM，动作由本地规则算子完成
   - 零外部依赖: 完全独立于 v5/gp，自包含
 
 依赖:
-  - 本地 mutations.py（自包含树生成+变异）
+  - 本地 actions.py（7 种因子动作）
   - 外部 evaluator + fitness_calculator（调用方注入）
 """
 
@@ -30,7 +30,7 @@ from .constraints import CFGGrammar, SemanticValidator
 from .dedup import FrequentSubtreeMonitor
 
 # 本地模块
-from .config import MutationConfig
+from .config import ActionConfig
 from .cache import SimpleFitnessCache
 
 
@@ -96,7 +96,7 @@ class MCTSEngine:
                  fitness_calculator: Any,
                  data: Dict[str, Any],
                  seed_expressions: List[str],
-                 mutation_config: Optional[MutationConfig] = None,
+                 action_config: Optional[ActionConfig] = None,
                  config: Optional[MCTSConfig] = None,
                  source: str = 'mcts_v1'):
         """
@@ -105,7 +105,7 @@ class MCTSEngine:
           fitness_calculator: 计算因子 fitness 的对象，需有 .compute() 方法
           data: 市场数据（OHLCV 等）
           seed_expressions: 种子因子表达式列表
-          mutation_config: MutationConfig（控制变异空间，默认使用内置配置）
+          action_config: ActionConfig（控制动作空间，默认使用内置配置）
           config: MCTS 引擎配置
           source: 来源标识
         """
@@ -116,16 +116,17 @@ class MCTSEngine:
         self.config = config or MCTSConfig()
         self.rng = random.Random(self.config.random_seed)
 
-        # MutationConfig
-        if mutation_config is None:
-            self.mutation_config = MutationConfig()
-            self.mutation_config.rng = random.Random(self.config.random_seed)
+        # ActionConfig
+        if action_config is None:
+            self.action_config = ActionConfig()
+            self.action_config.rng = random.Random(self.config.random_seed)
         else:
-            self.mutation_config = mutation_config
+            self.action_config = action_config
 
         # 约束组件
         self.cfg_grammar = CFGGrammar(
-            allowed_functions=self.mutation_config.func_allowlist
+            allowed_functions=self.action_config.func_allowlist
+            if hasattr(self.action_config, 'func_allowlist') else None
         ) if self.config.enable_cfg else None
 
         self.semantic_validator = SemanticValidator(
@@ -191,7 +192,7 @@ class MCTSEngine:
             # Step 2: Expansion
             children = tree.expand(
                 leaf,
-                mutation_config=self.mutation_config,
+                action_config=self.action_config,
                 n_branches=self.config.n_branches,
                 max_depth=self.config.max_depth,
                 cfg=self.cfg_grammar,
