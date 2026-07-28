@@ -57,7 +57,9 @@ class MCTSConfig:
     enable_subtree_avoid: bool = True       # 启用频繁子树回避
     freq_subtree_threshold: int = 5         # 频繁子树阈值
     enable_graft: bool = False              # 启用嫁接变异
-    enable_similarity_discount: bool = True  # AlphaCFG: 结构相似度折扣（防同类堆积）
+    enable_similarity_discount: bool = False  # AlphaCFG: 谨慎开启，伤浅层结构
+    enable_diverse_pool: bool = True           # 最优池结构去重（每签名只保留最优）
+    best_pool_size: int = 20                   # 最优池容量
 
     # ── 评估 ──
     fitness_mode: str = 'ic'                # ic | sharpe | gt_score
@@ -297,8 +299,10 @@ class MCTSEngine:
             # 计算 fitness
             fitness = self.fitness_calculator.compute(output)
 
-            # AlphaCFG: 结构相似度折扣（最优池≥3后才生效，防同类堆积）
-            if self.config.enable_similarity_discount and len(self.best_pool) >= 3:
+            # AlphaCFG: 结构相似度折扣（池≥10且深度≥3后才生效）
+            if (self.config.enable_similarity_discount
+                and len(self.best_pool) >= 10
+                and node.depth >= 3):
                 discount = self._compute_similarity_discount(node)
                 fitness = fitness * discount
 
@@ -350,19 +354,58 @@ class MCTSEngine:
             except Exception:
                 continue
 
+        # 相似度 < 80% → 不扣；相似度 ≥ 80% → 轻度扣分
+        if max_sim < 0.8:
+            return 1.0
         discount = 1.0 - alpha * max_sim
-        return max(discount, 0.3)
+        return max(discount, 0.5)
 
     def _update_best_pool(self, node: MCTSNode):
-        """更新全局最优池（保留 top-20）"""
+        """更新全局最优池（保留 top-N，可选结构多样性过滤）"""
         if not node.is_evaluated or node.fitness <= -999:
             return
 
+        if self.config.enable_diverse_pool:
+            # 结构签名去重：同签名只保留最高 fitness
+            sig = self._structural_signature(node)
+            for existing in self.best_pool:
+                if self._structural_signature(existing) == sig:
+                    if node.fitness > existing.fitness:
+                        self.best_pool.remove(existing)
+                        self.best_pool.append(node)
+                    return  # 已有同签名且 fitness 更高 → 不加入
+
         self.best_pool.append(node)
-        # 按 fitness 降序排序并保留 top-20
+        # 按 fitness 降序排序并保留 top-N
         self.best_pool.sort(key=lambda n: n.fitness, reverse=True)
-        if len(self.best_pool) > 20:
-            self.best_pool = self.best_pool[:20]
+        if len(self.best_pool) > self.config.best_pool_size:
+            self.best_pool = self.best_pool[:self.config.best_pool_size]
+
+    def _structural_signature(self, node: MCTSNode) -> str:
+        """提取结构签名：内层调用链（跳过外层等价包装）
+
+        例如:
+          cs_rank(ts_rank(ts_delta(ts_rank(cs_zscore(CLOSE),60),20),10))
+          签名 = ts_delta(ts_rank(cs_zscore),20)  ← 核心变换链
+
+        cs_rank/abs/sign/cs_zscore/cs_scale 等单调变换不改变排序，
+        视为"等价包装"跳过。
+        """
+        import ast as _ast
+
+        from .dedup import SubtreeHasher
+        hasher = SubtreeHasher()
+
+        _cosmetic_wraps = {'cs_rank', 'cs_zscore', 'cs_scale', 'abs', 'log', 'sign'}
+
+        tree = node.tree
+        while (isinstance(tree, (_ast.Call, getattr(_ast, 'Call', type(None))))
+               and hasattr(tree, 'func')
+               and hasattr(tree.func, 'id')
+               and tree.func.id in _cosmetic_wraps):
+            tree = tree.args[0]
+
+        return hasher.compute_full_tree(tree)
 
         # 更新全局最优
         if self.global_best is None or node.fitness > self.global_best.fitness:

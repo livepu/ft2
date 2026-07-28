@@ -44,6 +44,8 @@ _FUNC_META: Dict[str, Tuple[int, int]] = {
     'ts_max': (1, 1), 'ts_min': (1, 1), 'ts_skew': (1, 1),
     'ts_kurt': (1, 1), 'ts_mad': (1, 1), 'ts_ema': (1, 1),
     'ts_wma': (1, 1), 'ts_delay': (1, 1),
+    'tsf': (1, 1), 'ts_predict': (1, 1), 'linearreg': (1, 1),
+    'ts_intercept': (1, 1), 'ts_resid': (1, 1),
     # 时序成对（2 数据 + 1 窗口）
     'ts_cov': (2, 1), 'ts_corr': (2, 1),
     # 截面（1 数据，无窗口）
@@ -51,6 +53,7 @@ _FUNC_META: Dict[str, Tuple[int, int]] = {
     # 数学（1 数据，无窗口）
     'abs': (1, 0), 'log': (1, 0), 'sign': (1, 0),
     'sqrt': (1, 0), 'square': (1, 0), 'cube': (1, 0),
+    'neg': (1, 0),
 }
 
 
