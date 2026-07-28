@@ -57,6 +57,7 @@ class MCTSConfig:
     enable_subtree_avoid: bool = True       # 启用频繁子树回避
     freq_subtree_threshold: int = 5         # 频繁子树阈值
     enable_graft: bool = False              # 启用嫁接变异
+    enable_similarity_discount: bool = True  # AlphaCFG: 结构相似度折扣（防同类堆积）
 
     # ── 评估 ──
     fitness_mode: str = 'ic'                # ic | sharpe | gt_score
@@ -182,8 +183,11 @@ class MCTSEngine:
         for i in range(self.config.n_iterations):
             self.iteration = i
 
-            # 轮询选择一棵树
-            tree = self.trees[i % len(self.trees)]
+            # 出度感知树选择（AlphaPROBE: 被探索多的树退避，让其他树有机会发展）
+            outdegrees = [t.root.outdegree for t in self.trees]
+            max_od = max(outdegrees) if outdegrees else 1
+            weights = [max_od - od + 1 for od in outdegrees]  # 低出度→高权重
+            tree = self.rng.choices(self.trees, weights=weights, k=1)[0]
 
             # Step 1: Selection
             leaf = tree.select(
@@ -293,6 +297,11 @@ class MCTSEngine:
             # 计算 fitness
             fitness = self.fitness_calculator.compute(output)
 
+            # AlphaCFG: 结构相似度折扣（最优池≥3后才生效，防同类堆积）
+            if self.config.enable_similarity_discount and len(self.best_pool) >= 3:
+                discount = self._compute_similarity_discount(node)
+                fitness = fitness * discount
+
             # 写缓存
             if self.cache is not None and node.signature:
                 depth = node.depth
@@ -309,9 +318,40 @@ class MCTSEngine:
             # 评估失败 → 返回极低 fitness
             return -999.0
 
-    # ─────────────────────────────────────────────
-    # 结果管理
-    # ─────────────────────────────────────────────
+    def _compute_similarity_discount(self, node: MCTSNode,
+                                      alpha: float = 0.5) -> float:
+        """AlphaCFG 结构相似度折扣
+
+        仅在最优池有足够多样性后生效（≥3个不同结构），
+        防止探索初期就被扣分压制。
+
+        Returns:
+          折扣系数 ∈ [0.3, 1.0]。
+        """
+        if len(self.best_pool) < 3:
+            return 1.0  # 最优池太小，不扣
+
+        from .dedup import SubtreeHasher
+        hasher = SubtreeHasher()
+        node_hashes = set(hasher.extract_all_subtrees(node.tree))
+        if not node_hashes:
+            return 1.0
+
+        max_sim = 0.0
+        for best_node in self.best_pool[:5]:  # Top-5 冠军
+            try:
+                best_hashes = set(hasher.extract_all_subtrees(best_node.tree))
+                if not best_hashes:
+                    continue
+                intersection = node_hashes & best_hashes
+                union = node_hashes | best_hashes
+                sim = len(intersection) / len(union)
+                max_sim = max(max_sim, sim)
+            except Exception:
+                continue
+
+        discount = 1.0 - alpha * max_sim
+        return max(discount, 0.3)
 
     def _update_best_pool(self, node: MCTSNode):
         """更新全局最优池（保留 top-20）"""

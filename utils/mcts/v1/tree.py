@@ -252,7 +252,7 @@ class MCTSTree:
                 if not ok:
                     continue
 
-            # 频繁子树回避
+            # 频繁子树回避（AlphaJungle FSA）
             if subtree_monitor is not None:
                 hasher = SubtreeHasher()
                 full_hash = hasher.compute_full_tree(new_tree)
