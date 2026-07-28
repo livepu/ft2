@@ -1,28 +1,22 @@
 """
-utils/ast/v21/dsl.py — 语法层 (编译缓存优化版)
+utils/ast/v21/dsl.py — 语法层
 =============================================================================
 
-v21 核心优化: 编译缓存求值 (方案A)
-  1. _ast_to_expr()     — AST → Python 表达式字符串 (运算符用函数名替换)
-  2. _compile_expression() — 编译表达式为可调用 lambda 并缓存
-  3. evaluate()         — 优先走编译缓存, 回退到 _eval_node_fallback
-  4. compile_expression() — [新增] 公开 API, 直接返回编译后的可调用函数
+求值路径:
+  evaluate(tree, data)  → _eval_node_fallback(tree.body, data)   [与 v2 等价]
+  eval_colwise(...)      → 预编译表达式 → compiled_fn 逐列调用   [v21 优化]
+  compile_expression(s)  → 返回 compiled_fn, 供 GP 引擎外层编译  [v21 新增]
 
-evaluate() 调用路径:
-  evaluate(tree, data)
-    ├─ 路径A (编译缓存): get_expr_str(tree) → _EXPR_CACHE → lambda(data)
-    └─ 路径B (递归回退): _eval_node_fallback(tree.body, data)
+编译缓存:
+  仅用于 eval_colwise (面板求值) 和 compile_expression (公开 API)。
+  evaluate() 单次调用不使用编译缓存 — ast.unparse 开销 (14us) > 编译收益 (~4us)。
 
-在四层架构中的位置: 第1层(语法) — 定义"能写什么"
-  安全校验: 无变化 (复用 v2 的 parse_expression + 白名单/黑名单)
-
-[新增] 2026-07-28 v21: 编译缓存求值, 预期 5-10x 加速
+安全校验: 无变化 (复用 v2 的 parse_expression + 白名单/黑名单)
 """
 import ast
 import operator
-import functools
 import numpy as np
-from typing import Dict, Any, Union, Callable
+from typing import Dict, Any, Callable, Optional
 
 from .registry import (
     FUNC_REGISTRY, SAFE_CONSTANTS,
@@ -114,9 +108,9 @@ _FORBIDDEN_TYPES = {
 if hasattr(ast, 'Match'):
     _FORBIDDEN_TYPES.add(ast.Match)
 
-# Python 3.12 之前有 Exec
-if hasattr(ast, 'Exec'):
-    _FORBIDDEN_TYPES.add(ast.Exec)
+# [废弃] Python 3.8+ 已移除 ast.Exec, 仅保留注释供参考
+# if hasattr(ast, 'Exec'):
+#     _FORBIDDEN_TYPES.add(ast.Exec)
 
 FORBIDDEN_NODE_TYPES = frozenset(_FORBIDDEN_TYPES)
 
@@ -480,15 +474,11 @@ def compile_expression(expr_str: str) -> Callable:
 
 def evaluate(tree: ast.Expression,
              data: Dict[str, np.ndarray]) -> np.ndarray:
-    """[v21] 求值 AST 表达式 (编译缓存优先)
+    """求值 AST 表达式
 
-    路径A (编译缓存):
-      1. ast.unparse(tree) 获取表达式字符串
-      2. _EXPR_CACHE 命中 → 直接调用 lambda(data)
-      3. 未命中 → _compile_expression() 编译并缓存
-
-    路径B (递归回退):
-      当 ast.unparse 失败时 (罕见情况), 回退到 _eval_node_fallback
+    直接调用 _eval_node_fallback 递归求值，保持与 v2 一致。
+    编译缓存路径通过 compile_expression() 公开发用,
+    eval_colwise 内部自动使用预编译模式。
 
     Args:
         tree: parse_expression() 返回的 AST
@@ -499,14 +489,7 @@ def evaluate(tree: ast.Expression,
     Returns:
         np.ndarray，形状与数据长度一致
     """
-    try:
-        # 路径A: 编译缓存
-        expr_str = ast.unparse(tree)
-        compiled = _compile_expression(expr_str)
-        return compiled(data)
-    except Exception:
-        # 路径B: 递归回退 (安全网)
-        return _eval_node_fallback(tree.body, data)
+    return _eval_node_fallback(tree.body, data)
 
 
 def _eval_node_fallback(node: ast.AST, data: Dict[str, np.ndarray]) -> np.ndarray:
@@ -655,7 +638,7 @@ def get_functions(tree: ast.Expression) -> list:
     return sorted(funcs)
 
 
-def validate_expression(expr_str: str, available_vars: list = None) -> dict:
+def validate_expression(expr_str: str, available_vars: Optional[list] = None) -> dict:
     """LLM 前置校验: 表达式语法 + 变量存在性
 
     不依赖数据求值, 只做 parse + 变量对比。
@@ -702,6 +685,11 @@ def eval_colwise(tree: ast.Expression, data: Dict[str, np.ndarray],
       _rolling / _expanding / _persist 只处理 1D 数组,
       因此 2D 面板必须逐列调用 evaluate()。
 
+    [v21] 编译缓存优化:
+      表达式只解析一次 (ast.unparse + _compile_expression),
+      逐列循环中直接调用 compiled_fn(col_data), 避免每列 15us 的 unparse 开销。
+      编译失败时自动回退到 evaluate() 路径。
+
     Args:
         strict: False=静默返回NaN (批量回测/搜索模式),
                 True=异常立即抛出 (调试模式, 带列号定位)
@@ -715,7 +703,17 @@ def eval_colwise(tree: ast.Expression, data: Dict[str, np.ndarray],
              _cs_rank_core 只跳 NaN 不跳 inf, 需在此归一化。
            - 原实现 nan_to_num(nan=0.0) 把冷启动 NaN 误转为 0,
              被 cross_sectional_rank 当真实值排名, 产生假信号 (P0-1)。
+    [优化] 2026-07-28 v21: 预编译表达式, 逐列直接调用 compiled_fn, 避免重复 unparse
     """
+    # [v21] 预编译表达式: 只 unparse + compile 一次, 逐列复用
+    compiled_fn = None
+    try:
+        expr_str = ast.unparse(tree)
+        compiled_fn = _compile_expression(expr_str)
+    except Exception:
+        # 编译失败 (如含不支持节点), 回退到 evaluate() 逐列路径
+        pass
+
     result = np.full((T, N), np.nan)
     for j in range(N):
         col_data = {}
@@ -725,7 +723,10 @@ def eval_colwise(tree: ast.Expression, data: Dict[str, np.ndarray],
             else:
                 col_data[k] = v
         try:
-            col_result = evaluate(tree, col_data)
+            if compiled_fn is not None:
+                col_result = compiled_fn(col_data)
+            else:
+                col_result = evaluate(tree, col_data)
             if isinstance(col_result, np.ndarray):
                 result[:, j] = col_result[:T].ravel()
             elif isinstance(col_result, (int, float, np.integer, np.floating)):

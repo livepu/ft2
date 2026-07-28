@@ -23,7 +23,7 @@ utils/ast/v21/resolver.py — 编排层 (公共基础设施)
 import ast
 import copy
 import numpy as np
-from typing import Dict, Set, Optional
+from typing import Dict, Set
 
 from .registry import FUNC_REGISTRY
 from .dsl import normalize_data_keys, evaluate, eval_colwise, cross_sectional_rank
@@ -38,7 +38,7 @@ def _is_cs_function(name: str) -> bool:
 
 def _get_cs_functions() -> Set[str]:
     """[新增] 2026-06-22 获取当前所有 cs_* 函数名 (调试用)"""
-    return {name for name in FUNC_REGISTRY if name.startswith('cs_')}
+    return {name for name in FUNC_REGISTRY if name.startswith('cs_')}  # noqa: unused, debug utility
 
 
 # ============================================================
@@ -84,7 +84,7 @@ class CsResolver:
         # Step 0: 剥离外层 cs_rank (resolve 返回值总是截面排名, 外层 cs_rank 冗余)
         is_outer_cs_rank = _is_outer_cs_rank_call(tree)
         if is_outer_cs_rank:
-            work_tree = ast.Expression(body=tree.body.args[0])
+            work_tree = ast.Expression(body=tree.body.args[0])  # type: ignore[attr-defined]
         else:
             work_tree = tree
 
@@ -128,7 +128,7 @@ class CsResolver:
           3. 注入为预计算变量
           4. 返回 Name 节点替换原 Call 节点
         """
-        func_name = node.func.id
+        func_name = node.func.id  # type: ignore[attr-defined]
         inner_tree = ast.Expression(body=node.args[0])
 
         # 逐列求值内部表达式 (时序函数需要 1D)
@@ -169,7 +169,7 @@ class _CSVisitor(ast.NodeTransformer):
 
     def visit_Call(self, node: ast.Call):
         # 1. Bottom-up: 先处理所有子节点
-        node = self.generic_visit(node)
+        node = self.generic_visit(node)  # type: ignore[assignment]
 
         # 2. 检查当前节点是否为截面函数
         if not (isinstance(node.func, ast.Name)

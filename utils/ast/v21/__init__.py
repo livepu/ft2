@@ -1,44 +1,33 @@
 """
-utils/ast/v21 — 公共 AST 基础设施 (编译缓存优化版)
+utils/ast/v21 — 公共 AST 基础设施
 ═══════════════════════════════════════════════════════════════
 v21 vs v2 核心差异:
-  1. evaluate() 改用编译缓存: AST → compiled lambda → lru_cache
-     避免递归 _eval_node 的 isinstance 开销, 预期 5-10x 加速
-  2. 新增 compile_expression() 公开 API: 直接返回可调用函数
-  3. 新增 _compile_expression() 内部编译, 同 v2 安全校验不变
-  4. 向后兼容: 旧 evaluate() 保留为 _eval_node_fallback
+  1. eval_colwise() 预编译表达式, 逐列直接调用 compiled_fn
+     节省每列 14us 的 ast.unparse 开销, 面板级 1.1-1.4x 加速
+  2. 新增 compile_expression() 公开 API: 编译表达式为可调用函数
+     供 GP 引擎外层编译一次, 内层 O(1) 调用
+  3. evaluate() 与 v2 等价: 直接 _eval_node_fallback 递归求值
+     编译管道仅用于 eval_colwise 和 compile_expression
 ═══════════════════════════════════════════════════════════════
 
-架构 (5 个实质文件):
+架构 (5 个文件, 自底向上):
 
-  1. 语法层  (dsl.py)        → 定义"能写什么"
-     parse_expression()    — Python AST 解析 (白名单/黑名单安全校验)
-     evaluate()            — 编译缓存求值 (优先) / 递归求值 (回退)
-     compile_expression()  — [新增] 编译 AST 为可调用函数
-     eval_colwise()        — 面板逐列求值 (2D 安全)
-     cross_sectional_rank()— 截面排名 0~1
-     normalize_data_keys() — 数据键 ALL_CAPS 规范化
+  底层 — 注册 + 原语
+    registry.py    注册表 (FunctionSpec, FUNC_REGISTRY, 宏引擎, 变量注册)
+    functions.py   函数原语 (92 时序/截面/数学/特征函数, 23 numba core)
 
-  2. 原语+变量层  (functions.py)  → 定义"能算什么"+"能引用什么"
-     FUNC_REGISTRY          — 92 时序/截面/数学/特征函数
-     FunctionSpec           — 函数元数据 (category/data_args/param_pool/param_ranges)
-     ParamRange             — 参数值域约束 (dtype/min/max/pool)
-     FUNC_CATEGORIES        — 按类别索引
-     VALID_VAR_PREFIXES     — 70+ 合法变量前缀
-     VAR_CATEGORIES         — 按类别索引
+  中层 — 语法 + 编排
+    dsl.py         语法层 (parse/evaluate/eval_colwise + 编译缓存)
+    resolver.py    编排层 (CsResolver: cs_* 函数嵌套解算)
 
-  3. 编排层  (resolver.py)   → 截面函数嵌套解算
-     CsResolver.resolve()   — 单遍 bottom-up AST 变换
-     自动发现 cs_* 前缀函数, 处理任意深度嵌套/组合
+  顶层 — 规格 + 构建
+    spec.py        AstExpression 基类 + 构建器 + LLM 语法规格
 
-  4. 规格层  (spec.py)       → AST 构建+表达式基类
-     AstExpression          — DSL 表达式基类 (解析+自省)
-     make_var/make_call/... — 类型安全 AST 节点构建器 (供 GP 引擎)
-     normalize_expression() — 表达式规范化
-     describe_expression()  — 表达式结构化描述 (供 LLM)
-     grammar_spec_for_llm() — 语法规格 (供 LLM prompt)
-
-  依赖方向: 语法 ← 原语+变量 ← 编排 ← 规格
+  依赖方向 (无循环):
+    registry ← functions       (注册表单向依赖原语)
+    dsl ← registry             (语法层依赖注册表)
+    resolver ← dsl + registry   (编排层依赖语法 + 注册)
+    spec ← dsl + registry + resolver  (规格层消费所有下层)
 ═══════════════════════════════════════════════════════════════
 
 命名约定 (对齐 WQ101 行业标准):
@@ -46,8 +35,6 @@ v21 vs v2 核心差异:
   函数:   prefix_snake      ts_roc, cs_rank, expanding_std
   窗口:   参数名 d (day)      ts_mean(x, d)
   统计:   样本 ddof=1         ts_std, ts_skew, cs_zscore
-
-[新增] 2026-07-28 v21: 编译缓存求值, 递归 _eval_node 保留为回退
 """
 
 # ── 语法层 (dsl.py) ──
@@ -58,9 +45,8 @@ from .dsl import (
     eval_colwise, cross_sectional_rank,
     ast_depth, ast_node_count, walk_nodes,
     DSLSecurityError, DSLSyntaxError,
-    # [v21] 编译缓存求值
-    compile_expression, _compile_expression,
-    _ast_to_expr, _eval_node_fallback,
+    # [v21] 公开 API
+    compile_expression,
 )
 
 # ── 注册层 (registry.py) ──
@@ -108,9 +94,8 @@ __all__ = [
     'eval_colwise', 'cross_sectional_rank',
     'ast_depth', 'ast_node_count', 'walk_nodes',
     'DSLSecurityError', 'DSLSyntaxError',
-    # [v21] 编译缓存求值
-    'compile_expression', '_compile_expression', '_ast_to_expr',
-    '_eval_node_fallback',
+    # [v21] 公开 API
+    'compile_expression',
 
     # base — AST 表达式基类
     'AstExpression',

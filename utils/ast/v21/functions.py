@@ -1453,7 +1453,7 @@ def cs_quantile(x, q=0.5, interpolation='linear'):
     n_rows, n_cols = x.shape
     out = np.full((n_rows, n_cols), np.nan)
     for i in range(n_rows):
-        q_val = np.nanquantile(x[i], q, method=interpolation)
+        q_val = np.nanquantile(x[i], q, method=interpolation)  # type: ignore[call-overload]
         out[i, :] = q_val
     return out
 
@@ -1625,7 +1625,7 @@ def _feature_bbwidth(close: np.ndarray, period: int = 20) -> np.ndarray:
     [修复] 2026-07-09 NaN 透传, 对齐 WQ 规范: talib 在停牌/冷启动返回 NaN, 不应被填 0
            伪装成"最窄布林带"; middle 为 NaN 或 <=0 时返回 NaN (NaN=缺失, 不参与截面排名)."""
     c = np.asarray(close, float)
-    upper, middle, lower = talib.BBANDS(c, timeperiod=period, nbdevup=2, nbdevdn=2, matype=0)
+    upper, middle, lower = talib.BBANDS(c, timeperiod=period, nbdevup=2, nbdevdn=2, matype=0)  # type: ignore[arg-type]
     # [修复] 2026-07-09 middle NaN/<=0 → NaN (WQ: 缺失不排名); errstate 抑制 0 除警告
     with np.errstate(invalid='ignore', divide='ignore'):
         return np.where(middle > 0, (upper - lower) / middle, np.nan)
