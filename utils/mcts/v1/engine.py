@@ -99,7 +99,7 @@ class MCTSEngine:
     """
 
     def __init__(self,
-                 evaluator: Callable[[Dict, Any, Any], Any],
+                 evaluator: Callable[[Any, Any], Any],
                  fitness_calculator: Any,
                  data: Dict[str, Any],
                  seed_expressions: List[str],
@@ -132,8 +132,7 @@ class MCTSEngine:
 
         # 约束组件
         self.cfg_grammar = CFGGrammar(
-            allowed_functions=self.action_config.func_allowlist
-            if hasattr(self.action_config, 'func_allowlist') else None
+            allowed_functions=self.action_config.allowed_functions
         ) if self.config.enable_cfg else None
 
         self.semantic_validator = SemanticValidator(
@@ -398,11 +397,11 @@ class MCTSEngine:
 
         _cosmetic_wraps = {'cs_rank', 'cs_zscore', 'cs_scale', 'abs', 'log', 'sign'}
 
-        tree = node.tree
-        while (isinstance(tree, (_ast.Call, getattr(_ast, 'Call', type(None))))
-               and hasattr(tree, 'func')
-               and hasattr(tree.func, 'id')
-               and tree.func.id in _cosmetic_wraps):
+        tree = node.tree.body
+        while isinstance(tree, _ast.Call):
+            func_name = tree.func.id if isinstance(tree.func, _ast.Name) else ''
+            if func_name not in _cosmetic_wraps:
+                break
             tree = tree.args[0]
 
         return hasher.compute_full_tree(tree)
