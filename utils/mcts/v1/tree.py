@@ -45,7 +45,7 @@ class MCTSTree:
     def __init__(self, root_expression: str):
         """
         Args:
-          root_expression: 根因子表达式字符串
+          root_expression: 根表达式字符串
         """
         root_tree = self._parse_expression(root_expression)
         self.root = MCTSNode(
@@ -381,7 +381,7 @@ class MCTSTree:
 
     @staticmethod
     def _parse_expression(expr_str: str) -> ast.Expression:
-        """解析因子表达式字符串为 AST"""
+        """解析表达式字符串为 AST"""
         tree = ast.parse(expr_str.strip(), mode='eval')
         if not isinstance(tree, ast.Expression):
             raise ValueError(f"无法解析表达式: {expr_str}")

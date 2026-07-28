@@ -1,5 +1,5 @@
 """
-MCTSEngine — MCTS 因子搜索引擎主循环
+MCTSEngine — MCTS 树搜索主循环
 
 流程（每轮迭代）:
   1. Selection   : tree.select() → 选择最优叶节点
@@ -11,10 +11,11 @@ MCTSEngine — MCTS 因子搜索引擎主循环
   - 不是 GP（无种群/交叉/选择），是树搜索
   - 适合深挖掘（对已有种子深度优化），不适合从零宽探索
   - LLM-free: 核心循环不依赖 LLM，动作由本地规则算子完成
-  - 零外部依赖: 完全独立于 v5/gp，自包含
+  - 零外部依赖: 完全独立于 gp/v5/v6 和 factor/v5，自包含
+  - 评估逻辑通过外部注入 (evaluator + fitness_calculator)
 
 依赖:
-  - 本地 actions.py（7 种因子动作）
+  - 本地 actions.py（7 种 AST 搜索动作）
   - 外部 evaluator + fitness_calculator（调用方注入）
 """
 
@@ -77,7 +78,10 @@ class MCTSConfig:
 
 
 class MCTSEngine:
-    """MCTS 因子搜索引擎
+    """MCTS 树搜索引擎
+
+    领域无关的纯搜索算法。评估通过外部注入的 evaluator +
+    fitness_calculator 完成，可直接适配因子/择时等不同场景。
 
     用法:
       engine = MCTSEngine(
@@ -102,9 +106,9 @@ class MCTSEngine:
         """
         Args:
           evaluator: (data, tree) → factor_values 的函数
-          fitness_calculator: 计算因子 fitness 的对象，需有 .compute() 方法
+          fitness_calculator: 计算 fitness 的对象，需有 .compute() 方法
           data: 市场数据（OHLCV 等）
-          seed_expressions: 种子因子表达式列表
+          seed_expressions: 种子表达式列表
           action_config: ActionConfig（控制动作空间，默认使用内置配置）
           config: MCTS 引擎配置
           source: 来源标识
@@ -270,8 +274,8 @@ class MCTSEngine:
 
         流程:
           1. 查缓存（如有）
-          2. evaluator(data, tree) → 因子值面板
-          3. fitness_calculator.compute(面板) → fitness
+          2. evaluator(data, tree) → 计算输出
+          3. fitness_calculator.compute(output) → fitness
           4. 可选 GT-Score
           5. 写缓存
         """
@@ -283,11 +287,11 @@ class MCTSEngine:
                 return cached[0]
 
         try:
-            # 执行因子计算
-            factor_values = self.evaluator(self.data, node.tree)
+            # 执行表达式求值
+            output = self.evaluator(self.data, node.tree)
 
             # 计算 fitness
-            fitness = self.fitness_calculator.compute(factor_values)
+            fitness = self.fitness_calculator.compute(output)
 
             # 写缓存
             if self.cache is not None and node.signature:
@@ -413,7 +417,7 @@ class MCTSEngine:
         """生成搜索报告"""
         lines = []
         lines.append("=" * 60)
-        lines.append("MCTS 因子搜索报告")
+        lines.append("MCTS 树搜索报告")
         lines.append("=" * 60)
 
         # 配置
@@ -435,7 +439,7 @@ class MCTSEngine:
             lines.append(f"  历史最优:   {max(self.stats['best_fitness']):.4f}")
 
         # Top-10
-        lines.append(f"\n## Top-10 因子")
+        lines.append(f"\n## Top-10 表达式")
         for i, node in enumerate(self.top(10)):
             fit = node.fitness if node.is_evaluated else -999
             lines.append(f"  {i + 1:2d}. [{fit:.4f}] {node.expression[:80]}")

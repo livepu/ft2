@@ -1,9 +1,9 @@
 """
-utils/mcts/v1/actions.py — MCTS 因子动作空间（7 种局部变换）
+utils/mcts/v1/actions.py — MCTS 搜索动作空间（7 种局部变换）
 
 设计哲学:
   MCTS 的每一步是小幅度、可归因的局部变换，不是 GP 式的随机变异。
-  每个动作只改变因子的一个维度（参数/变量/函数/结构），让 UCB 能追踪
+  每个动作只改变表达式的一个维度（参数/变量/函数/结构），让 UCB 能追踪
   "哪个维度的变换带来了收益"。
 
 动作清单:
@@ -279,10 +279,10 @@ def add_condition(tree: ast.Expression, config: ActionConfig,
     """用 IfExp 包裹一个值子树
 
     改进: 用 ts_quantile 类的分位数阈值，而不是固定常数。
-    阈值从因子自身的分位数中选，确保条件真的会触发。
+    阈值从表达式自身的分位数中选，确保条件真的会触发。
 
     三种条件类型:
-      1. 因子值大于自身均值: x > ts_mean(x, window)
+      1. 值大于自身均值: x > ts_mean(x, window)
       2. 波动率门控: ts_std(x, window) > ts_median(ts_std(x, window), long_window)
       3. 动量门控: ts_roc(x, short) > 0
     """
@@ -301,7 +301,7 @@ def add_condition(tree: ast.Expression, config: ActionConfig,
     cond_type = rng.choice(['mean_gate', 'vol_gate', 'momentum_gate'])
 
     if cond_type == 'mean_gate':
-        # x > ts_mean(x, window) — 因子值高于近期均值时启用
+        # x > ts_mean(x, window) — 值高于近期均值时启用
         condition = ast.Compare(
             left=target_copy,
             ops=[ast.Gt()],
@@ -323,7 +323,7 @@ def add_condition(tree: ast.Expression, config: ActionConfig,
             comparators=[ast.Constant(value=0)],
         )
     else:  # momentum_gate
-        # ts_roc(x, short_window) > 0 — 因子值上升时启用
+        # ts_roc(x, short_window) > 0 — 值上升时启用
         short_window = rng.choice([3, 5, 10])
         condition = ast.Compare(
             left=ast.Call(
@@ -356,7 +356,7 @@ def graft(tree: ast.Expression, _config: ActionConfig,
     """从最优池取子树嫁接到当前树
 
     Args:
-      best_pool: MCTSNode 列表（全局最优因子池）
+      best_pool: MCTSNode 列表（全局最优节点池）
     """
     if not best_pool or len(best_pool) < 2:
         return None

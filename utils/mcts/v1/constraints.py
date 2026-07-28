@@ -193,7 +193,7 @@ class SemanticValidator:
 class CFGGrammar:
     """上下文无关文法约束（AlphaCFG 方案）
 
-    定义合法因子的产生式规则:
+    定义合法表达式的产生式规则:
       EXPR    → UNARY(EXPR) | BINARY(EXPR, EXPR) | TS(EXPR, INT) | VAR | CONST
       BOOL    → COMPARE(EXPR, EXPR) | LOGIC(BOOL, BOOL) | NOT(BOOL)
       COMPARE → > | >= | < | <= | == | !=

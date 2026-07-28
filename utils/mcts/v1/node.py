@@ -1,12 +1,12 @@
 """
 MCTSNode — MCTS 树节点数据结构
 
-每个节点 = 一个因子表达式 + MCTS 统计 + 树结构关系。
+每个节点 = 一个表达式 + MCTS 统计 + 树结构关系。
 节点本身是轻量 dataclass，不包含评估逻辑。
 
 贝叶斯先验字段（AlphaPROBE 方案）:
-  prior_quality : 归一化后的因子质量 (ICIR/SR)
-  outdegree     : 被选作父因子的次数（出度惩罚用）
+  prior_quality : 归一化后的节点质量
+  outdegree     : 被选作父节点的次数（出度惩罚用）
 """
 
 import ast
@@ -17,14 +17,14 @@ from typing import Optional, List
 
 @dataclass
 class MCTSNode:
-    """MCTS 树节点 = 一个因子表达式
+    """MCTS 树节点 = 一个表达式
 
     生命周期:
       创建 → expand 产生子节点 → evaluate 计算 fitness → backpropagate 更新统计
     """
 
-    # ── 因子核心 ──
-    expression: str                          # 因子表达式字符串
+    # ── 表达式核心 ──
+    expression: str                          # 表达式字符串
     tree: ast.Expression                     # AST 树
     fitness: float = -999.0                  # 评估后的 fitness（-999 表示未评估）
 
@@ -49,7 +49,7 @@ class MCTSNode:
 
     # ── 贝叶斯先验（AlphaPROBE 方案） ──
     prior_quality: float = 1.0               # 归一化质量（0~1，评估后更新）
-    outdegree: int = 0                       # 当前出度（被选作父因子的次数）
+    outdegree: int = 0                       # 当前出度（被选作父节点的次数）
 
     # ── 子树同构检测（AlphaAgent 方案） ──
     subtree_hash: str = ''                   # 规范化 AST 子树哈希
