@@ -323,10 +323,21 @@ class MCTSTree:
             current.total_value += fitness
             current.reward_history.append(fitness)
 
-            # prior_quality: 用平均 Q 值归一化到 [0, 1]
+            # prior_quality: sigmoid(Q/t) 归一化到 (0, 1)
+            #   t=0.5: Q=0→0.5, Q=±0.5→0.73/0.27, Q=±1→0.88/0.12
+            #   光滑无硬截断, 在 Q>1.0 极值区间保留区分力 (clamp 会丢失)
+            #   数值稳定: z=Q/t 超出 ±20 时直接取边界, 避免 exp 溢出 (fitness=-999 → Q≈-999)
+            #   参考: AlphaPROBE(z-score+sigmoid) / AlphaCFG(softmax) / AlphaJungle(no prior)
+            #   分析记录: k01/探索记录.md → prior_quality 归一化偏差
             if current.visit_count > 0:
                 raw_q = current.q_value
-                current.prior_quality = max(0.0, min(1.0, (raw_q + 1.0) / 2.0))
+                z = raw_q * 2.0          # z = Q / t, t=0.5
+                if z > 20.0:
+                    current.prior_quality = 1.0
+                elif z < -20.0:
+                    current.prior_quality = 0.0
+                else:
+                    current.prior_quality = 1.0 / (1.0 + math.exp(-z))
 
             # 父节点 outdegree += 1
             if current.parent is not None:
