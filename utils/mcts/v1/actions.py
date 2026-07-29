@@ -15,13 +15,13 @@ utils/mcts/v1/actions.py — MCTS 搜索动作空间（7 种局部变换）
   add_condition    — 加条件门控
   graft            — 嫁接最优池子树（需要 best_pool 参数）
 
-依赖: 仅 stdlib ast + 本地 ast_utils / config
+函数元数据: 从 AST v2 FUNC_REGISTRY 动态读取（单一致信源），不再硬编码。
 """
 
 import ast
 import copy
 import random
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Tuple
 
 from .ast_utils import (
     _simplify_ast, _collect_replaceable, _replace_subtree,
@@ -31,35 +31,53 @@ from .config import ActionConfig
 
 
 # ============================================================
-# 函数元数据（元数 + 是否需要窗口参数）
+# 函数元数据 — 从 AST v2 注册表动态读取
 # ============================================================
-# (n_data_args, n_window_params)
-# n_data_args: 数据参数个数（子树/变量）
-# n_window_params: 窗口参数个数（整数）
-
-_FUNC_META: Dict[str, Tuple[int, int]] = {
-    # 时序（1 数据 + 1 窗口）
-    'ts_rank': (1, 1), 'ts_mean': (1, 1), 'ts_std': (1, 1),
-    'ts_roc': (1, 1), 'ts_delta': (1, 1), 'ts_sum': (1, 1),
-    'ts_max': (1, 1), 'ts_min': (1, 1), 'ts_skew': (1, 1),
-    'ts_kurt': (1, 1), 'ts_mad': (1, 1), 'ts_ema': (1, 1),
-    'ts_wma': (1, 1), 'ts_delay': (1, 1),
-    'tsf': (1, 1), 'ts_predict': (1, 1), 'linearreg': (1, 1),
-    'ts_intercept': (1, 1), 'ts_resid': (1, 1),
-    # 时序成对（2 数据 + 1 窗口）
-    'ts_cov': (2, 1), 'ts_corr': (2, 1),
-    # 截面（1 数据，无窗口）
-    'cs_rank': (1, 0), 'cs_zscore': (1, 0), 'cs_scale': (1, 0),
-    # 数学（1 数据，无窗口）
-    'abs': (1, 0), 'log': (1, 0), 'sign': (1, 0),
-    'sqrt': (1, 0), 'square': (1, 0), 'cube': (1, 0),
-    'neg': (1, 0),
-}
-
 
 def _get_func_arity(func_name: str) -> Optional[Tuple[int, int]]:
-    """查询函数元数 (n_data_args, n_window_params)"""
-    return _FUNC_META.get(func_name.lower())
+    """查询函数元数 (n_data_args, n_window_params)，从 FUNC_REGISTRY 推导。
+
+    - n_data_args  → FunctionSpec.data_args
+    - n_window_params → 由 param_pool 首元素推导:
+        - 无 param_pool          → 0
+        - 首元素是标量           → 1
+        - 首元素是 tuple/list    → len(首元素)
+    """
+    try:
+        from utils.ast.v2.registry import FUNC_REGISTRY
+    except ImportError:
+        return None
+
+    spec = FUNC_REGISTRY.get(func_name.lower())
+    if spec is None:
+        return None
+
+    n_data = spec.data_args
+    n_window = 0
+
+    if spec.param_pool:
+        first = spec.param_pool[0]
+        if isinstance(first, (tuple, list)):
+            n_window = len(first)
+        else:
+            n_window = 1
+
+    return (n_data, n_window)
+
+
+def _get_param_candidates(func_name: str, config: ActionConfig) -> list:
+    """获取函数的窗口参数候选值：优先 FunctionSpec.param_pool，回退 config.param_windows。
+
+    这确保 ts_delay 只用 [1,5,10,20]，不会拿到 60；ts_kurt 只用 [20,60]，不会拿 5。
+    """
+    try:
+        from utils.ast.v2.registry import FUNC_REGISTRY
+        spec = FUNC_REGISTRY.get(func_name.lower())
+        if spec and spec.param_pool:
+            return spec.param_pool
+    except ImportError:
+        pass
+    return config.param_windows
 
 
 def _funcs_with_same_arity(func_name: str,
@@ -89,26 +107,46 @@ def change_param(tree: ast.Expression, config: ActionConfig,
     """改一个参数值（窗口或常数）
 
     策略:
-      - 整数参数（窗口）: 从 config.param_windows 选另一个值
+      - 整数参数（窗口）: 优先查 FUNC_REGISTRY 获取函数级 param_pool，
+                         回退到 config.param_windows
       - 浮点参数: 高斯扰动
     """
     new_tree = copy.deepcopy(tree)
-    candidates = []
-
+    param_nodes = []
     for node in _walk_nodes(new_tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) \
            and not isinstance(node.value, bool):
-            candidates.append(node)
+            param_nodes.append(node)
 
-    if not candidates:
+    if not param_nodes:
         return None
 
-    target = rng.choice(candidates)
+    target = rng.choice(param_nodes)
     v = target.value
 
     if isinstance(v, int):
-        # 窗口参数: 从可选值中选一个不同的
-        windows = [w for w in config.param_windows if w != v]
+        # 尝试获取函数级 param_pool
+        windows = None
+        func_name = _resolve_parent_func_name(target, new_tree)
+        if func_name:
+            pools = _get_param_candidates(func_name, config)
+            if pools:
+                first = pools[0]
+                if isinstance(first, (int, float)):
+                    # 标量 param_pool: [5, 10, 20] → 直接排除当前值
+                    windows = [w for w in pools
+                               if isinstance(w, (int, float)) and w != v]
+                elif isinstance(first, (tuple, list)):
+                    # 元组 param_pool: [(5,10), (20,30)] → 展开所有唯一值
+                    all_vals = set()
+                    for t in pools:
+                        if isinstance(t, (tuple, list)):
+                            all_vals.update(x for x in t
+                                            if isinstance(x, (int, float)))
+                    windows = sorted(w for w in all_vals if w != v)
+        if not windows:
+            windows = [w for w in config.param_windows if w != v]
+
         if windows:
             target.value = rng.choice(windows)
         else:
@@ -120,6 +158,19 @@ def change_param(tree: ast.Expression, config: ActionConfig,
 
     ast.fix_missing_locations(new_tree)
     return _simplify_ast(new_tree)
+
+
+def _resolve_parent_func_name(node: ast.AST, tree: ast.AST) -> Optional[str]:
+    """查找节点所属的最内层函数名。
+
+    遍历树找到包含该 node 的 Call 节点，返回其函数名。
+    """
+    for n in _walk_nodes(tree):
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+            for child in _walk_nodes(n):
+                if child is node:
+                    return n.func.id
+    return None
 
 
 # ============================================================
@@ -229,7 +280,21 @@ def wrap_function(tree: ast.Expression, config: ActionConfig,
     # 构建新的 Call 节点
     args: list[ast.expr] = [copy.deepcopy(target)]
     if n_window > 0:
-        args.append(ast.Constant(value=rng.choice(config.param_windows)))
+        # 优先函数级 param_pool，回退全局
+        pools = _get_param_candidates(func_name, config)
+        if pools and isinstance(pools[0], (int, float)):
+            args.append(ast.Constant(value=rng.choice(pools)))
+        elif pools and isinstance(pools[0], (tuple, list)):
+            # 多窗口函数：每个窗口从对应位置选
+            for wi in range(n_window):
+                vals_at_pos = [p[wi] for p in pools
+                               if isinstance(p, (tuple, list)) and len(p) > wi]
+                if vals_at_pos:
+                    args.append(ast.Constant(value=rng.choice(vals_at_pos)))
+                else:
+                    args.append(ast.Constant(value=rng.choice(config.param_windows)))
+        else:
+            args.append(ast.Constant(value=rng.choice(config.param_windows)))
 
     wrapped = ast.Call(
         func=ast.Name(id=func_name, ctx=ast.Load()),
