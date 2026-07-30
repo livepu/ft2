@@ -654,6 +654,16 @@ const HeatmapChart = {
                     xAxis: { type: 'category', data: extracted.xAxis, splitArea: { show: true } },
                     yAxis: { type: 'category', data: extracted.yAxis, splitArea: { show: true } },
                     visualMap: { min: visualMin, max: visualMax, range: [visualMin, visualMax], calculable: true, orient: 'vertical', right: '2%', top: 'center', text: [visualMax.toFixed(decimalPlaces) + ' (×' + multiplier + ')', visualMin.toFixed(decimalPlaces) + ' (×' + multiplier + ')'], inRange: { color: HEATMAP_COLORS } },
+                    // [优化] 2026-07-29 添加 tooltip，悬停显示 月份 + 行业 + 超额收益
+                    tooltip: {
+                        trigger: 'item',
+                        formatter: function(params) {
+                            var xLabel = extracted.xAxis[params.data[0]];
+                            var yLabel = extracted.yAxis[params.data[1]];
+                            var val = params.data[2];
+                            return xLabel + '<br/>' + yLabel + ': ' + val.toFixed(4);
+                        }
+                    },
                     series: [{ type: 'heatmap', data: displayData, label: { show: heatmapShowData.value, formatter: params => params.value[2].toFixed(2) }, emphasis: { itemStyle: { shadowBlur: 10 } } }]
                 };
             }
