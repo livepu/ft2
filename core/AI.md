@@ -122,10 +122,13 @@ def on_bar(self, context, bars):
     account.order_percent('399317.SZ', 1.0, OrderSide.Buy, note="金叉买入")
     account.order_volume('399317.SZ', 100, OrderSide.Sell)
 
-    # 查询
-    account.get_position(symbol)  # {'volume': ..., 'cost_price': ...}
-    account.get_account()         # {'cash': ..., 'nav': ...}
+    # 查询（返回类型对齐 gm：一律 dict / List[Dict]，字段名对齐 gm）
+    account.get_position(symbol)  # List[Dict]: [{symbol, side, volume, volume_today, vwap}, ...]
+    account.get_orders()          # List[Dict]: 字段对齐 gm Order (order_id/symbol/side/position_effect/volume/price/filled_volume/filled_vwap/filled_amount/filled_commission/created_at)
+    account.get_account()         # {'balance','nav','available','used_bail','fpnl','risk_ratio'} (字段对齐掘金 Cash)
 ```
+
+> **字段命名规范（2026-08-04 对齐掘金 myquant.cn）**：`balance`=账面资金(Cash.balance)、`vwap`=持仓加权均价(Position.vwap)、`fpnl`=浮动盈亏(Cash.fpnl)、`used_bail`=已用保证金(Cash.used_bail)、`filled_commission`/`filled_amount`=成交手续费/金额(Order 回报)。下单参数顺序对齐掘金 `(symbol, 数量, side, order_type, position_effect, price)`，目标持仓用 `position_side`。
 
 - **AccountManager**: 完整账户，快照聚合 + TradeRecord + FIFO 平仓匹配
 - **FastAccount**: 轻量账户，通过 `context.data()` 缓存获取价格，自动扣费+记录净值

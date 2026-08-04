@@ -77,7 +77,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from functools import wraps
 # [修复] 2026-05-30 _calculate_profit 需要用 OrderSide 枚举做比较
-from .account import OrderSide
+from .account import OrderSide, PositionEffect, PositionSide
 
 
 
@@ -1065,7 +1065,7 @@ class AccountAnalyzer:
         if dates and len(dates) >= 2:
             info_m['开始日期'] = dates[1].strftime('%Y-%m-%d')
             info_m['结束日期'] = dates[-1].strftime('%Y-%m-%d')
-        initial_cash = self.account.snapshots[0].cash if self.account and self.account.snapshots else 0
+        initial_cash = self.account.snapshots[0].balance if self.account and self.account.snapshots else 0
         final_nav = self.account.snapshots[-1].nav if self.account and self.account.snapshots else 0
         if initial_cash > 0:
             info_m['初始资金'] = f"{initial_cash:,.0f}"
@@ -1257,8 +1257,8 @@ class AccountAnalyzer:
                 row['方向'] = '买入' if t.side == 1 else '卖出'
                 row['价格'] = t.price
                 row['数量'] = t.volume
-                row['金额'] = round(t.amount, 2)
-                row['手续费'] = round(t.fee, 2)
+                row['金额'] = round(t.filled_amount, 2)
+                row['手续费'] = round(t.filled_commission, 2)
                 if has_notes:
                     row['备注'] = getattr(t, 'note', '')
                 trades.append(row)
@@ -1375,7 +1375,7 @@ class AccountAnalyzer:
             for d in dates_sorted:
                 nav = assets[d]
                 snap = daily_last_snap.get(d)
-                cash = snap.cash if snap else 0
+                cash = snap.balance if snap else 0
                 pos_val = nav - cash
                 asset_rows.append({
                     '日期': d.strftime('%Y-%m-%d'),
@@ -1404,8 +1404,8 @@ class AccountAnalyzer:
                 row['方向'] = '买入' if t.side == 1 else '卖出'
                 row['价格'] = t.price
                 row['数量'] = t.volume
-                row['金额'] = round(t.amount, 2)
-                row['手续费'] = round(t.fee, 2)
+                row['金额'] = round(t.filled_amount, 2)
+                row['手续费'] = round(t.filled_commission, 2)
                 if has_notes:
                     row['备注'] = getattr(t, 'note', '')
                 trade_rows.append(row)
@@ -1524,35 +1524,25 @@ class AccountAnalyzer:
 
     def _calculate_profit(self, trade_records: List) -> List:
         """
-        计算每笔交易的盈亏
-        
-        使用 FIFO（先进先出）原则匹配开平仓交易：
-        - 买入：累积持仓，记录平均开仓价格和手续费
-        - 卖出：按持仓比例计算成本和盈亏，平仓后重置持仓信息
-        
-        盈亏计算公式：
-        盈亏 = 卖出金额 - 成本 - 手续费
-        成本 = (卖出数量 / 持仓数量) × 总成本
-        
+        计算每笔交易的盈亏（[重构] 2026-08-04 深度B：支持期货多空）
+
+        使用 FIFO（先进先出）原则匹配开平仓交易，持仓按 (symbol, position_side) 维度：
+        - 开多(Buy+Open)：累积持仓，记录平均成本与手续费
+        - 平多(Sell+Close / 股票 Sell)：盈亏 = 卖出金额 - 成本 - 手续费
+        - 开空(Sell+Open)：累积空头持仓
+        - 平空(Buy+Close)：盈亏 = 成本 - 买入金额 - 手续费
+
+        盈亏公式：
+        多头：盈亏 = 卖出金额 - 成本 - 手续费；成本 = (平仓量/持仓量) × 总成本
+        空头：盈亏 = 成本 - 买入金额 - 手续费
+
         Args:
-            trade_records: 成交记录列表
-                         每条记录包含：symbol, volume, price, side, fee, created_at
-            
+            trade_records: 成交记录列表（含 position_effect/position_side/filled_commission）
+
         Returns:
-            List[Dict]: 盈亏记录列表，每条记录包含：
-                       - symbol: 标的代码
-                       - profit: 盈亏金额（正为盈利，负为亏损）
-                       - open_time, close_time: 开平仓时间
-                       - open_price, close_price: 开平仓价格
-                       - volume: 交易数量（负数表示卖出）
-                       - open_fee, close_fee: 开平仓手续费
-                       - original_trade: 原始交易记录对象
-            
-        Example:
-            >>> profits = analyzer._calculate_profit(trade_records)
-            >>> for trade in profits:
-            ...     print(f"{trade['symbol']}: 盈亏 {trade['profit']}")
+            List[Dict]: 盈亏记录列表（同旧结构，volume 负数为平仓）
         """
+        # 持仓表 (symbol, position_side) → {volume, cost, open_time, open_price, open_fee}
         positions = defaultdict(lambda: {'volume': 0, 'cost': 0, 'open_time': None, 'open_price': 0, 'open_fee': 0})
         processed_trades = []
 
@@ -1565,48 +1555,74 @@ class AccountAnalyzer:
             price = trade.price
             side = trade.side
             created_at = trade.created_at
-            fee = trade.fee
+            fee = trade.filled_commission
+            # [新增] 2026-08-04 合约乘数（期货盈亏 = 价差×乘数×手数；股票=1）
+            multiplier = getattr(trade, 'multiplier', 1)
+            position_effect = getattr(trade, 'position_effect', PositionEffect.Open)
+            position_side = getattr(trade, 'position_side', PositionSide.Long)
+            key = (symbol, position_side)
+            pos = positions[key]
 
-            # [修复] 2026-05-30 TradeRecord.side 是 int (OrderSide.Buy=1)，
-            #   原用字符串 'buy'/'sell' 比较导致永久为 False，交易盈亏始终为空
-            if side == OrderSide.Buy:
-                positions[symbol]['volume'] += abs_volume
-                positions[symbol]['cost'] += abs_volume * price + fee
-                if positions[symbol]['open_time'] is None:
-                    positions[symbol]['open_time'] = created_at
-                    positions[symbol]['open_price'] = price
-                    positions[symbol]['open_fee'] += fee
-            elif side == OrderSide.Sell:
-                if positions[symbol]['volume'] == 0:
+            # 开仓 vs 平仓判定（统一股票/期货）：
+            #   Open:      Buy→开多；Sell+Short→开空；Sell+Long→股票平仓
+            #   Close*:    Long→平多；Short→平空
+            if position_effect == PositionEffect.Open:
+                if side == OrderSide.Sell and position_side == PositionSide.Short:
+                    # ── 开空（期货）──
+                    pos['volume'] += abs_volume
+                    pos['cost'] += abs_volume * price * multiplier + fee
+                    if pos['open_time'] is None:
+                        pos['open_time'] = created_at
+                        pos['open_price'] = price
+                        pos['open_fee'] += fee
+                    continue
+                if side == OrderSide.Buy:
+                    # ── 开多（股票买入 / 期货开多）──
+                    pos['volume'] += abs_volume
+                    pos['cost'] += abs_volume * price * multiplier + fee
+                    if pos['open_time'] is None:
+                        pos['open_time'] = created_at
+                        pos['open_price'] = price
+                        pos['open_fee'] += fee
+                    continue
+                # Sell + Long + Open = 股票平仓 → 落入下方平仓逻辑
+                if side == OrderSide.Sell and pos['volume'] == 0:
                     continue
 
-                sell_amount = abs_volume * price
-                cost = (abs_volume / positions[symbol]['volume']) * positions[symbol]['cost']
-                profit = sell_amount - cost - fee
+            # ── 平仓 ──
+            if pos['volume'] == 0:
+                continue
 
-                open_fee_portion = (abs_volume / positions[symbol]['volume']) * positions[symbol]['open_fee']
+            cost = (abs_volume / pos['volume']) * pos['cost']
+            if position_side == PositionSide.Long:
+                profit = abs_volume * price * multiplier - cost - fee
+            else:
+                # 空头：成本 - 买入金额 - 手续费
+                profit = cost - abs_volume * price * multiplier - fee
 
-                processed_trades.append({
-                    'symbol': symbol,
-                    'profit': profit,
-                    'open_time': positions[symbol]['open_time'],
-                    'close_time': created_at,
-                    'open_price': positions[symbol]['open_price'],
-                    'open_fee': open_fee_portion,
-                    'close_fee': fee,
-                    'close_price': price,
-                    'volume': volume,
-                    'original_trade': trade
-                })
+            open_fee_portion = (abs_volume / pos['volume']) * pos['open_fee']
 
-                positions[symbol]['volume'] -= abs_volume
-                positions[symbol]['cost'] -= cost
-                positions[symbol]['open_fee'] -= open_fee_portion
+            processed_trades.append({
+                'symbol': symbol,
+                'profit': profit,
+                'open_time': pos['open_time'],
+                'close_time': created_at,
+                'open_price': pos['open_price'],
+                'open_fee': open_fee_portion,
+                'close_fee': fee,
+                'close_price': price,
+                'volume': volume,
+                'original_trade': trade
+            })
 
-                if positions[symbol]['volume'] == 0:
-                    positions[symbol]['open_time'] = None
-                    positions[symbol]['open_price'] = 0
-                    positions[symbol]['open_fee'] = 0
+            pos['volume'] -= abs_volume
+            pos['cost'] -= cost
+            pos['open_fee'] -= open_fee_portion
+
+            if pos['volume'] == 0:
+                pos['open_time'] = None
+                pos['open_price'] = 0
+                pos['open_fee'] = 0
 
         return processed_trades
 

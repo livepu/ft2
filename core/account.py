@@ -63,6 +63,20 @@ class OrderType:
     Market = 2         # 市价委托
 
 
+# [对齐掘金 2026-08-04] 模块级常量别名（gm 风格：OrderSide_Buy / PositionEffect_CloseToday）
+#   与上述类属性数值完全等价，供掘金风格策略代码直接引用，同时保留 OrderSide.Buy 类属性用法。
+OrderSide_Buy = OrderSide.Buy
+OrderSide_Sell = OrderSide.Sell
+OrderType_Limit = OrderType.Limit
+OrderType_Market = OrderType.Market
+PositionEffect_Open = PositionEffect.Open
+PositionEffect_Close = PositionEffect.Close
+PositionEffect_CloseToday = PositionEffect.CloseToday
+PositionEffect_CloseYesterday = PositionEffect.CloseYesterday
+PositionSide_Long = PositionSide.Long
+PositionSide_Short = PositionSide.Short
+
+
 # ============================================================================
 # 数据类
 # ============================================================================
@@ -79,6 +93,8 @@ class ContractSpec:
         symbol: 合约代码，如 'RB2510.SHF'
         multiplier: 合约乘数（每手对应标的单位数量），如螺纹钢=10、沪深300=300
         margin_ratio: 保证金比例，如 0.08（开仓保证金 = 价格×乘数×margin_ratio×手数）
+        margin_ratio_near: [参考掘金 marginfloat_ratio2] 临近交割(距最后交易日≤2交易日)保证金上浮率，
+                           None 表示不分级（恒用 margin_ratio）
         price_tick: 最小变动价位，如螺纹钢=1.0
         exchange: 交易所：SHFE/DCE/CZCE/CFFEX/INE
         delisted_date: 最后交易日（对齐掘金 get_symbol_infos.delisted_date）
@@ -86,127 +102,107 @@ class ContractSpec:
     symbol: str
     multiplier: int
     margin_ratio: float
+    margin_ratio_near: float = None   # [参考掘金] 临近交割保证金上浮率（分级保证金）
     price_tick: float = 1.0
     exchange: str = ''
     delisted_date: str = ''
 
+    def effective_margin_ratio(self, remaining_days: int = None) -> float:
+        """按剩余交易日动态选择保证金率（对齐掘金 marginfloat_ratio1/2 分级思想）。
+
+        remaining_days ≤ 2 且配置了 margin_ratio_near → 上浮费率；否则基准费率。
+        remaining_days=None（未配置交割日）时恒用基准费率。
+        """
+        if self.margin_ratio_near and remaining_days is not None and remaining_days <= 2:
+            return self.margin_ratio_near
+        return self.margin_ratio
+
 
 @dataclass
-class FuturePosition:
-    """期货双向持仓（多空可共存，即锁仓）。
+class Position:
+    """统一持仓对象 — 对齐掘金 gm Position（股票/期货通用）
 
-    [新增] 2026-08-04 重构：期货持仓从裸 dict 升级为类型化结构，
-    把增/减仓、估值、保证金占用逻辑收进类方法，消除 AccountManager
-    中分散的 sec_type 分支判断。
-
-    字段对齐 gm 持仓回报模型：
-        long_volume / long_volume_today / long_cost      (多头: 总/今/均价)
-        short_volume / short_volume_today / short_cost   (空头: 总/今/均价)
+    [新增] 2026-08-04 深度B重构：股票/期货统一持仓表 (symbol, side) → Position。
+    字段与 gm Position 回报一致：symbol/side/volume/volume_today/vwap/fpnl
+      - 股票：side=PositionSide.Long（恒多头），multiplier=1
+      - 期货：side=Long/Short，multiplier=合约乘数
+    vwap = 加权开仓均价（对齐 Position.vwap，不含手续费）
     """
 
-    long_volume: int = 0
-    long_volume_today: int = 0
-    long_cost: float = 0.0
-    short_volume: int = 0
-    short_volume_today: int = 0
-    short_cost: float = 0.0
-
-    @property
-    def sec_type(self) -> str:
-        """品种标记，供外部判断期货持仓"""
-        return 'future'
-
-    @property
-    def total_volume(self) -> int:
-        """多空总手数（持仓天数判定用）"""
-        return self.long_volume + self.short_volume
+    symbol: str
+    side: int
+    volume: int = 0
+    volume_today: int = 0     # 今仓（期货平今依据；股票=当日买入）
+    vwap: float = 0.0         # 加权开仓均价（不含手续费）
 
     def is_empty(self) -> bool:
-        """多空均为零"""
-        return self.long_volume == 0 and self.short_volume == 0
+        """持仓为零"""
+        return self.volume == 0
 
-    def open_long(self, volume: int, price: float):
-        """开多：加权均价，今仓同步增加"""
-        new_vol = self.long_volume + volume
-        self.long_cost = ((self.long_cost * self.long_volume + price * volume) / new_vol
-                          if new_vol > 0 else 0.0)
-        self.long_volume = new_vol
-        self.long_volume_today += volume
+    def open(self, volume: int, price: float):
+        """开仓：加权 vwap，今仓同步增加"""
+        new_vol = self.volume + volume
+        self.vwap = ((self.vwap * self.volume + price * volume) / new_vol
+                     if new_vol > 0 else 0.0)
+        self.volume = new_vol
+        self.volume_today += volume
 
-    def open_short(self, volume: int, price: float):
-        """开空：加权均价，今仓同步增加"""
-        new_vol = self.short_volume + volume
-        self.short_cost = ((self.short_cost * self.short_volume + price * volume) / new_vol
-                           if new_vol > 0 else 0.0)
-        self.short_volume = new_vol
-        self.short_volume_today += volume
-
-    def close_long(self, volume: int, today_volume: int = None):
-        """平多。today_volume=None 时按 FIFO 先平今仓（对齐掘金"期货默认平今"）；
+    def close(self, volume: int, today_volume: int = None):
+        """平仓。today_volume=None → FIFO 先平今仓（对齐掘金"期货默认平今"）；
         CloseToday 传 today_volume=volume；CloseYesterday 传 today_volume=0。"""
         if today_volume is None:
-            today_volume = min(self.long_volume_today, volume)
-        self.long_volume_today -= today_volume
-        self.long_volume -= volume
+            today_volume = min(self.volume_today, volume)
+        self.volume_today -= today_volume
+        self.volume -= volume
 
-    def close_short(self, volume: int, today_volume: int = None):
-        """平空，语义同 close_long"""
-        if today_volume is None:
-            today_volume = min(self.short_volume_today, volume)
-        self.short_volume_today -= today_volume
-        self.short_volume -= volume
+    def fpnl(self, price: float, multiplier: int = 1) -> float:
+        """浮动盈亏：多头 (price-vwap)、空头 (vwap-price) × 乘数 × 手数（对齐 Position.fpnl）"""
+        if self.side == PositionSide.Long:
+            return (price - self.vwap) * multiplier * self.volume
+        return (self.vwap - price) * multiplier * self.volume
 
-    def float_pnl(self, price: float, multiplier: int) -> float:
-        """浮动盈亏：多头(现价-成本)、空头(成本-现价) × 乘数 × 手数"""
-        pnl = 0.0
-        if self.long_volume > 0:
-            pnl += (price - self.long_cost) * multiplier * self.long_volume
-        if self.short_volume > 0:
-            pnl += (self.short_cost - price) * multiplier * self.short_volume
-        return pnl
-
-    def used_margin(self, price: float, multiplier: int, margin_ratio: float) -> float:
-        """已用保证金 = (多头+空头) × 价格 × 乘数 × 保证金率"""
-        return (self.long_volume + self.short_volume) * price * multiplier * margin_ratio
+    def used_bail(self, price: float, multiplier: int, margin_ratio: float) -> float:
+        """已用保证金 = 持仓市值 × 保证金率（股票调用方传 margin_ratio=0 即无保证金）"""
+        return self.volume * price * multiplier * margin_ratio
 
     def to_dict(self) -> Dict:
-        """转 dict（get_position 对外输出用）"""
+        """转 dict（get_position 对外输出，键名对齐 gm Position 回报）"""
         return {
-            'long_volume': self.long_volume,
-            'long_volume_today': self.long_volume_today,
-            'long_cost': round(self.long_cost, 3),
-            'short_volume': self.short_volume,
-            'short_volume_today': self.short_volume_today,
-            'short_cost': round(self.short_cost, 3),
-            'sec_type': self.sec_type,
+            'symbol': self.symbol,
+            'side': self.side,
+            'volume': self.volume,
+            'volume_today': self.volume_today,
+            'vwap': round(self.vwap, 3),
         }
 
 
 @dataclass
 class PositionSnapshot:
-    """持仓快照数据类"""
+    """持仓快照数据类（字段对齐掘金 Position：symbol/side/volume/volume_today/vwap）"""
     symbol: str
-    volume: float
-    cost_price: float
-    price: float
-    created_at: datetime
+    side: int = PositionSide.Long
+    volume: float = 0.0
+    volume_today: float = 0.0
+    vwap: float = 0.0
+    price: float = 0.0
+    created_at: datetime = None
 
 
 @dataclass
 class AccountSnapshot:
-    """账户快照数据类"""
-    cash: float
+    """账户快照数据类（字段对齐掘金 Cash：balance/nav/available/used_bail/fpnl）"""
+    balance: float       # 账面资金（对齐 Cash.balance）
     nav: float
     created_at: datetime
     positions: Dict[str, PositionSnapshot] = field(default_factory=dict)
     # [新增] 2026-08-04 期货专用字段（仅期货持仓时非零）
-    margin_used: float = 0.0   # 已用保证金（当前所有期货持仓占用）
-    float_pnl: float = 0.0     # 浮动盈亏（未平仓期货按现价重估）
+    used_bail: float = 0.0   # 已用保证金（对齐 Cash.used_bail，当前所有期货持仓占用）
+    fpnl: float = 0.0        # 浮动盈亏（对齐 Cash.fpnl，未平仓期货按现价重估）
 
 
 @dataclass
 class TradeRecord:
-    """成交记录数据类 - 兼容掘金规范"""
+    """成交记录数据类 - 字段命名对齐掘金 Order 回报（filled_volume/filled_amount/filled_commission）"""
     created_at: datetime
     symbol: str
     price: float
@@ -215,12 +211,39 @@ class TradeRecord:
     position_effect: int             # 开平标志: 1=开仓, 2=平仓
     position_side: int = PositionSide.Long  # 持仓方向: 1=多, 2=空
     order_type: int = OrderType.Limit  # 委托类型: 1=限价, 2=市价
-    fee: float = 0.0
+    filled_commission: float = 0.0   # 成交手续费（对齐 Order.filled_commission）
     order_id: str = ''
-    filled_volume: float = 0.0        # 已成交数量
-    amount: float = 0.0              # 成交金额
+    filled_volume: float = 0.0        # 已成交数量（对齐 Order.filled_volume）
+    filled_amount: float = 0.0        # 成交金额（对齐 Order.filled_amount）
+    multiplier: int = 1               # [新增] 2026-08-04 合约乘数（股票=1，期货=合约乘数，analyzer 盈亏用）
     # [新增] 2026-05-30 信号备注，可追溯每笔交易触发原因（如 "温度计75度买入"）
     note: str = ''
+
+    def to_dict(self) -> Dict:
+        """转 dict — [重构] 2026-08-04 对齐 gm get_orders 返回 List[Dict]。
+
+        字段命名对齐 gm Order（DictLikeOrder._fields）：
+        volume=委托量, price=委托价, filled_vwap=已成均价（ft2 单笔全成=price），
+        status 不输出（ft2 全成交，无委托状态机）。
+        """
+        return {
+            'order_id': self.order_id,
+            'symbol': self.symbol,
+            'side': self.side,
+            'position_effect': self.position_effect,
+            'position_side': self.position_side,
+            'order_type': self.order_type,
+            'volume': self.volume,
+            'price': self.price,
+            'filled_volume': self.filled_volume,
+            'filled_vwap': self.price,
+            'filled_amount': self.filled_amount,
+            'filled_commission': self.filled_commission,
+            'created_at': self.created_at,
+            # ft2 扩展字段
+            'multiplier': self.multiplier,
+            'note': self.note,
+        }
 
 
 # ============================================================================
@@ -237,27 +260,27 @@ class _OrderMixin:
       股票执行层差异走 _process_stock_order hook，
       Sell 比例持仓读取走 _get_stock_position_volume hook。
 
-    [期货层] 纯计算/持仓操作集中于此，持仓统一用 FuturePosition 对象：
+    [期货层] 纯计算/持仓操作集中于此，持仓统一用 Position 对象（(symbol, side) 表）：
 
       - 合约规格：register_contract / _get_contract
-      - 保证金：_calc_margin / _get_used_margin / _get_available_cash
+      - 保证金：_calc_margin / _get_used_bail / _get_available_cash（含按到期日分级）
       - 手续费：_calc_future_commission
       - 校验：FUTURE_ORDER_MATRIX / _validate_future_order
       - 执行：_process_future_order（成交记录差异走 _record_future_trade hook）
-      - 持仓：_update_future_position（操作 FuturePosition）
+      - 持仓：_update_future_position（操作单方向 Position）
       - 目标持仓：order_target_volume/value/percent + long/short/target
 
-    账务模型（对齐真实期货账户，做法B）：
-      cash        = 账面资金（初始 + 已实现盈亏 - 手续费），保证金不从此扣减
-      margin_used = 已用保证金（遍历持仓动态计算）
-      float_pnl   = 未平仓浮动盈亏（按现价重估）
-      available   = cash - margin_used - frozen
-      nav         = cash + float_pnl   ← 真实权益（保证金只是占用，仍在 cash 内）
+    账务模型（对齐真实期货账户 + 掘金 Cash 字段命名，做法B）：
+      balance   = 账面资金（对齐 Cash.balance；初始 + 已实现盈亏 - 手续费），保证金不从此扣减
+      used_bail = 已用保证金（对齐 Cash.used_bail；遍历持仓动态计算）
+      fpnl      = 未平仓浮动盈亏（对齐 Cash.fpnl；按现价重估）
+      available = balance - used_bail - frozen
+      nav       = balance + fpnl   ← 真实权益（保证金只是占用，仍在 balance 内）
 
-    开仓：校验 available ≥ 保证金+手续费 → cash -= 手续费 → 持仓增加（margin_used 自动上升）
-    平仓：cash += 平仓盈亏 - 手续费 → 持仓减少（margin_used 自动下降）
+    开仓：校验 available ≥ 保证金+手续费 → balance -= 手续费 → 持仓增加（used_bail 自动上升）
+    平仓：balance += 平仓盈亏 - 手续费 → 持仓减少（used_bail 自动下降）
     与方案文档差异：文档"开仓扣保证金/平仓释放"会把持仓期 NAV 低估保证金，
-    此处保证金不进出 cash，NAV 始终 = cash + 浮盈，持仓期权益正确。
+    此处保证金不进出 balance，NAV 始终 = balance + 浮盈，持仓期权益正确。
     """
 
     # ─────────────────────────────────────────────
@@ -366,7 +389,7 @@ class _OrderMixin:
         order_amount = nav * abs(percent)
 
         if side == OrderSide.Buy:
-            available_amount = self.cash
+            available_amount = self.balance
             if order_amount > available_amount:
                 order_amount = available_amount
 
@@ -441,7 +464,7 @@ class _OrderMixin:
     def _get_stock_position_volume(self, symbol: str) -> float:
         """股票持仓数量 hook — 由子类实现（Sell 比例委托用）。
 
-        AccountManager：持仓 dict {'volume', 'cost_price'} → ['volume']
+        AccountManager：持仓 dict {'volume', 'vwap'} → ['volume']
         FastAccount：持仓 float → 直接返回
         """
         raise NotImplementedError("_get_stock_position_volume 必须由子类实现")
@@ -486,16 +509,28 @@ class _OrderMixin:
             raise ValueError(f"合约 {symbol} 未注册规格，请先调用 register_contract()")
         return spec
 
-    def _calc_margin(self, symbol: str, price: float, volume: int) -> float:
-        """计算开仓所需保证金 = 价格 × 乘数 × 保证金率 × 手数"""
-        spec = self._get_contract(symbol)
-        return round(price * spec.multiplier * spec.margin_ratio * volume, 2)
+    def _remaining_days(self, symbol: str) -> Optional[int]:
+        """距最后交易日剩余自然日（未配置 delisted_date 返回 None → 恒用基准保证金率）"""
+        spec = self._contracts.get(symbol)
+        if spec is None or not spec.delisted_date:
+            return None
+        try:
+            last = datetime.strptime(spec.delisted_date, '%Y-%m-%d').date()
+            return (last - context.now.date()).days
+        except (ValueError, TypeError):
+            return None
 
-    def _get_used_margin(self) -> float:
-        """计算当前所有期货持仓的已用保证金（动态遍历，无需手动增减）"""
+    def _calc_margin(self, symbol: str, price: float, volume: int) -> float:
+        """计算开仓所需保证金 = 价格 × 乘数 × 保证金率 × 手数（保证金率按到期日分级）"""
+        spec = self._get_contract(symbol)
+        ratio = spec.effective_margin_ratio(self._remaining_days(symbol))
+        return round(price * spec.multiplier * ratio * volume, 2)
+
+    def _get_used_bail(self) -> float:
+        """计算当前所有期货持仓的已用保证金（对齐 Cash.used_bail，动态遍历）"""
         total = 0.0
-        for symbol, pos in self.positions.items():
-            if not isinstance(pos, FuturePosition):
+        for (symbol, _side), pos in self.positions.items():
+            if not self._is_future(symbol):
                 continue
             spec = self._contracts.get(symbol)
             if spec is None:
@@ -506,12 +541,13 @@ class _OrderMixin:
                 continue
             if price <= 0:
                 continue
-            total += pos.used_margin(price, spec.multiplier, spec.margin_ratio)
+            total += pos.used_bail(price, spec.multiplier,
+                                   spec.effective_margin_ratio(self._remaining_days(symbol)))
         return round(total, 2)
 
     def _get_available_cash(self) -> float:
         """可用资金 = 现金 - 已用保证金 - 冻结资金（getattr 兼容无 frozen 属性的 FastAccount）"""
-        return round(self.cash - self._get_used_margin() - getattr(self, 'frozen', 0.0), 2)
+        return round(self.balance - self._get_used_bail() - getattr(self, 'frozen', 0.0), 2)
 
     def _calc_future_commission(self, symbol: str, price: float, volume: int,
                                 position_effect: int) -> float:
@@ -554,20 +590,21 @@ class _OrderMixin:
             rate = ps.get('close_commission_rate', ps.get('commission_rate', 0.0001))
         return max(round(contract_value * rate, 2), ps.get('min_commission', 0))
 
-    # 期货下单合法性矩阵： (side, position_effect) → (操作语义, 需持仓条件, order_business)
+    # 期货下单合法性矩阵： (side, position_effect) → (操作语义, 需持仓条件, order_business, pos_side)
     #   order_business 对齐掘金 gm OrderBusiness_FUTURE_* (10-17)：
     #   10=FUTURE_BUY_OPEN, 11=FUTURE_SELL_CLOSE, 12=FUTURE_SELL_CLOSE_TODAY,
     #   13=FUTURE_SELL_CLOSE_YESTERDAY, 14=FUTURE_SELL_OPEN, 15=FUTURE_BUY_CLOSE,
     #   16=FUTURE_BUY_CLOSE_TODAY, 17=FUTURE_BUY_CLOSE_YESTERDAY
+    #   pos_side = 目标持仓方向（对齐掘金 Position.side 维度）
     FUTURE_ORDER_MATRIX = {
-        (OrderSide.Buy,  PositionEffect.Open):           ("开多", None, 10),
-        (OrderSide.Sell, PositionEffect.Close):          ("平多", 'long', 11),
-        (OrderSide.Sell, PositionEffect.CloseToday):     ("平今多", 'long_today', 12),
-        (OrderSide.Sell, PositionEffect.CloseYesterday): ("平昨多", 'long_yesterday', 13),
-        (OrderSide.Sell, PositionEffect.Open):           ("开空", None, 14),
-        (OrderSide.Buy,  PositionEffect.Close):          ("平空", 'short', 15),
-        (OrderSide.Buy,  PositionEffect.CloseToday):     ("平今空", 'short_today', 16),
-        (OrderSide.Buy,  PositionEffect.CloseYesterday): ("平昨空", 'short_yesterday', 17),
+        (OrderSide.Buy,  PositionEffect.Open):           ("开多", None, 10, PositionSide.Long),
+        (OrderSide.Sell, PositionEffect.Close):          ("平多", 'total', 11, PositionSide.Long),
+        (OrderSide.Sell, PositionEffect.CloseToday):     ("平今多", 'today', 12, PositionSide.Long),
+        (OrderSide.Sell, PositionEffect.CloseYesterday): ("平昨多", 'yesterday', 13, PositionSide.Long),
+        (OrderSide.Sell, PositionEffect.Open):           ("开空", None, 14, PositionSide.Short),
+        (OrderSide.Buy,  PositionEffect.Close):          ("平空", 'total', 15, PositionSide.Short),
+        (OrderSide.Buy,  PositionEffect.CloseToday):     ("平今空", 'today', 16, PositionSide.Short),
+        (OrderSide.Buy,  PositionEffect.CloseYesterday): ("平昨空", 'yesterday', 17, PositionSide.Short),
     }
 
     def _validate_future_order(self, symbol: str, volume: int, side: int,
@@ -584,7 +621,7 @@ class _OrderMixin:
         if rule is None:
             return f"无效的期货下单组合: side={side}, position_effect={position_effect}"
 
-        semantic, required, _ = rule
+        semantic, required, _, pos_side = rule
 
         if symbol not in self._contracts:
             return f"合约 {symbol} 未注册规格，请先 register_contract()"
@@ -592,22 +629,16 @@ class _OrderMixin:
         if required is None:  # 开仓无需检查持仓
             return None
 
-        pos = self.positions.get(symbol)
-        if not isinstance(pos, FuturePosition):
-            return f"平仓失败: {symbol} 无期货持仓 ({semantic})"
+        pos = self.positions.get((symbol, pos_side))
+        if pos is None:
+            return f"平仓失败: {symbol} 无{'多' if pos_side == PositionSide.Long else '空'}头持仓 ({semantic})"
 
-        if required == 'long':
-            total = pos.long_volume
-        elif required == 'long_today':
-            total = pos.long_volume_today
-        elif required == 'long_yesterday':
-            total = pos.long_volume - pos.long_volume_today
-        elif required == 'short':
-            total = pos.short_volume
-        elif required == 'short_today':
-            total = pos.short_volume_today
-        elif required == 'short_yesterday':
-            total = pos.short_volume - pos.short_volume_today
+        if required == 'total':
+            total = pos.volume
+        elif required == 'today':
+            total = pos.volume_today
+        elif required == 'yesterday':
+            total = pos.volume - pos.volume_today
         else:
             total = 0
 
@@ -630,7 +661,8 @@ class _OrderMixin:
         if price <= 0:
             raise ValueError(f"Invalid price {price} for {symbol}")
         spec = self._get_contract(symbol)
-        margin_per_lot = price * spec.multiplier * spec.margin_ratio
+        ratio = spec.effective_margin_ratio(self._remaining_days(symbol))
+        margin_per_lot = price * spec.multiplier * ratio
         volume = int(order_amount / margin_per_lot)
         if volume == 0:
             raise ValueError("Calculated order volume is zero")
@@ -644,7 +676,7 @@ class _OrderMixin:
         流程：
           开仓：计算保证金 → 验资 → 扣手续费 → 更新双向持仓
           平仓：结算盈亏(以持仓均价) → 扣手续费 → 更新双向持仓
-        保证金不进出 cash（见类注释账务模型），margin_used 由持仓动态计算。
+        保证金不进出 balance（见类注释账务模型），used_bail 由持仓动态计算。
         成交记录通过 _record_future_trade hook 差异化解耦：
           AccountManager → TradeRecord；FastAccount → 空。
         """
@@ -660,26 +692,28 @@ class _OrderMixin:
                 print(f"期货开仓失败: 需要保证金 {margin_required:.0f} + 手续费 {commission:.2f}, "
                       f"可用资金 {available:.2f}")
                 return 0
-            self.cash = round(self.cash - commission, 2)
+            self.balance = round(self.balance - commission, 2)
             self._update_future_position(symbol, volume, price, side, position_effect)
         else:
-            # ── 平仓 ──
-            pos = self.positions.get(symbol)
-            if not isinstance(pos, FuturePosition):
+            # ── 平仓（按 matrix 推导目标持仓方向 pos_side）──
+            _, _, _, pos_side = self.FUTURE_ORDER_MATRIX[(side, position_effect)]
+            pos = self.positions.get((symbol, pos_side))
+            if pos is None:
                 print(f"期货平仓失败: {symbol} 无持仓")
                 return 0
-            if side == OrderSide.Sell:
-                # 平多：盈亏 = (现价 - 成本) × 乘数 × 手数
-                pnl = (price - pos.long_cost) * spec.multiplier * volume
+            if pos_side == PositionSide.Long:
+                # 平多：盈亏 = (现价 - vwap) × 乘数 × 手数
+                pnl = (price - pos.vwap) * spec.multiplier * volume
             else:
-                # 平空：盈亏 = (成本 - 现价) × 乘数 × 手数
-                pnl = (pos.short_cost - price) * spec.multiplier * volume
-            self.cash = round(self.cash + pnl - commission, 2)
+                # 平空：盈亏 = (vwap - 现价) × 乘数 × 手数
+                pnl = (pos.vwap - price) * spec.multiplier * volume
+            self.balance = round(self.balance + pnl - commission, 2)
             self._update_future_position(symbol, volume, price, side, position_effect)
 
         # ── 成交记录 hook ──
+        _, _, _, pos_side = self.FUTURE_ORDER_MATRIX[(side, position_effect)]
         self._record_future_trade(
-            symbol=symbol, volume=volume, side=side,
+            symbol=symbol, volume=volume, side=side, position_side=pos_side,
             position_effect=position_effect, order_type=order_type,
             price=price, commission=commission, multiplier=spec.multiplier, note=note,
         )
@@ -691,41 +725,32 @@ class _OrderMixin:
 
     def _update_future_position(self, symbol: str, volume: int, price: float,
                                 side: int, position_effect: int):
-        """更新期货双向持仓（操作 FuturePosition，多空可共存/锁仓）。
+        """更新期货持仓（统一 (symbol, side) 表，操作单方向 Position）。
 
-        8 种 (side, position_effect) 组合折叠为 FuturePosition 的方法调用：
-            open_long / open_short / close_long / close_short
-        Close(默认平仓) 按 FIFO 先平今仓，与掘金"期货默认平今"一致；
+        从 FUTURE_ORDER_MATRIX 取目标持仓方向 pos_side，
+        8 种组合折叠为 Position.open/close 方法调用：
+        Close(默认平仓) 按 FIFO 先平今仓（对齐掘金"期货默认平今"）；
         CloseToday / CloseYesterday 通过 today_volume 参数区分。
         """
-        pos = self.positions.get(symbol)
-        if not isinstance(pos, FuturePosition):
-            pos = FuturePosition()
+        _, _, _, pos_side = self.FUTURE_ORDER_MATRIX[(side, position_effect)]
+        pos = self.positions.get((symbol, pos_side))
+        if pos is None:
+            pos = Position(symbol=symbol, side=pos_side)
 
-        key = (side, position_effect)
-
-        if key == (OrderSide.Buy, PositionEffect.Open):
-            pos.open_long(volume, price)                       # 开多
-        elif key == (OrderSide.Sell, PositionEffect.Open):
-            pos.open_short(volume, price)                      # 开空
-        elif key == (OrderSide.Sell, PositionEffect.Close):
-            pos.close_long(volume)                             # 平多(FIFO先平今)
-        elif key == (OrderSide.Sell, PositionEffect.CloseToday):
-            pos.close_long(volume, today_volume=volume)        # 平今多
-        elif key == (OrderSide.Sell, PositionEffect.CloseYesterday):
-            pos.close_long(volume, today_volume=0)             # 平昨多
-        elif key == (OrderSide.Buy, PositionEffect.Close):
-            pos.close_short(volume)                            # 平空(FIFO先平今)
-        elif key == (OrderSide.Buy, PositionEffect.CloseToday):
-            pos.close_short(volume, today_volume=volume)       # 平今空
-        elif key == (OrderSide.Buy, PositionEffect.CloseYesterday):
-            pos.close_short(volume, today_volume=0)            # 平昨空
+        if position_effect == PositionEffect.Open:
+            pos.open(volume, price)                      # 开仓加权 vwap
+        elif position_effect == PositionEffect.Close:
+            pos.close(volume)                            # 平仓(FIFO先平今)
+        elif position_effect == PositionEffect.CloseToday:
+            pos.close(volume, today_volume=volume)       # 平今
+        elif position_effect == PositionEffect.CloseYesterday:
+            pos.close(volume, today_volume=0)            # 平昨
 
         # 清理零持仓
         if pos.is_empty():
-            self.positions.pop(symbol, None)
+            self.positions.pop((symbol, pos_side), None)
         else:
-            self.positions[symbol] = pos
+            self.positions[(symbol, pos_side)] = pos
 
     # ── 目标持仓系列（对齐掘金 GM order_target_*，用 position_side 而非 side）──
 
@@ -750,9 +775,10 @@ class _OrderMixin:
         if position_side not in (PositionSide.Long, PositionSide.Short):
             raise ValueError(f"position_side 必须为 PositionSide.Long/Short, got {position_side}")
 
-        pos = self.positions.get(symbol)
-        long_vol = pos.long_volume if isinstance(pos, FuturePosition) else 0
-        short_vol = pos.short_volume if isinstance(pos, FuturePosition) else 0
+        long_pos = self.positions.get((symbol, PositionSide.Long))
+        short_pos = self.positions.get((symbol, PositionSide.Short))
+        long_vol = long_pos.volume if long_pos else 0
+        short_vol = short_pos.volume if short_pos else 0
 
         if position_side == PositionSide.Long:
             # 目标多头：先平空（避免锁仓）再调整多头
@@ -886,8 +912,9 @@ class AccountManager(_OrderMixin):
             init_cash: 初始资金，默认100万
             fee_config: 费用配置，包含佣金率、印花税率、最低佣金
         """
-        self.cash = round(init_cash, 2)
-        self.positions: Dict[str, Dict] = {}
+        self.balance = round(init_cash, 2)
+        # [重构] 2026-08-04 深度B：统一持仓表 (symbol, side) → Position（股票 side=Long，期货 Long/Short）
+        self.positions: Dict[Tuple[str, int], Position] = {}
         self.trade_records: List[TradeRecord] = []
         self.snapshots: List[AccountSnapshot] = []
         self.fee_config = fee_config or {
@@ -917,8 +944,8 @@ class AccountManager(_OrderMixin):
             created_at: 快照时间，由引擎传入（通常 = 首根 bar 的 eob - 1 天）
         """
         snapshot = AccountSnapshot(
-            cash=self.cash,
-            nav=self.cash,
+            balance=self.balance,
+            nav=self.balance,
             created_at=created_at,
             positions={}
         )
@@ -938,10 +965,11 @@ class AccountManager(_OrderMixin):
             created_at = context.now
 
         pos_snapshots = {}
-        total_assets = self.cash          # 股票部分累加市值
-        total_float_pnl = 0.0             # [新增] 2026-08-04 期货浮动盈亏
+        total_assets = self.balance          # 股票部分累加市值
+        total_fpnl = 0.0             # [新增] 2026-08-04 期货浮动盈亏
 
-        for symbol, pos in self.positions.items():
+        # [重构] 2026-08-04 深度B：统一遍历 (symbol, side) → Position
+        for (symbol, side), pos in self.positions.items():
             try:
                 price = self._get_price(symbol)
             except (ValueError, KeyError):
@@ -949,40 +977,37 @@ class AccountManager(_OrderMixin):
             if price <= 0:
                 continue
 
-            # [新增] 2026-08-04 期货：NAV 只记浮动盈亏（保证金仍占用 cash 内）
-            if isinstance(pos, FuturePosition):
+            if self._is_future(symbol):
+                # 期货：NAV 只记浮动盈亏（保证金仍占用 balance 内）
                 spec = self._contracts.get(symbol)
                 if spec is None:
                     continue
-                total_float_pnl += pos.float_pnl(price, spec.multiplier)
+                total_fpnl += pos.fpnl(price, spec.multiplier)
                 pos_snap = PositionSnapshot(
-                    symbol=symbol,
-                    volume=pos.total_volume,   # 多空总量（持仓天数判定用）
-                    cost_price=0.0,
-                    price=price,
-                    created_at=created_at,
+                    symbol=symbol, side=side,
+                    volume=pos.volume, volume_today=pos.volume_today,
+                    vwap=pos.vwap, price=price, created_at=created_at,
                 )
-                pos_snapshots[symbol] = pos_snap
+                pos_snapshots[(symbol, side)] = pos_snap
                 continue
 
+            # 股票：市值计入 NAV
+            total_assets += pos.volume * price
             pos_snap = PositionSnapshot(
-                symbol=symbol,
-                volume=pos['volume'],
-                cost_price=round(pos['cost_price'], 3),
-                price=price,
-                created_at=created_at
+                symbol=symbol, side=side,
+                volume=pos.volume, volume_today=pos.volume_today,
+                vwap=round(pos.vwap, 3), price=price, created_at=created_at,
             )
-            pos_snapshots[symbol] = pos_snap
-            total_assets += pos['volume'] * price
+            pos_snapshots[(symbol, side)] = pos_snap
 
-        total_assets = round(total_assets + total_float_pnl, 2)
+        total_assets = round(total_assets + total_fpnl, 2)
         snapshot = AccountSnapshot(
-            cash=self.cash,
+            balance=self.balance,
             nav=total_assets,
             created_at=created_at,
             positions=pos_snapshots,
-            margin_used=self._get_used_margin(),
-            float_pnl=round(total_float_pnl, 2),
+            used_bail=self._get_used_bail(),
+            fpnl=round(total_fpnl, 2),
         )
         self.snapshots.append(snapshot)
 
@@ -995,11 +1020,17 @@ class AccountManager(_OrderMixin):
         Args:
             snapshot: 账户快照对象
         """
-        self.cash = round(snapshot.cash, 2)
-        self.positions = {
-            sym: {'volume': pos.volume, 'cost_price': round(pos.cost_price, 3)}
-            for sym, pos in snapshot.positions.items()
-        }
+        self.balance = round(snapshot.balance, 2)
+        self.positions = {}
+        for key, pos in snapshot.positions.items():
+            # 兼容旧快照键格式（str）与新格式 ((symbol, side))
+            symbol, side = key if isinstance(key, tuple) else (key, PositionSide.Long)
+            self.positions[(symbol, side)] = Position(
+                symbol=symbol, side=side,
+                volume=int(pos.volume),
+                volume_today=int(getattr(pos, 'volume_today', pos.volume)),
+                vwap=pos.vwap,
+            )
         self.current_time = snapshot.created_at
 
     # ------------------------------------------------------------------------
@@ -1020,9 +1051,9 @@ class AccountManager(_OrderMixin):
         return order_id
 
     def _get_stock_position_volume(self, symbol: str) -> float:
-        """[覆写] 股票持仓数量（AccountManager 持仓为 dict {'volume','cost_price'}）"""
-        pos = self.positions.get(symbol)
-        return pos['volume'] if isinstance(pos, dict) else 0
+        """[覆写] 股票持仓数量（统一持仓表 (symbol, Long) → Position）"""
+        pos = self.positions.get((symbol, PositionSide.Long))
+        return pos.volume if pos else 0
 
     def _process_order(
         self,
@@ -1057,20 +1088,29 @@ class AccountManager(_OrderMixin):
         stamp_tax = round(price * volume * self.fee_config['stamp_tax_rate'], 2) if side == OrderSide.Sell else 0
         total_fee = round(commission + stamp_tax, 2)
 
+        key = (symbol, PositionSide.Long)   # [重构] 2026-08-04 股票恒多头
+
         if side == OrderSide.Buy:
             total_cost = round(volume * price + total_fee, 2)
-            if self.cash < total_cost:
-                print(f"订单 {order_id} 买入 {symbol} 失败，资金不足。需要 {total_cost}，可用资金 {self.cash}")
+            if self.balance < total_cost:
+                print(f"订单 {order_id} 买入 {symbol} 失败，资金不足。需要 {total_cost}，可用资金 {self.balance}")
                 return 0
-            self.cash = round(self.cash - total_cost, 2)
-            self._update_position(symbol, volume, price, total_fee, OrderSide.Buy)
+            self.balance = round(self.balance - total_cost, 2)
+            pos = self.positions.get(key)
+            if pos is None:
+                pos = Position(symbol=symbol, side=PositionSide.Long)
+            pos.open(volume, price)   # vwap 不含手续费（对齐掘金 Position.vwap）
+            self.positions[key] = pos
         else:
-            current_pos = self.positions.get(symbol, {'volume': 0})
-            if current_pos['volume'] < volume:
-                print(f"订单 {order_id} 卖出 {symbol} 失败，持仓不足。需要 {volume}，当前持仓 {current_pos['volume']}")
+            pos = self.positions.get(key)
+            if pos is None or pos.volume < volume:
+                cur = pos.volume if pos else 0
+                print(f"订单 {order_id} 卖出 {symbol} 失败，持仓不足。需要 {volume}，当前持仓 {cur}")
                 return 0
-            self.cash = round(self.cash + volume * price - total_fee, 2)
-            self._update_position(symbol, volume, price, total_fee, OrderSide.Sell)
+            self.balance = round(self.balance + volume * price - total_fee, 2)
+            pos.close(volume)
+            if pos.is_empty():
+                self.positions.pop(key, None)
 
         self.trade_records.append(TradeRecord(
             created_at=context.now,
@@ -1081,48 +1121,24 @@ class AccountManager(_OrderMixin):
             position_effect=position_effect,
             position_side=PositionSide.Long,
             order_type=order_type,
-            fee=total_fee,
+            filled_commission=total_fee,
             order_id=order_id,
             filled_volume=volume,
-            amount=price * volume,
+            filled_amount=price * volume,
             note=note,
         ))
         return volume
-
-    def _update_position(self, symbol: str, volume: int, price: float, total_fee: float, side: int):
-        """
-        更新持仓信息
-
-        Args:
-            symbol: 交易品种代码
-            volume: 成交数量（正数）
-            price: 成交价格
-            total_fee: 总费用
-            side: 买卖方向，OrderSide.Buy=1, OrderSide.Sell=2
-        """
-        pos = self.positions.get(symbol, {'volume': 0, 'cost_price': 0})
-        if side == OrderSide.Buy:
-            new_volume = pos['volume'] + volume
-            total_purchase_cost = pos['volume'] * pos['cost_price'] + volume * price + total_fee
-            new_cost = total_purchase_cost / new_volume
-            pos['volume'] = new_volume
-            pos['cost_price'] = round(new_cost, 3)
-        else:
-            pos['volume'] -= volume
-            if pos['volume'] == 0:
-                del self.positions[symbol]
-                return
-        self.positions[symbol] = pos
 
     # [新增] 2026-08-04 期货支持：核心逻辑见 _OrderMixin（AccountManager/FastAccount 共享）
     #   账务模型：保证金不进出 cash，NAV = cash + 浮盈，详见 mixin 注释。
     # [重构] 2026-08-04 期货方法已移入 _OrderMixin，此处仅覆写成交记录 hook。
 
     def _record_future_trade(self, symbol: str, volume: int, side: int,
-                             position_effect: int, order_type: int,
-                             price: float, commission: float,
+                             position_side: int, position_effect: int,
+                             order_type: int, price: float, commission: float,
                              multiplier: int, note: str = ''):
-        """[覆写] 期货成交记录 → TradeRecord（FastAccount 走 mixin 默认空实现）"""
+        """[覆写] 期货成交记录 → TradeRecord（FastAccount 走 mixin 默认空实现）
+        position_side 由 FUTURE_ORDER_MATRIX 推导（对齐掘金 Position.side）"""
         order_id = f"order_{len(self.trade_records)+1}"
         self.trade_records.append(TradeRecord(
             created_at=context.now,
@@ -1131,12 +1147,13 @@ class AccountManager(_OrderMixin):
             volume=volume,
             side=side,
             position_effect=position_effect,
-            position_side=PositionSide.Long if side == OrderSide.Buy else PositionSide.Short,
+            position_side=position_side,
             order_type=order_type,
-            fee=commission,
+            filled_commission=commission,
             order_id=order_id,
             filled_volume=volume,
-            amount=round(price * multiplier * volume, 2),
+            filled_amount=round(price * multiplier * volume, 2),
+            multiplier=multiplier,
             note=note,
         ))
 
@@ -1157,8 +1174,8 @@ class AccountManager(_OrderMixin):
         query_time = context.now if query_time is None else query_time
 
         if not self.snapshots:
-            return self._account_dict(self.cash, self.cash, query_time,
-                                      margin_used=self._get_used_margin())
+            return self._account_dict(self.balance, self.balance, query_time,
+                                      used_bail=self._get_used_bail())
 
         snapshot = next(
             (s for s in reversed(self.snapshots) if s.created_at <= query_time),
@@ -1166,98 +1183,75 @@ class AccountManager(_OrderMixin):
         )
 
         if snapshot is None:
-            return self._account_dict(self.cash, self.cash, query_time,
-                                      margin_used=self._get_used_margin())
+            return self._account_dict(self.balance, self.balance, query_time,
+                                      used_bail=self._get_used_bail())
 
-        margin_used = getattr(snapshot, 'margin_used', 0.0)
-        float_pnl = getattr(snapshot, 'float_pnl', 0.0)
-        return self._account_dict(snapshot.cash, snapshot.nav, snapshot.created_at,
-                                  margin_used=margin_used, float_pnl=float_pnl)
+        used_bail = getattr(snapshot, 'used_bail', 0.0)
+        fpnl = getattr(snapshot, 'fpnl', 0.0)
+        return self._account_dict(snapshot.balance, snapshot.nav, snapshot.created_at,
+                                  used_bail=used_bail, fpnl=fpnl)
 
-    def _account_dict(self, cash: float, nav: float, created_at: datetime,
-                      margin_used: float = 0.0, float_pnl: float = 0.0) -> Dict:
+    def _account_dict(self, balance: float, nav: float, created_at: datetime,
+                      used_bail: float = 0.0, fpnl: float = 0.0) -> Dict:
         """构造 get_account 返回字典（三分支共用，消除重复）。
 
-        字段：cash/nav/created_at + 期货扩展(available/margin_used/float_pnl/risk_ratio)
+        字段对齐掘金 Cash：balance/nav/available + 期货扩展(used_bail/fpnl/risk_ratio)
         """
         return {
-            'cash': cash,
+            'balance': balance,
             'nav': nav,
             'created_at': created_at,
             # [新增] 2026-08-04 期货字段：可用资金/已用保证金/浮动盈亏/风险度
-            'available': round(cash - margin_used - self.frozen, 2),
-            'margin_used': margin_used,
-            'float_pnl': float_pnl,
-            'risk_ratio': round(margin_used / nav, 4) if nav > 0 else 0.0,
+            'available': round(balance - used_bail - self.frozen, 2),
+            'used_bail': used_bail,
+            'fpnl': fpnl,
+            'risk_ratio': round(used_bail / nav, 4) if nav > 0 else 0.0,
         }
 
-    def get_position(self, symbol: str = None) -> Dict:
+    def get_position(self, symbol: str = None, side: int = None) -> List[Dict]:
         """
-        获取持仓信息
-        
+        获取持仓信息（[重构] 2026-08-04 深度B：对齐掘金 gm get_position 返回 Position 列表）。
+
         Args:
-            symbol: 交易品种代码，为None时返回所有持仓
-            
+            symbol: 合约/股票代码，过滤单品种
+            side: 持仓方向（PositionSide.Long/Short），过滤单方向
+
         Returns:
-            Dict: 单个品种返回{'volume', 'cost_price'}，所有品种返回字典
+            List[Dict]: [{symbol, side, volume, volume_today, vwap}, ...]，
+                        空列表表示无持仓（falsy，兼容 `if get_position()` 判断）
         """
-        if not self.snapshots:
-            positions = self.positions.copy()
-        else:
-            last_snapshot = self.snapshots[-1]
-            positions = {
-                sym: {'volume': pos.volume, 'cost_price': pos.cost_price}
-                for sym, pos in last_snapshot.positions.items()
-            }
-
-        if symbol:
-            # [新增] 2026-08-04 期货：返回多空分列（多空可共存）
-            if self._is_future(symbol):
-                live = self.positions.get(symbol)
-                if isinstance(live, FuturePosition):
-                    return live.to_dict()
-                return {'long_volume': 0, 'long_volume_today': 0, 'long_cost': 0.0,
-                        'short_volume': 0, 'short_volume_today': 0, 'short_cost': 0.0,
-                        'sec_type': 'future'}
-            pos = positions.get(symbol, {'volume': 0, 'cost_price': 0})
-            pos['cost_price'] = round(pos['cost_price'], 3)
-            return pos
-
-        # [新增] 2026-08-04 期货持仓合入全量结果（多空分列）
-        for sym in list(positions.keys()):
-            if self._is_future(sym):
-                live = self.positions.get(sym)
-                positions[sym] = live.to_dict() if isinstance(live, FuturePosition) else {
-                    'long_volume': 0, 'short_volume': 0, 'long_cost': 0.0,
-                    'short_cost': 0.0, 'sec_type': 'future'}
-        for pos in positions.values():
-            if pos.get('sec_type') != 'future':
-                pos['cost_price'] = round(pos.get('cost_price', 0), 3)
-        return positions
+        result = []
+        for (sym, s), pos in self.positions.items():
+            if symbol and sym != symbol:
+                continue
+            if side is not None and s != side:
+                continue
+            result.append(pos.to_dict())
+        return result
 
     def get_orders(
         self,
         start_query_time: datetime = None,
         end_query_time: datetime = None
-    ) -> List[TradeRecord]:
+    ) -> List[Dict]:
         """
-        获取成交记录
+        获取成交记录（[重构] 2026-08-04 返回 List[Dict]，对齐 gm get_orders 返回类型）
         
         Args:
             start_query_time: 查询起始时间
             end_query_time: 查询结束时间
             
         Returns:
-            List[TradeRecord]: 成交记录列表
+            List[Dict]: 成交记录列表（字段对齐 gm Order），空列表表示无成交
         """
-        trades = self.trade_records
+        trades = [t.to_dict() for t in self.trade_records]
 
         if start_query_time:
-            trades = [t for t in trades if t.created_at >= start_query_time]
+            trades = [t for t in trades if t['created_at'] >= start_query_time]
         if end_query_time:
-            trades = [t for t in trades if t.created_at <= end_query_time]
+            trades = [t for t in trades if t['created_at'] <= end_query_time]
 
-        return trades.copy()
+        return trades
 
     # ------------------------------------------------------------------------
     # 私有方法
@@ -1339,7 +1333,7 @@ class AccountManager(_OrderMixin):
             init_cash: 可选，重置后的初始资金。不传则保持当前现金不变。
         """
         if init_cash is not None:
-            self.cash = round(init_cash, 2)
+            self.balance = round(init_cash, 2)
         self.positions.clear()
         self.trade_records.clear()
         self.snapshots.clear()
@@ -1357,18 +1351,19 @@ class FastAccount(_OrderMixin):
 
     fee_config 从 AccountManager 继承，与 full 模式共享同一费源。
     [新增] 2026-08-04 期货支持：核心逻辑复用 _OrderMixin，
-      持仓 FuturePosition 对象，账务与 AccountManager 完全一致（NAV=cash+浮盈）。
+      持仓 Position 对象（统一 (symbol, side) 表），账务与 AccountManager 完全一致（NAV=balance+浮盈）。
     """
 
-    __slots__ = ('cash', 'positions', 'fee_config', 'daily_assets', '_latest_prices',
+    __slots__ = ('balance', 'positions', 'fee_config', 'daily_assets', '_latest_prices',
                  '_contracts')
 
     FREQ_ORDER = ['1m', '60s', '5m', '300s', '15m', '900s',
                   '30m', '1800s', '60m', '3600s', '1d']
 
     def __init__(self, cash: float = 1e6, fee_config: Dict = None):
-        self.cash = float(cash)
-        self.positions: Dict[str, float] = {}  # {symbol: shares}
+        self.balance = float(cash)
+        # [重构] 2026-08-04 深度B：统一持仓表 (symbol, side) → Position（与 AccountManager 一致）
+        self.positions: Dict[Tuple[str, int], Position] = {}
         self.fee_config = fee_config or {
             'commission_rate': 0.0,
             'stamp_tax_rate': 0.0,
@@ -1453,9 +1448,10 @@ class FastAccount(_OrderMixin):
         """
         if date is None:
             date = context.now.date()
-        nav = self.cash
-        float_pnl = 0.0
-        for sym, shares in self.positions.items():
+        nav = self.balance
+        fpnl = 0.0
+        # [重构] 2026-08-04 深度B：统一遍历 (symbol, side) → Position
+        for (sym, _side), pos in self.positions.items():
             # [优化] 2026-06-21 优先读引擎注入的 bar 价格缓存
             price = self._latest_prices.get(sym)
             if price is None:
@@ -1464,14 +1460,14 @@ class FastAccount(_OrderMixin):
                 except (ValueError, KeyError):
                     pass
             if price:
-                if isinstance(shares, FuturePosition):
+                if self._is_future(sym):
                     spec = self._contracts.get(sym)
                     if spec is None:
                         continue
-                    float_pnl += shares.float_pnl(price, spec.multiplier)
+                    fpnl += pos.fpnl(price, spec.multiplier)
                 else:
-                    nav += shares * price
-        nav += float_pnl
+                    nav += pos.volume * price
+        nav += fpnl
         self.daily_assets[date] = round(nav, 2)
 
     # ── 下单 (逻辑由 _OrderMixin 统一提供，此处仅覆写股票执行层 hook) ──
@@ -1488,15 +1484,16 @@ class FastAccount(_OrderMixin):
         return ''
 
     def _get_stock_position_volume(self, symbol: str) -> float:
-        """[覆写] 股票持仓数量（FastAccount 持仓为 float 结构）"""
-        sh = self.positions.get(symbol, 0)
-        return sh if not isinstance(sh, FuturePosition) else 0
+        """[覆写] 股票持仓数量（统一持仓表 (symbol, Long) → Position）"""
+        pos = self.positions.get((symbol, PositionSide.Long))
+        return pos.volume if pos else 0
 
     def _process_order(self, symbol: str, volume: int, side: int,
                        price: float) -> int:
         """执行订单 — 现金+持仓更新，对齐 AccountManager._process_order 现金计算。
 
         与 AccountManager._process_order 的区别：不生成 TradeRecord，不触发快照。
+        [重构] 2026-08-04 深度B：股票持仓用 Position 对象（(symbol, Long) 表）。
         """
         fee = self.fee_config
 
@@ -1507,55 +1504,54 @@ class FastAccount(_OrderMixin):
         stamp_tax = round(price * volume * fee['stamp_tax_rate'], 2) if side == OrderSide.Sell else 0
         total_fee = round(commission + stamp_tax, 2)
 
+        key = (symbol, PositionSide.Long)
+
         if side == OrderSide.Buy:
             total_cost = round(volume * price + total_fee, 2)
-            if self.cash < total_cost:
-                print(f"FastAccount 买入 {symbol} 失败，资金不足。需要 {total_cost}，可用资金 {self.cash}")
+            if self.balance < total_cost:
+                print(f"FastAccount 买入 {symbol} 失败，资金不足。需要 {total_cost}，可用资金 {self.balance}")
                 return 0
-            self.cash = round(self.cash - total_cost, 2)
-            self.positions[symbol] = self.positions.get(symbol, 0) + volume
+            self.balance = round(self.balance - total_cost, 2)
+            pos = self.positions.get(key)
+            if pos is None:
+                pos = Position(symbol=symbol, side=PositionSide.Long)
+            pos.open(volume, price)   # vwap 不含手续费（对齐掘金 Position.vwap）
+            self.positions[key] = pos
         else:
-            current_shares = self.positions.get(symbol, 0)
-            if current_shares < volume:
-                print(f"FastAccount 卖出 {symbol} 失败，持仓不足。需要 {volume}，当前持仓 {current_shares}")
+            pos = self.positions.get(key)
+            if pos is None or pos.volume < volume:
+                cur = pos.volume if pos else 0
+                print(f"FastAccount 卖出 {symbol} 失败，持仓不足。需要 {volume}，当前持仓 {cur}")
                 return 0
-            self.cash = round(self.cash + volume * price - total_fee, 2)
-            self.positions[symbol] -= volume
-            if abs(self.positions[symbol]) < 1e-9:
-                del self.positions[symbol]
+            self.balance = round(self.balance + volume * price - total_fee, 2)
+            pos.close(volume)
+            if pos.is_empty():
+                self.positions.pop(key, None)
 
         return volume
 
     # ── 查询 (兼容 AccountManager 接口) ──
 
-    def get_position(self, symbol: str = None):
-        """返回持仓信息。
+    def get_position(self, symbol: str = None, side: int = None):
+        """返回持仓信息（[重构] 2026-08-04 对齐掘金：Position dict 列表，可用 symbol/side 过滤）。
 
-        [新增] 2026-08-04 期货返回多空分列（FuturePosition.to_dict），多空可共存。
+        Returns:
+            List[Dict]: [{symbol, side, volume, volume_today, vwap}, ...]
         """
-        if symbol:
-            if self._is_future(symbol):
-                pos = self.positions.get(symbol)
-                if isinstance(pos, FuturePosition):
-                    return pos.to_dict()
-                return {'long_volume': 0, 'long_volume_today': 0, 'long_cost': 0.0,
-                        'short_volume': 0, 'short_volume_today': 0, 'short_cost': 0.0,
-                        'sec_type': 'future'}
-            shares = self.positions.get(symbol, 0)
-            return {'volume': shares, 'cost_price': 0}
-        result = {}
-        for sym, sh in self.positions.items():
-            if isinstance(sh, FuturePosition):
-                result[sym] = sh.to_dict()
-            else:
-                result[sym] = {'volume': sh, 'cost_price': 0}
+        result = []
+        for (sym, s), pos in self.positions.items():
+            if symbol and sym != symbol:
+                continue
+            if side is not None and s != side:
+                continue
+            result.append(pos.to_dict())
         return result
 
     def get_account(self, query_time=None):
-        """返回账户概览。nav = cash + 股票市值 + 期货浮盈，优先读 _latest_prices 缓存。"""
-        nav = self.cash
-        float_pnl = 0.0
-        for sym, shares in self.positions.items():
+        """返回账户概览。nav = balance + 股票市值 + 期货浮盈，优先读 _latest_prices 缓存。"""
+        nav = self.balance
+        fpnl = 0.0
+        for (sym, _side), pos in self.positions.items():
             price = self._latest_prices.get(sym)
             if price is None:
                 try:
@@ -1563,14 +1559,14 @@ class FastAccount(_OrderMixin):
                 except (ValueError, KeyError):
                     pass
             if price:
-                if isinstance(shares, FuturePosition):
+                if self._is_future(sym):
                     spec = self._contracts.get(sym)
                     if spec is None:
                         continue
-                    float_pnl += shares.float_pnl(price, spec.multiplier)
+                    fpnl += pos.fpnl(price, spec.multiplier)
                 else:
-                    nav += shares * price
-        return {'cash': self.cash, 'nav': round(nav + float_pnl, 2)}
+                    nav += pos.volume * price
+        return {'balance': self.balance, 'nav': round(nav + fpnl, 2)}
 
 
 # ============================================================================
