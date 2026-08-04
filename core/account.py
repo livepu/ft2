@@ -943,7 +943,7 @@ class AccountManager(_OrderMixin):
     │
     ├── [查询操作]              # 策略中获取实时状态，优先从最新快照反查
     │   ├── get_account()       #  查询账户现金+净值（从 snapshots 反查 ≤ query_time 的快照）
-    │   ├── get_position()      #  查询持仓（单品种返回 dict，全部返回 Dict[str,dict]）
+    │   ├── get_position()      #  查询持仓（List[Dict]，空持仓返回 []，对齐 gm）
     │   └── get_orders()        #  查询成交记录（支持时间区间过滤）
     │
     └── [底层支撑]

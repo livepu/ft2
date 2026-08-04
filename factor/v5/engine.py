@@ -161,12 +161,12 @@ class FacEngine:
                 # 平仓: 不在缓冲区内的品种全部卖出
                 # 排名跌出前 buffer_rank 名才卖出，减少无谓换手
                 # 无缓冲时 buffer_codes=top_codes，退化为原始逻辑
-                positions = ctx.account.get_position()  # None → 所有持仓 dict
+                positions = ctx.account.get_position()  # [重构] 2026-08-04 深度B: List[Dict]
                 # [修复] 2026-06-18 卖出前预计算保留品种数，避免卖出后positions未及时更新
-                n_keep = sum(1 for code, pos in positions.items()
-                            if pos.get('volume', 0) > 0 and code in buffer_codes)
-                for code, pos in list(positions.items()):
-                    if pos.get('volume', 0) > 0 and code not in buffer_codes:
+                held_codes = {p['symbol'] for p in positions if p.get('volume', 0) > 0}
+                n_keep = sum(1 for code in held_codes if code in buffer_codes)
+                for code in held_codes:
+                    if code not in buffer_codes:
                         try:
                             ctx.account.order_percent(
                                 code, 1.0, OrderSide.Sell,
@@ -184,8 +184,7 @@ class FacEngine:
                     for code in top_codes & symbols_set:
                         if n_bought >= n_slots:
                             break  # 空位已用完
-                        pos = positions.get(code)
-                        if pos and pos.get('volume', 0) > 0:
+                        if code in held_codes:
                             continue  # 已持有（包括缓冲保留的）
                         try:
                             ctx.account.order_percent(
@@ -285,11 +284,11 @@ class FacEngine:
                     buffer_codes = top_codes
 
                 # [修复] 2026-06-21 对齐 _run_full：平仓用 get_position() 获取持仓信息
-                positions = ctx.account.get_position()
-                n_keep = sum(1 for code, pos in positions.items()
-                            if pos.get('volume', 0) > 0 and code in buffer_codes)
-                for code, pos in list(positions.items()):
-                    if pos.get('volume', 0) > 0 and code not in buffer_codes:
+                positions = ctx.account.get_position()  # [重构] 2026-08-04 深度B: List[Dict]
+                held_codes = {p['symbol'] for p in positions if p.get('volume', 0) > 0}
+                n_keep = sum(1 for code in held_codes if code in buffer_codes)
+                for code in held_codes:
+                    if code not in buffer_codes:
                         try:
                             ctx.account.order_percent(code, 1.0, OrderSide.Sell)
                         except (ValueError, RuntimeError):
@@ -303,8 +302,7 @@ class FacEngine:
                     for code in top_codes & set(symbols):
                         if n_bought >= n_slots:
                             break
-                        pos = positions.get(code)
-                        if pos and pos.get('volume', 0) > 0:
+                        if code in held_codes:
                             continue
                         try:
                             ctx.account.order_percent(code, weight, OrderSide.Buy)
@@ -326,116 +324,16 @@ class FacEngine:
         """向量化因子轮动：纯矩阵运算，不经过 Engine._drive_timeline。
 
         连续权重近似 (无 lot_size)，费率模拟与 fast/full 对齐。
-        调仓时序: 当日收盘后用旧权重计收益 → 调仓 → 记录净值 (与 _drive_timeline 一致)
+        [重构] 2026-08-04 Top-N 权重 + 矩阵引擎统一委托 VectorBacktester.run_panel，
+        因子版本不再复制 Top-N 闭包逻辑。
         """
-        panel = FacEngine._prepare_panel(panel, start_date)
-        dates = panel.index.sort_values()
-        symbols = panel.columns.tolist()
-        symbols_set = set(symbols)
-        n = len(dates)
-        sym_to_idx = {c: i for i, c in enumerate(symbols)}
-
-        # 构建价格 + 收益率矩阵 (T × N)
-        price_arr = np.full((n, len(symbols)), np.nan)
-        for code in symbols:
-            if code in assets:
-                price_arr[:, sym_to_idx[code]] = assets[code]['close'].reindex(dates).values
-        returns_arr = np.diff(price_arr, axis=0) / price_arr[:-1]
-        returns_arr = np.nan_to_num(returns_arr, nan=0.0)
-
-        # 调仓日
-        rebalance_set = FacEngine._make_rebalance_set(dates, rebalance)
-        use_buffer = buffer > 0
-        buffer_rank = top_n + buffer
-
-        fee = fee_config or {'commission_rate': 0.0, 'stamp_tax_rate': 0.0, 'min_commission': 0.0}
-
-        # 预计算每日 top_codes
-        panel_arr = panel.values  # T × N
-        top_indices = np.argsort(-panel_arr, axis=1)[:, :max(top_n, buffer_rank if use_buffer else top_n)]
-
-        # 权重矩阵: weight_matrix[i] = 第i天开始时的持仓权重 (即前一天收盘调仓后的权重)
-        weight_matrix = np.zeros((n, len(symbols)))
-        held = set()
-        current_weights = {}
-
-        nav = float(initial_capital)
-        daily_nav = {dates[0].date(): round(nav, 2)}
-
-        for i in range(n):
-            date = dates[i]
-            is_rebalance = date in rebalance_set and date in panel.index
-
-            # 1. 当日收益: 用旧权重 × 当日收益率 (i-1 → i)
-            if i > 0 and current_weights:
-                ret = 0.0
-                for c, w in current_weights.items():
-                    j = sym_to_idx.get(c)
-                    if j is not None:
-                        ret += w * returns_arr[i - 1, j]
-                nav *= (1.0 + ret)
-
-            # 2. 调仓 (收盘后)
-            if is_rebalance:
-                top_codes = set()
-                for j in range(top_n):
-                    code = symbols[top_indices[i, j]]
-                    if code in symbols_set:
-                        top_codes.add(code)
-
-                if use_buffer:
-                    buffer_codes = set()
-                    for j in range(buffer_rank):
-                        code = symbols[top_indices[i, j]]
-                        if code in symbols_set:
-                            buffer_codes.add(code)
-                    keep = held & buffer_codes
-                else:
-                    keep = held & top_codes
-
-                n_keep = len(keep)
-                n_slots = top_n - n_keep
-                new_codes = [c for c in top_codes if c not in held][:n_slots]
-                target_codes = keep | set(new_codes)
-                n_target = len(target_codes)
-
-                if n_target > 0:
-                    # [注意] vector 模式采用等权重置：每次调仓强制所有持仓品种等权
-                    # 这与 fast 模式的行为不同：
-                    #   - fast 模式保留品种维持原权重，新买入品种按 1/len(top_codes) 定价
-                    #   - vector 模式所有目标持仓品种统一按 1/n_target 等权
-                    # 结果：表现好的品种权重不会被累积放大，表现差的品种也不会被自动稀释。
-                    # 适用场景：被动指数再平衡、等权因子轮动。
-                    # 若需对齐 fast 的绩效累积特性，应改为保留原权重 + 新品种按比例分配。
-                    wt = 1.0 / n_target
-                    new_weights = {c: wt for c in target_codes}
-                else:
-                    new_weights = {}
-
-                # 手续费
-                if current_weights:
-                    sell_val = buy_val = 0.0
-                    for c, w in current_weights.items():
-                        nw = new_weights.get(c, 0.0)
-                        if w > nw:
-                            sell_val += (w - nw) * nav
-                    for c, w in new_weights.items():
-                        ow = current_weights.get(c, 0.0)
-                        if w > ow:
-                            buy_val += (w - ow) * nav
-                    if sell_val > 0:
-                        nav -= max(sell_val * fee['commission_rate'], fee['min_commission'])
-                        nav -= sell_val * fee['stamp_tax_rate']
-                    if buy_val > 0:
-                        nav -= max(buy_val * fee['commission_rate'], fee['min_commission'])
-
-                current_weights = new_weights
-                held = target_codes
-
-            weight_matrix[i] = [current_weights.get(c, 0.0) for c in symbols]
-            daily_nav[date.date()] = round(nav, 2)
-
-        return AccountAnalyzer(daily_assets=daily_nav)
+        from core.backtest import VectorBacktester
+        vbt = VectorBacktester().set_init_cash(initial_capital)
+        if fee_config is not None:
+            vbt.set_fee_config(fee_config)
+        for code, df in assets.items():
+            vbt.add_data(code, df)
+        return vbt.run_panel(panel, top_n, buffer, rebalance, start_date)
 
     # ============================================================
     # 工具方法

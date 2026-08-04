@@ -262,12 +262,12 @@ class FactorEngineCore:
                     buffer_codes = top_codes
 
                 # 平仓: 不在缓冲区内的品种全部卖出
-                positions = ctx.account.get_position()
+                positions = ctx.account.get_position()  # [重构] 2026-08-04 深度B: List[Dict]
                 # [对齐] 2026-06-20 卖出前预计算保留品种数，避免卖出后positions未及时更新
-                n_keep = sum(1 for code, pos in positions.items()
-                            if pos.get('volume', 0) > 0 and code in buffer_codes)
-                for code, pos in list(positions.items()):
-                    if pos.get('volume', 0) > 0 and code not in buffer_codes:
+                held_codes = {p['symbol'] for p in positions if p.get('volume', 0) > 0}
+                n_keep = sum(1 for code in held_codes if code in buffer_codes)
+                for code in held_codes:
+                    if code not in buffer_codes:
                         try:
                             ctx.account.order_percent(
                                 code, 1.0, OrderSide.Sell,
@@ -285,8 +285,7 @@ class FactorEngineCore:
                     for code in top_codes & symbols_set:
                         if n_bought >= n_slots:
                             break  # 空位已用完
-                        pos = positions.get(code)
-                        if pos and pos.get('volume', 0) > 0:
+                        if code in held_codes:
                             continue  # 已持有（包括缓冲保留的）
                         try:
                             ctx.account.order_percent(

@@ -186,9 +186,11 @@ class EngineV3:
                 if dt is None:
                     return
 
-                if sig > 0 and not ctx.account.positions:
+                # [重构] 2026-08-04 深度B 统一用 get_position()（与 v4/v5 一致，避免直访内部持仓表）
+                has_pos = bool(ctx.account.get_position())
+                if sig > 0 and not has_pos:
                     ctx.account.order_percent(symbol, 1.0, OrderSide.Buy)
-                elif sig <= 0 and ctx.account.positions:
+                elif sig <= 0 and has_pos:
                     ctx.account.order_percent(symbol, 1.0, OrderSide.Sell)
 
         return engine.run_fast(_FastStrategy(), df['eob'].iloc[0], df['eob'].iloc[-1])

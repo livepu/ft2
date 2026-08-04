@@ -231,64 +231,31 @@ class StyleBacktest:
 
     @staticmethod
     def _run_vectorized(manager, assets, rebalance, capital, start_date, fee_config):
-        """向量化: 预计算每日权重 → 矩阵运算"""
+        """向量化: 预计算每日权重 → 矩阵运算
+
+        [重构] 2026-08-04 矩阵/时序/费率/净值统一由 core.backtest.run_vectorized 提供，
+        此处只保留权重预计算（manager 的风格合成逻辑）。
+        """
         dates = manager.dates
         if start_date:
             dates = dates[dates >= pd.Timestamp(start_date)]
         symbols = manager.symbols
         sym_to_idx = {c: i for i, c in enumerate(symbols)}
-        n = len(dates)
-        
-        # 构建价格 + 收益率矩阵
-        price_arr = np.full((n, len(symbols)), np.nan)
-        for code in symbols:
-            if code in assets:
-                price_arr[:, sym_to_idx[code]] = (
-                    assets[code].loc[:, 'close'].reindex(dates).values
-                )
-        ret_arr = np.diff(price_arr, axis=0) / (price_arr[:-1] + 1e-12)
-        ret_arr = np.nan_to_num(ret_arr, nan=0.0)
-        
-        # 预计算每日权重
+
+        # 预计算每日权重（manager 风格合成）
         daily_weights = StyleBacktest._precompute_weights(
             manager, dates, symbols, sym_to_idx,
         )
-        
-        # 调仓日
-        rb_dates = _make_rebalance_set(dates, rebalance)
-        
-        # 费率
-        fee = fee_config or {'commission_rate': 0.0, 'stamp_tax_rate': 0.0, 'min_commission': 0.0}
-        
-        nav = float(capital)
-        daily_nav = {}
-        current_weights = np.zeros(len(symbols))
-        
-        for i in range(n):
-            date = dates[i]
-            is_rb = date in rb_dates
-            
-            # 当日收益
-            if i > 0 and current_weights.sum() > 0:
-                day_ret = np.dot(current_weights, ret_arr[i - 1, :])
-                nav *= (1.0 + day_ret)
-            
-            # 调仓
-            if is_rb:
-                new_weights = daily_weights.get(date, np.zeros(len(symbols)))
-                
-                # 手续费
-                dw = np.abs(new_weights - current_weights)
-                turnover = dw.sum() / 2
-                if turnover > 0:
-                    nav -= max(turnover * nav * fee['commission_rate'], fee['min_commission'])
-                    nav -= turnover * nav * fee['stamp_tax_rate']
-                
-                current_weights = new_weights
-            
-            daily_nav[date.date()] = round(nav, 2)
-        
-        return AccountAnalyzer(daily_assets=daily_nav)
+
+        def weight_fn(date):
+            w = daily_weights.get(date)
+            if w is None:
+                return {}
+            return {s: float(v) for s, v in zip(symbols, w) if v > 0}
+
+        from core.backtest import run_vectorized
+        return run_vectorized(assets, dates, symbols, weight_fn, rebalance,
+                              capital, start_date, fee_config)
 
     @staticmethod
     def _precompute_weights(manager, dates, symbols, sym_to_idx):
@@ -348,12 +315,12 @@ class StyleBacktest:
                 self._targets = pos
                 
                 # 平仓不在目标内的
-                for code, hold in list(ctx.account.get_position().items()):
+                for hold in ctx.account.get_position():  # [重构] 2026-08-04 深度B: List[Dict]
                     if hold.get('volume', 0) <= 0:
                         continue
-                    if code not in pos:
+                    if hold['symbol'] not in pos:
                         try:
-                            ctx.account.order_percent(code, 1.0, OrderSide.Sell)
+                            ctx.account.order_percent(hold['symbol'], 1.0, OrderSide.Sell)
                         except (ValueError, RuntimeError):
                             pass
                 
