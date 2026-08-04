@@ -461,7 +461,18 @@ const GenericChart = {
                         trigger: 'item',
                         formatter: function(p) {
                             const v = p.data;
+                            // [新增] 2026-08-04 自动识别坐标维度名（来自 series.dimensions 配置）
+                            // ECharts 5.3+ 回调参数提供 dimensionNames；过滤内置维度名后即自定义维度名
+                            const builtin = ['x', 'y', 'name', 'value', 'seriesName', 'seriesId',
+                                             'dataIndex', 'dataType', 'dimension', 'encode'];
+                            const dims = (p.dimensionNames || []).filter(function(d) {
+                                return typeof d === 'string' && d && builtin.indexOf(d) === -1;
+                            });
                             if (v && v.name !== undefined && Array.isArray(v.value)) {
+                                if (dims.length >= 2) {
+                                    return v.name + '<br/>' + dims[0] + ': ' + v.value[0]
+                                         + '<br/>' + dims[1] + ': ' + v.value[1];
+                                }
                                 return v.name + ' (' + v.value[0] + ', ' + v.value[1] + ')';
                             }
                             if (Array.isArray(v) && v.length >= 2) {

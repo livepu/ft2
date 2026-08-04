@@ -23,7 +23,20 @@ core/backtest.py — 简化回测入口 (Engine 二次封装)
 
 逃生舱: bt.engine 可直接拿原始 Engine 做高级操作。
 
+分层架构（原子化 vs 应用层）:
+  应用层 (类, 有状态/面向场景流程):
+    Backtester       — Engine 事件驱动流程封装 (run: full/fast)
+    VectorBacktester — 向量矩阵流程封装 (add_data → run/run_panel)
+  原子层 (模块级函数, 无状态/可复用):
+    run_vectorized       — 通用矩阵回测引擎 (weight_fn 回调驱动)
+    _make_rebalance_set  — 调仓日生成工具
+
+  判断标准: 函数看"通用性" (无状态、可复用 → 原子化模块函数),
+           类看"应用场景" (有状态、有流程 → 封装)。
+  原子能力被多处使用时提升为模块级函数; 单一场景使用留在类内即可。
+
 [新增] 2026-06-30 Engine 二次封装, 简化调用不丢灵活性
+[新增] 2026-08-04 分层: 原子化引擎函数 + 应用层流程类 (Backtester/VectorBacktester)
 """
 
 import numpy as np
@@ -256,6 +269,8 @@ class Backtester:
 # [新增] 2026-08-04 补全 vector 高层流程：导入数据 → weight_fn → 执行 → AccountAnalyzer。
 #   与 Backtester 的关系：Backtester 封装 Engine（事件驱动 full/fast）；
 #   本类封装矩阵路径（run_vectorized），两者互不依赖、使用体验对齐（add_data → run）。
+#   分层定位：应用层（有状态：assets/init_cash/fee_config；面向流程），
+#   底层原子引擎见模块级 run_vectorized（无状态纯函数）。
 
 class VectorBacktester:
     """向量化回测流程封装（矩阵近似，无 lot_size）
@@ -406,6 +421,9 @@ class VectorBacktester:
 # ============================================================
 # 向量化回测核心 — [新增] 2026-08-04 从 factor/v4/v5、pms/v1 的 _run_vectorized 上移
 # ============================================================
+# 分层定位：原子层（无状态纯函数，矩阵回测引擎）。
+#   被 VectorBacktester（流程封装）与 pms/v1（直接调用）共同复用；
+#   引擎不依赖任何流程类，保持"流程依赖引擎、引擎独立"的方向。
 
 def _make_rebalance_set(dates: pd.DatetimeIndex, rebalance) -> set:
     """生成调仓日集合（兼容字符串和 v3 RebalanceScheduler 对象）
@@ -451,6 +469,7 @@ def run_vectorized(assets: Dict[str, pd.DataFrame], dates: pd.DatetimeIndex,
         initial_capital: 初始资金
         start_date: 可选起始日期
         fee_config: 费率 {'commission_rate', 'stamp_tax_rate', 'min_commission'}
+            （默认零费；需要费率时由调用方通过此参数传入，如佣金万1 → {'commission_rate': 0.0001}）
 
     Returns:
         AccountAnalyzer(daily_assets)
