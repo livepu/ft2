@@ -64,6 +64,7 @@ class Backtester:
         self._symbol_names: Dict[str, str] = {}  # 品种名称（可选，仅用于显示）
         self._init_cash: float = 1e6
         self._fee_config: Optional[dict] = None
+        self._future_config: Optional[dict] = None  # [新增] 2026-08-04 期货统一默认规格（方案A）
         self._bench_label: Optional[str] = None
         self._freq: str = '1d'
 
@@ -80,6 +81,18 @@ class Backtester:
     def set_fee_config(self, fee_config: dict) -> 'Backtester':
         """设置费率配置 (对齐 Engine.__init__ 的 fee_config 参数)"""
         self._fee_config = fee_config
+        return self
+
+    def set_future_config(self, future_config: dict) -> 'Backtester':
+        """设置期货统一默认规格 (对齐 Engine.__init__ 的 future_config 参数)
+
+        [新增] 2026-08-04 方案A：无品种数据时统一兜底，三级解析
+        (register_contract > contracts[symbol] > 默认值)。
+
+        Example:
+            >>> bt.set_future_config({'default_multiplier': 10, 'default_margin_ratio': 0.10})
+        """
+        self._future_config = future_config
         return self
 
     def set_benchmark(self, bench_label: str, bench_data: pd.DataFrame,
@@ -149,7 +162,8 @@ class Backtester:
         """
         # 首次 add_data 时创建 Engine
         if self.engine is None:
-            self.engine = Engine(init_cash=self._init_cash, fee_config=self._fee_config)
+            self.engine = Engine(init_cash=self._init_cash, fee_config=self._fee_config,
+                                 future_config=self._future_config)
             context.mode = 'backtest'
 
         # 标准化数据

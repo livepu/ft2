@@ -35,7 +35,7 @@ Path 2 — 净值模式（fast 回测 / 外部数据）:
       ├─ 'returns'  (np.array)  → volatility / var / cvar / sortino
       └─ 'daily_assets' (dict)  → return_rate
 
-    @metric 方法 → 资产指标 (12个) + 交易指标 (7个)
+    @metric 方法 → 资产指标 (13个: 收益2 + 风险11) + 交易指标 (6个)
 
     _build_report_data() → to_notebook() / to_excel()
       ├─ 无基准 → 基础信息 + 收益 + 风险
@@ -72,9 +72,7 @@ import math
 import numpy as np
 import os
 from datetime import datetime, date
-from typing import Dict, List, Tuple, Any, Optional, Union
-from dataclasses import dataclass
-from pathlib import Path
+from typing import Dict, List, Tuple, Optional
 from functools import wraps
 # [修复] 2026-05-30 _calculate_profit 需要用 OrderSide 枚举做比较
 from .account import OrderSide, PositionEffect, PositionSide
@@ -778,8 +776,10 @@ class AccountAnalyzer:
         if mode == 'amount':
             profits = [t['profit'] for t in profitable_trades]
         elif mode == 'percentage':
+            # [重构] 2026-08-04 用 invested（开仓占用资金）替代市值口径：
+            #   股票 invested=量×价；期货 invested=量×价×乘数×保证金率
             profits = [
-                t['profit'] / (abs(t['volume']) * t['open_price'])
+                t['profit'] / (t.get('invested') or (abs(t['volume']) * t['open_price']))
                 for t in profitable_trades
             ]
         else:
@@ -807,8 +807,9 @@ class AccountAnalyzer:
         if mode == 'amount':
             losses = [t['profit'] for t in loss_trades]
         elif mode == 'percentage':
+            # [重构] 2026-08-04 同 avg_profit：用 invested（开仓占用资金）统一股票/期货口径
             losses = [
-                t['profit'] / (abs(t['volume']) * t['open_price'])
+                t['profit'] / (t.get('invested') or (abs(t['volume']) * t['open_price']))
                 for t in loss_trades
             ]
         else:
@@ -922,8 +923,9 @@ class AccountAnalyzer:
                         'order': attr._metric_order,
                         'method': name
                     }
-                except:
-                    pass
+                except Exception:
+                    pass  # [规范] 2026-08-04 指标异常静默跳过（避免单指标拖垮报告），
+                         # 不捕获 KeyboardInterrupt/SystemExit
         return metrics
 
     def metrics(self) -> Dict:
@@ -1254,7 +1256,15 @@ class AccountAnalyzer:
                 }
                 if has_names:
                     row['名称'] = symbol_names.get(t.symbol, '')
-                row['方向'] = '买入' if t.side == 1 else '卖出'
+                # [重构] 2026-08-04 混合账户方向列：期货平仓/开空显式标记（用已有字段推导，不依赖品种标记）
+                eff = getattr(t, 'position_effect', PositionEffect.Open)
+                pside = getattr(t, 'position_side', PositionSide.Long)
+                if eff != PositionEffect.Open:            # 平仓（Close/CloseToday/CloseYesterday）
+                    row['方向'] = '平多' if pside == PositionSide.Long else '平空'
+                elif pside == PositionSide.Short:         # 期货开空
+                    row['方向'] = '开空'
+                else:
+                    row['方向'] = '买入' if t.side == OrderSide.Buy else '卖出'
                 row['价格'] = t.price
                 row['数量'] = t.volume
                 row['金额'] = round(t.filled_amount, 2)
@@ -1330,7 +1340,7 @@ class AccountAnalyzer:
 
         Sheet 结构:
             回测指标 — 按 group（基础/收益/风险/交易）分组展示
-            每日资产 — 日期 + 现金 + 持仓市值 + 总净值
+            每日资产 — 日期 + 现金 + 股票市值 + 期货保证金 + 期货浮盈 + 总净值（混合账户分列）
             交易记录 — 全部成交明细（日期/标的/方向/价格/数量/金额/手续费/备注）
 
         Args:
@@ -1365,7 +1375,8 @@ class AccountAnalyzer:
         # ---------- Sheet 2: 每日资产 ----------
         assets = self._daily_assets
         dates_sorted = sorted(assets.keys())
-        # 从 snapshots 反推每日 cash（取当日最后一个快照）
+        # [重构] 2026-08-04 混合账户分列：从快照反推 现金/股票市值/期货保证金/期货浮盈。
+        #   恒等式：nav = cash + 股票市值 + 期货浮盈（期货保证金在 cash 内，不重复计）
         if self.account and self.account.snapshots:
             daily_last_snap = {}
             for s in self.account.snapshots:
@@ -1375,14 +1386,21 @@ class AccountAnalyzer:
             for d in dates_sorted:
                 nav = assets[d]
                 snap = daily_last_snap.get(d)
-                cash = snap.balance if snap else 0
-                pos_val = nav - cash
-                asset_rows.append({
-                    '日期': d.strftime('%Y-%m-%d'),
-                    '现金': round(cash, 2),
-                    '持仓市值': round(pos_val, 2),
-                    '总净值': round(nav, 2),
-                })
+                if snap:
+                    cash = snap.balance
+                    fpnl = snap.fpnl or 0.0
+                    margin = snap.used_bail or 0.0
+                    pos_val = nav - cash - fpnl       # 股票市值（期货浮盈单独列）
+                    asset_rows.append({
+                        '日期': d.strftime('%Y-%m-%d'),
+                        '现金': round(cash, 2),
+                        '股票市值': round(pos_val, 2),
+                        '期货保证金': round(margin, 2),
+                        '期货浮盈': round(fpnl, 2),
+                        '总净值': round(nav, 2),
+                    })
+                else:
+                    asset_rows.append({'日期': d.strftime('%Y-%m-%d'), '总净值': round(nav, 2)})
         else:
             asset_rows = [{'日期': d.strftime('%Y-%m-%d'), '总净值': round(v, 2)}
                          for d, v in sorted(assets.items())]
@@ -1401,7 +1419,15 @@ class AccountAnalyzer:
                 }
                 if has_names:
                     row['名称'] = symbol_names.get(t.symbol, '')
-                row['方向'] = '买入' if t.side == 1 else '卖出'
+                # [重构] 2026-08-04 混合账户方向列：期货平仓/开空显式标记（用已有字段推导，不依赖品种标记）
+                eff = getattr(t, 'position_effect', PositionEffect.Open)
+                pside = getattr(t, 'position_side', PositionSide.Long)
+                if eff != PositionEffect.Open:            # 平仓（Close/CloseToday/CloseYesterday）
+                    row['方向'] = '平多' if pside == PositionSide.Long else '平空'
+                elif pside == PositionSide.Short:         # 期货开空
+                    row['方向'] = '开空'
+                else:
+                    row['方向'] = '买入' if t.side == OrderSide.Buy else '卖出'
                 row['价格'] = t.price
                 row['数量'] = t.volume
                 row['金额'] = round(t.filled_amount, 2)
@@ -1542,8 +1568,10 @@ class AccountAnalyzer:
         Returns:
             List[Dict]: 盈亏记录列表（同旧结构，volume 负数为平仓）
         """
-        # 持仓表 (symbol, position_side) → {volume, cost, open_time, open_price, open_fee}
-        positions = defaultdict(lambda: {'volume': 0, 'cost': 0, 'open_time': None, 'open_price': 0, 'open_fee': 0})
+        # 持仓表 (symbol, position_side) → {volume, cost, open_time, open_price, open_fee, invested}
+        #   invested = 开仓占用资金（股票=市值=量×价；期货=保证金=量×价×乘数×保证金率），
+        #   供 avg_profit/avg_loss(percentage) 计算每笔收益率（混合账户股票/期货口径统一）
+        positions = defaultdict(lambda: {'volume': 0, 'cost': 0, 'open_time': None, 'open_price': 0, 'open_fee': 0, 'invested': 0})
         processed_trades = []
 
         for trade in trade_records:
@@ -1571,6 +1599,7 @@ class AccountAnalyzer:
                     # ── 开空（期货）──
                     pos['volume'] += abs_volume
                     pos['cost'] += abs_volume * price * multiplier + fee
+                    pos['invested'] += abs_volume * price * multiplier * getattr(trade, 'margin_ratio', 1.0)
                     if pos['open_time'] is None:
                         pos['open_time'] = created_at
                         pos['open_price'] = price
@@ -1580,6 +1609,7 @@ class AccountAnalyzer:
                     # ── 开多（股票买入 / 期货开多）──
                     pos['volume'] += abs_volume
                     pos['cost'] += abs_volume * price * multiplier + fee
+                    pos['invested'] += abs_volume * price * multiplier * getattr(trade, 'margin_ratio', 1.0)
                     if pos['open_time'] is None:
                         pos['open_time'] = created_at
                         pos['open_price'] = price
@@ -1601,6 +1631,7 @@ class AccountAnalyzer:
                 profit = cost - abs_volume * price * multiplier - fee
 
             open_fee_portion = (abs_volume / pos['volume']) * pos['open_fee']
+            invested_portion = (abs_volume / pos['volume']) * pos['invested']
 
             processed_trades.append({
                 'symbol': symbol,
@@ -1612,17 +1643,20 @@ class AccountAnalyzer:
                 'close_fee': fee,
                 'close_price': price,
                 'volume': volume,
+                'invested': invested_portion,   # [新增] 2026-08-04 开仓占用资金（股票=市值/期货=保证金）
                 'original_trade': trade
             })
 
             pos['volume'] -= abs_volume
             pos['cost'] -= cost
             pos['open_fee'] -= open_fee_portion
+            pos['invested'] -= invested_portion
 
             if pos['volume'] == 0:
                 pos['open_time'] = None
                 pos['open_price'] = 0
                 pos['open_fee'] = 0
+                pos['invested'] = 0
 
         return processed_trades
 

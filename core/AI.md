@@ -2,7 +2,7 @@
 
 > 回测引擎核心 + HTML 报告（已融合 notebook 模块）
 >
-> **版本：v2.8 | 更新日期：2026-06-23**
+> **版本：v3.0 | 更新日期：2026-08-04**
 
 ---
 
@@ -23,6 +23,16 @@ run() →  AccountManager      run_fast() → FastAccount
               纯矩阵向量化, 跳过事件驱动, ~38ms/次 (73x)
                  → AccountAnalyzer(daily_assets)
 ```
+
+**v3.0 更新要点（2026-08-04）——深度 B 重构 + 期货支持 + 对齐掘金 gm：**
+- **持仓模型统一 `(symbol, side) → Position`**：单方向对象，股票 side=Long 恒多头，期货 Long/Short 多空独立；删除 FuturePosition 与 long_vwap/short_vwap 前缀命名
+- **期货交易**：`register_contract()` 注册合约规格（multiplier/margin_ratio/price_tick/exchange/delisted_date + margin_ratio_near 保证金分级），`FUTURE_ORDER_MATRIX` 校验 8 种 (side, position_effect) 组合，开仓验资/平仓盈亏结算（含乘数）、平今/平昨 FIFO
+- **下单接口对齐 gm（6 个）**：order_volume/value/percent + order_target_volume/value/percent，签名 `(symbol, 数量, side, order_type, position_effect, price)`、枚举数值与 gm 一致、**返回 `List[Dict]` 委托回报（失败返回 `[]`）**；已删除非 gm 的便捷包装（order_target_long/short/target）
+- **order_percent 期货基数 = 账户净值**（对齐 gm"按总资产比例"），超出可用资金由开仓验资拦截
+- **查询接口对齐 gm**：get_position()/get_orders() 返回 `List[Dict]`（空持仓 `[]`），get_account() 返回 dict（balance/nav/available/used_bail/fpnl/risk_ratio，字段对齐掘金 Cash）
+- **字段命名对齐 gm**：`vwap`=加权开仓均价（Position.vwap）、`used_bail`=已用保证金（Cash.used_bail）、`fpnl`=浮动盈亏（Cash.fpnl）、`filled_vwap/filled_amount/filled_commission`（Order 回报）
+- **FastAccount 期货适配**：复用 `_OrderMixin` 共享核心（保证金/手续费/持仓更新），差异仅轻量执行（不生成 TradeRecord/快照）
+- **analyzer 期货多空**：`_calculate_profit` 按 `(symbol, position_side)` 维度 FIFO，盈亏含合约乘数
 
 **v2.8 更新要点（2026-06-23）：**
 - 新增品种名称表：`Engine.add_data(symbol_name=...)` 记录品种名称，`_drive_timeline` 自动注入到 `account._symbol_names`，analyzer 报告交易记录表自动显示"名称"列
@@ -118,8 +128,8 @@ vector 模式仅在 `factor/v4` 可用，不经过 `_drive_timeline`，用连续
 def on_bar(self, context, bars):
     account = context.account
 
-    # 下单（接口完全一致）
-    account.order_percent('399317.SZ', 1.0, OrderSide.Buy, note="金叉买入")
+    # 下单（接口完全一致；[重构] 2026-08-04 返回 List[Dict] 委托回报，对齐 gm，失败返回 []）
+    receipts = account.order_percent('399317.SZ', 1.0, OrderSide.Buy, note="金叉买入")  # [{symbol, volume, price, filled_volume, filled_vwap, filled_amount, filled_commission, ...}]
     account.order_volume('399317.SZ', 100, OrderSide.Sell)
 
     # 查询（返回类型对齐 gm：一律 dict / List[Dict]，字段名对齐 gm）
@@ -139,6 +149,67 @@ def on_bar(self, context, bars):
 - `TradeRecord.note`：仅 full 模式，追溯每笔交易触发原因
 - FastAccount 每个 bar 通过 `update_prices(bars)` 缓存 close 价，mark()/get_account()/order_percent 零开销取价
 
+### 2.1 期货交易（v3.0 新增）
+
+**统一配置（方案A，无品种数据时推荐）**：`future_config` 与 `fee_config` 平级，在 `Engine()` 构造时一次传入，全品种兜底：
+
+```python
+engine = Engine(
+    init_cash=1e6,
+    future_config={
+        'default_multiplier': 10,           # 统一乘数（必须显式给定，无通用默认）
+        'default_margin_ratio': 0.10,       # 统一保证金率（国内商品/股指常见中枢 10%）
+        'default_margin_ratio_near': None,  # 分级保证金上浮（不配=不分级）
+        'default_price_tick': 1.0,
+        'default_exchange': 'SHFE',
+        'contracts': {                      # 可选：有数据的品种精确覆盖（优先于默认值）
+            'IF2609.CFE': {'multiplier': 300, 'margin_ratio': 0.12},
+        },
+    },
+)
+# 解析优先级：register_contract() > contracts[symbol] > default_* 统一兜底
+# 无 future_config 且未 register_contract → 拒单（返回 []）
+```
+
+**精确注册（有品种数据时）**：
+
+```python
+from core.account import PositionSide, PositionEffect, OrderSide
+
+def on_init(self, context):
+    # 合约注册（优先于 future_config；无配置时也可不注册，走统一默认）
+    context.account.register_contract(
+        'RB2510.SHF', multiplier=10, margin_ratio=0.08,
+        price_tick=1.0, exchange='SHFE', delisted_date='2026-10-15')
+
+def on_bar(self, context, bars):
+    account = context.account
+    # 开多 / 开空 / 平多 / 平空（side+position_effect 组合，对齐 gm）
+    account.order_percent('RB2510.SHF', 0.3, OrderSide.Buy,  position_effect=PositionEffect.Open)    # 开多 30% 净值
+    account.order_percent('RB2510.SHF', 0.3, OrderSide.Sell, position_effect=PositionEffect.Open)    # 开空
+    account.order_volume('RB2510.SHF', 5, OrderSide.Sell, position_effect=PositionEffect.Close)      # 平多
+    account.order_volume('RB2510.SHF', 5, OrderSide.Buy,  position_effect=PositionEffect.Close)      # 平空
+    account.order_volume('RB2510.SHF', 5, OrderSide.Sell, position_effect=PositionEffect.CloseToday) # 平今
+    # 目标持仓（position_side 指定方向，自动先平反向避免锁仓）
+    account.order_target_volume('RB2510.SHF', 4, PositionSide.Long)
+    account.order_target_percent('RB2510.SHF', 0.5, PositionSide.Short)
+```
+
+**期货账务模型（保证金不进出 balance，NAV = balance + 浮盈）：**
+
+| 字段 | 口径 |
+|------|------|
+| `balance` | 账面资金 = 初始 + 已实现盈亏 - 手续费，保证金不进出 |
+| `used_bail` | 已用保证金（遍历持仓按现价动态计算，支持 margin_ratio_near 分级） |
+| `fpnl` | 未平仓浮动盈亏（按现价重估，空头方向正确） |
+| `available` | balance - used_bail - frozen |
+| `nav` | balance + fpnl（真实权益） |
+
+**下单返回（对齐 gm `List[Dict]`）：**
+- 成功：`[{symbol, side, position_effect, position_side, order_type, volume, price, filled_volume, filled_vwap, filled_amount, filled_commission, created_at}]`
+- 失败（校验/资金/持仓不足）：`[]`
+- FastAccount 轻量构造同构 dict（无 TradeRecord）
+
 ---
 
 ## 3. AccountAnalyzer — 分析器
@@ -151,7 +222,7 @@ from core.analyzer import AccountAnalyzer
 # Path 1: 快照模式 (full 回测) — 全部指标可用
 analyzer = AccountAnalyzer(account=engine.account)
 # _daily_assets ← _aggregate_daily_assets(snapshots)
-# _trade_profits ← _calculate_profit(trade_records)
+# _trade_profits ← _calculate_profit(trade_records)   # [v3.0] 期货多空按 (symbol, position_side) FIFO，盈亏含合约乘数
 
 # Path 2: 净值模式 (fast 回测 / 外部数据) — 仅资产指标可用
 analyzer = AccountAnalyzer(daily_assets={date(2024,1,2): 1e6, ...})
@@ -429,6 +500,8 @@ nb.export_html()  # → 输出到当前脚本所在目录
 7. **缓存实例化隔离** — `_cache`/`bar_data_set`/`account` 归 Engine 实例所有，多引擎天然隔离，无需 `account.reset()`
 8. **基准＝真实策略** — `BenchHolder` 走与主策略相同的引擎+数据+账户通道，对比结果无偏差
 9. **Notebook 渲染层内聚** — `analyzer.to_notebook()` 内部完成全链路；支持 `header/footer` 回调扩展
+10. **期货账务模型** — 保证金占用不进出 balance（NAV = balance + 浮盈），used_bail/fpnl 由持仓动态计算，持仓期权益正确
+11. **对齐掘金 gm** — 账户/交易接口的命名、枚举数值、返回类型（`List[Dict]`）与 gm 一致，策略代码可在 gm/ft2 间迁移
 
 ---
 
@@ -437,7 +510,7 @@ nb.export_html()  # → 输出到当前脚本所在目录
 ```
 core/
 ├── engine.py          # 回测引擎 (Engine + timeline 驱动，run/run_fast)
-├── account.py         # 账户管理 (AccountManager + FastAccount + OrderSide + BenchHolder)
+├── account.py         # 账户管理 (AccountManager + FastAccount + Position/ContractSpec + _OrderMixin + 枚举/BenchHolder)
 ├── analyzer.py        # 分析器 (AccountAnalyzer + @metric + to_notebook/to_excel)
 ├── storage.py         # 数据存储 (context 上下文)
 ├── symbol_classifier.py # 品种分类

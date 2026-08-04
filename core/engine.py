@@ -20,13 +20,15 @@ class Engine:
         - 策略通过 context.account 访问（委托到活跃 Engine）
         - 实盘时替换为 RealBroker，接口不变
     """
-    def __init__(self, init_cash=1e6, fee_config=None):
+    def __init__(self, init_cash=1e6, fee_config=None, future_config=None):
         self.init_cash = init_cash
         self.timeline = OrderedDict()
         self.cache_count = 100
         self._cache = _Cache()
         self.bar_data_set = set()
-        self.account = AccountManager(init_cash=init_cash, fee_config=fee_config)
+        # [新增] 2026-08-04 方案A：期货统一默认规格（future_config 与 fee_config 平级）
+        self.account = AccountManager(init_cash=init_cash, fee_config=fee_config,
+                                      future_config=future_config)
         self.fast_account = None  # 每次 run_fast() 时重建
         # [新增] 2026-06-23 代码→品种名称映射，由 add_data(symbol_name=...) 填充
         #   _drive_timeline 启动时注入到 account._symbol_names，analyzer 报告查表显示
@@ -171,7 +173,8 @@ class Engine:
 
         # 替换 account 为 FastAccount，策略 ctx.account 透明切换
         original_account = self.account
-        self.fast_account = FastAccount(self.init_cash, original_account.fee_config)
+        self.fast_account = FastAccount(self.init_cash, original_account.fee_config,
+                                        getattr(original_account, 'future_config', None))
         self.account = self.fast_account
 
         try:

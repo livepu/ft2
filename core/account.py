@@ -216,6 +216,10 @@ class TradeRecord:
     filled_volume: float = 0.0        # 已成交数量（对齐 Order.filled_volume）
     filled_amount: float = 0.0        # 成交金额（对齐 Order.filled_amount）
     multiplier: int = 1               # [新增] 2026-08-04 合约乘数（股票=1，期货=合约乘数，analyzer 盈亏用）
+    # [新增] 2026-08-04 实际保证金率：命名对齐 gm get_symbols 字段 margin_ratio；
+    #   股票=1，期货=开仓时生效比率（含 margin_ratio_near 分级）。内部计算字段
+    #   （analyzer 保证金口径收益率），gm Order 回报无此字段，不进 to_dict()
+    margin_ratio: float = 1.0
     # [新增] 2026-05-30 信号备注，可追溯每笔交易触发原因（如 "温度计75度买入"）
     note: str = ''
 
@@ -314,7 +318,8 @@ class _OrderMixin:
             price: 委托价格，默认为当前价格
 
         Returns:
-            str: 订单ID（期货校验失败返回空字符串）
+            List[Dict]: 委托回报（[重构] 2026-08-04 对齐 gm 下单返回 List[Dict]），
+                        校验/资金/持仓失败返回空列表 []
         """
         if not isinstance(volume, (int, float)) or volume <= 0:
             raise ValueError("Order volume must be a positive number")
@@ -339,13 +344,17 @@ class _OrderMixin:
             error = self._validate_future_order(symbol, volume, side, position_effect)
             if error:
                 print(f"订单失败: {error}")
-                return ''
-            return self._process_future_order(symbol, volume, side, position_effect,
-                                              order_type, price, note)
+                return []
+            filled = self._process_future_order(symbol, volume, side, position_effect,
+                                                order_type, price, note)
+        else:
+            # 股票路径：执行层由子类提供
+            filled = self._process_stock_order(symbol, volume, side, position_effect,
+                                               order_type, price, note)
 
-        # 股票路径：执行层由子类提供
-        return self._process_stock_order(symbol, volume, side, position_effect,
-                                         order_type, price, note)
+        if not filled:
+            return []
+        return self._order_receipt(symbol, volume, side, position_effect, order_type, price, note)
 
     def order_percent(
         self,
@@ -503,11 +512,38 @@ class _OrderMixin:
         return classify_symbol(symbol) == 'future'
 
     def _get_contract(self, symbol: str) -> ContractSpec:
-        """获取已注册的合约规格，未注册则报错（消除各处重复的 spec None 检查）"""
+        """获取合约规格（[重构] 2026-08-04 方案A 三级解析：注册 > 品种配置 > 统一默认）。
+
+          - 一级：register_contract() 显式注册（有品种数据时最高优先）
+          - 二级：future_config['contracts'][symbol] 按品种精确配置
+          - 三级：future_config 默认值兜底（无品种数据时统一乘数/保证金率，
+                  需配置 default_multiplier 或 default_margin_ratio 才启用；
+                  构造后缓存进 _contracts）
+        均未命中抛 ValueError（未注册拒单）。
+        """
         spec = self._contracts.get(symbol)
-        if spec is None:
-            raise ValueError(f"合约 {symbol} 未注册规格，请先调用 register_contract()")
-        return spec
+        if spec is not None:
+            return spec
+        fc = self.future_config or {}
+        cfg = fc.get('contracts', {}).get(symbol)
+        if cfg:
+            spec = ContractSpec(symbol=symbol, **cfg)
+            self._contracts[symbol] = spec
+            return spec
+        if self._is_future(symbol) and (fc.get('default_multiplier') is not None
+                                        or fc.get('default_margin_ratio') is not None):
+            spec = ContractSpec(
+                symbol=symbol,
+                multiplier=fc.get('default_multiplier') or 1,
+                margin_ratio=fc.get('default_margin_ratio', 0.10),
+                margin_ratio_near=fc.get('default_margin_ratio_near'),
+                price_tick=fc.get('default_price_tick', 1.0),
+                exchange=fc.get('default_exchange', ''),
+            )
+            self._contracts[symbol] = spec
+            return spec
+        raise ValueError(f"合约 {symbol} 未注册规格且无 future_config 默认值，"
+                         f"请调用 register_contract() 或配置 future_config")
 
     def _remaining_days(self, symbol: str) -> Optional[int]:
         """距最后交易日剩余自然日（未配置 delisted_date 返回 None → 恒用基准保证金率）"""
@@ -532,8 +568,10 @@ class _OrderMixin:
         for (symbol, _side), pos in self.positions.items():
             if not self._is_future(symbol):
                 continue
-            spec = self._contracts.get(symbol)
-            if spec is None:
+            # [重构] 2026-08-04 方案A：走三级解析，不依赖缓存顺序
+            try:
+                spec = self._get_contract(symbol)
+            except ValueError:
                 continue
             try:
                 price = self._get_price(symbol)
@@ -623,8 +661,12 @@ class _OrderMixin:
 
         semantic, required, _, pos_side = rule
 
-        if symbol not in self._contracts:
-            return f"合约 {symbol} 未注册规格，请先 register_contract()"
+        # [重构] 2026-08-04 方案A：走三级解析（注册 > 品种配置 > future_config 默认值），
+        #   统一默认构造后缓存进 _contracts，此处不再直接读 _contracts
+        try:
+            self._get_contract(symbol)
+        except ValueError:
+            return f"合约 {symbol} 未注册规格且无 future_config 默认值，请 register_contract() 或配置 future_config"
 
         if required is None:  # 开仓无需检查持仓
             return None
@@ -650,13 +692,13 @@ class _OrderMixin:
     def _order_percent_future(self, symbol: str, percent: float, side: int,
                               position_effect: int, order_type: int,
                               price: float, note: str) -> str:
-        """order_percent 的期货路径：基于可用资金 × percent 计算手数。
+        """order_percent 的期货路径：基于账户净值 × percent 计算手数。
 
-        对齐掘金 GM：期货 percent 基于可用资金（而非总权益），
-        手数 = 可用资金×percent / (价格×乘数×保证金率)。
+        对齐掘金 GM 官网手册：order_percent 按"总资产"指定比例委托，
+        手数 = nav×percent / (价格×乘数×保证金率)。
         """
-        available = self._get_available_cash()
-        order_amount = available * abs(percent)
+        nav = self.get_account()['nav']
+        order_amount = nav * abs(percent)
         price = price or self._get_price(symbol)
         if price <= 0:
             raise ValueError(f"Invalid price {price} for {symbol}")
@@ -715,13 +757,49 @@ class _OrderMixin:
         self._record_future_trade(
             symbol=symbol, volume=volume, side=side, position_side=pos_side,
             position_effect=position_effect, order_type=order_type,
-            price=price, commission=commission, multiplier=spec.multiplier, note=note,
+            price=price, commission=commission, multiplier=spec.multiplier,
+            margin_ratio=spec.effective_margin_ratio(self._remaining_days(symbol)),
+            note=note,
         )
         return volume
 
     def _record_future_trade(self, **kwargs):
         """成交记录 hook 默认空实现；AccountManager 覆写为 TradeRecord。"""
         pass
+
+    def _order_receipt(self, symbol: str, volume: int, side: int, position_effect: int,
+                       order_type: int, price: float, note: str = '') -> List[Dict]:
+        """构造 gm 风格委托回报 List[Dict]（[重构] 2026-08-04 对齐 gm 下单返回）。
+
+        统一由 TradeRecord.to_dict() 序列化（dataclass 单一字段源，不手写 key）：
+        - AccountManager：复用 trade_records[-1]（完整成交记录，含手续费/成交额）
+        - FastAccount：临时构造 TradeRecord 复用 to_dict()（不落库，保持零 TradeRecord 设计；
+          乘数/保证金率/手续费按合约实际值，非写死）
+        """
+        records = getattr(self, 'trade_records', None)
+        if records:
+            return [records[-1].to_dict()]
+        # FastAccount：临时构造 TradeRecord（不 append，保持轻量设计）
+        pos_side = PositionSide.Long
+        multiplier = 1
+        commission = 0.0
+        margin_ratio = 1.0
+        if self._is_future(symbol):
+            spec = self._get_contract(symbol)
+            pos_side = self.FUTURE_ORDER_MATRIX[(side, position_effect)][3]
+            multiplier = spec.multiplier
+            margin_ratio = spec.effective_margin_ratio(self._remaining_days(symbol))
+            commission = self._calc_future_commission(symbol, price, volume, position_effect)
+        trade = TradeRecord(
+            created_at=getattr(context, 'now', None) or datetime.now(),
+            symbol=symbol, price=price, volume=volume, side=side,
+            position_effect=position_effect, position_side=pos_side,
+            order_type=order_type, filled_commission=commission,
+            order_id='', filled_volume=volume,
+            filled_amount=round(price * multiplier * volume, 2),
+            multiplier=multiplier, margin_ratio=margin_ratio, note=note,
+        )
+        return [trade.to_dict()]
 
     def _update_future_position(self, symbol: str, volume: int, price: float,
                                 side: int, position_effect: int):
@@ -780,31 +858,32 @@ class _OrderMixin:
         long_vol = long_pos.volume if long_pos else 0
         short_vol = short_pos.volume if short_pos else 0
 
+        receipts = []
         if position_side == PositionSide.Long:
             # 目标多头：先平空（避免锁仓）再调整多头
             if short_vol > 0:
-                self.order_volume(symbol, short_vol, OrderSide.Buy, order_type,
-                                  PositionEffect.Close, price, note + ' (平空)')
+                receipts += self.order_volume(symbol, short_vol, OrderSide.Buy, order_type,
+                                              PositionEffect.Close, price, note + ' (平空)')
             delta = volume - long_vol
             if delta > 0:
-                return self.order_volume(symbol, delta, OrderSide.Buy, order_type,
-                                         PositionEffect.Open, price, note)
-            if delta < 0:
-                return self.order_volume(symbol, -delta, OrderSide.Sell, order_type,
-                                         PositionEffect.Close, price, note)
+                receipts += self.order_volume(symbol, delta, OrderSide.Buy, order_type,
+                                              PositionEffect.Open, price, note)
+            elif delta < 0:
+                receipts += self.order_volume(symbol, -delta, OrderSide.Sell, order_type,
+                                              PositionEffect.Close, price, note)
         else:
             # 目标空头：先平多（避免锁仓）再调整空头
             if long_vol > 0:
-                self.order_volume(symbol, long_vol, OrderSide.Sell, order_type,
-                                  PositionEffect.Close, price, note + ' (平多)')
+                receipts += self.order_volume(symbol, long_vol, OrderSide.Sell, order_type,
+                                              PositionEffect.Close, price, note + ' (平多)')
             delta = volume - short_vol
             if delta > 0:
-                return self.order_volume(symbol, delta, OrderSide.Sell, order_type,
-                                         PositionEffect.Open, price, note)
-            if delta < 0:
-                return self.order_volume(symbol, -delta, OrderSide.Buy, order_type,
-                                         PositionEffect.Close, price, note)
-        return ''
+                receipts += self.order_volume(symbol, delta, OrderSide.Sell, order_type,
+                                              PositionEffect.Open, price, note)
+            elif delta < 0:
+                receipts += self.order_volume(symbol, -delta, OrderSide.Buy, order_type,
+                                              PositionEffect.Close, price, note)
+        return receipts
 
     def order_target_value(self, symbol: str, value: float, position_side: int,
                            order_type: int = OrderType.Market,
@@ -837,32 +916,6 @@ class _OrderMixin:
         target_volume = int(target_value / per_lot) if per_lot > 0 else 0
         return self.order_target_volume(symbol, target_volume, position_side,
                                         order_type, price, note)
-
-    # ── 便捷包装（方案文档接口，语义与 order_target_volume 一致）──
-
-    def order_target_long(self, symbol: str, target_lots: int,
-                          order_type: int = OrderType.Market,
-                          price: float = None, note: str = '') -> str:
-        """目标多头持仓 N 手（便捷方法，等价 order_target_volume(..., PositionSide.Long)）"""
-        return self.order_target_volume(symbol, target_lots, PositionSide.Long,
-                                        order_type, price, note)
-
-    def order_target_short(self, symbol: str, target_lots: int,
-                           order_type: int = OrderType.Market,
-                           price: float = None, note: str = '') -> str:
-        """目标空头持仓 N 手（便捷方法，等价 order_target_volume(..., PositionSide.Short)）"""
-        return self.order_target_volume(symbol, target_lots, PositionSide.Short,
-                                        order_type, price, note)
-
-    def order_target(self, symbol: str, long_lots: int = 0, short_lots: int = 0,
-                     order_type: int = OrderType.Market,
-                     price: float = None, note: str = '') -> str:
-        """同时设定多空目标：先调空再调多（避免锁仓）"""
-        self.order_target_volume(symbol, short_lots, PositionSide.Short,
-                                 order_type, price, note + ' (空)')
-        return self.order_target_volume(symbol, long_lots, PositionSide.Long,
-                                        order_type, price, note + ' (多)')
-
 
 # ============================================================================
 # 账户管理类
@@ -904,6 +957,7 @@ class AccountManager(_OrderMixin):
         self,
         init_cash: float = 1e6,
         fee_config: Dict = None,
+        future_config: Dict = None,
     ):
         """
         初始化账户管理器
@@ -911,6 +965,13 @@ class AccountManager(_OrderMixin):
         Args:
             init_cash: 初始资金，默认100万
             fee_config: 费用配置，包含佣金率、印花税率、最低佣金
+            future_config: [新增] 2026-08-04 方案A 期货统一规格（无品种数据时兜底）：
+                default_multiplier  统一乘数（必须显式给定，乘数因品种差异大无通用默认）
+                default_margin_ratio 统一保证金率（默认 0.10，国内商品/股指常见中枢）
+                default_margin_ratio_near 分级保证金上浮（不配=不分级）
+                default_price_tick / default_exchange
+                contracts: {symbol: {...}} 按品种精确覆盖（优先于默认值）
+                解析优先级：register_contract > contracts[symbol] > 默认值
         """
         self.balance = round(init_cash, 2)
         # [重构] 2026-08-04 深度B：统一持仓表 (symbol, side) → Position（股票 side=Long，期货 Long/Short）
@@ -928,6 +989,8 @@ class AccountManager(_OrderMixin):
         # [新增] 2026-08-04 期货支持
         self._contracts: Dict[str, ContractSpec] = {}   # 合约规格注册表 (symbol → ContractSpec)
         self.frozen: float = 0.0                        # 冻结资金（为条件单预留，当前恒为 0）
+        # [新增] 2026-08-04 方案A：期货统一默认规格（与 fee_config 平级，run_fast 透传）
+        self.future_config: Dict = future_config or {}
 
     # ------------------------------------------------------------------------
     # 快照操作
@@ -979,8 +1042,9 @@ class AccountManager(_OrderMixin):
 
             if self._is_future(symbol):
                 # 期货：NAV 只记浮动盈亏（保证金仍占用 balance 内）
-                spec = self._contracts.get(symbol)
-                if spec is None:
+                try:
+                    spec = self._get_contract(symbol)
+                except ValueError:
                     continue
                 total_fpnl += pos.fpnl(price, spec.multiplier)
                 pos_snap = PositionSnapshot(
@@ -1044,11 +1108,12 @@ class AccountManager(_OrderMixin):
     def _process_stock_order(self, symbol: str, volume: int, side: int,
                              position_effect: int, order_type: int,
                              price: float, note: str = '') -> str:
-        """[覆写] 股票订单执行：生成 order_id → _process_order（TradeRecord+快照）"""
+        """[覆写] 股票订单执行：生成 order_id → _process_order（TradeRecord+快照）。
+        失败（资金不足/持仓不足）返回 ''，由 order_volume 出口转空列表。"""
         order_id = f"order_{len(self.trade_records)+1}"
-        self._process_order(symbol, volume, side, position_effect, order_type,
-                            price, order_id, note)
-        return order_id
+        filled = self._process_order(symbol, volume, side, position_effect, order_type,
+                                     price, order_id, note)
+        return order_id if filled else ''
 
     def _get_stock_position_volume(self, symbol: str) -> float:
         """[覆写] 股票持仓数量（统一持仓表 (symbol, Long) → Position）"""
@@ -1136,9 +1201,10 @@ class AccountManager(_OrderMixin):
     def _record_future_trade(self, symbol: str, volume: int, side: int,
                              position_side: int, position_effect: int,
                              order_type: int, price: float, commission: float,
-                             multiplier: int, note: str = ''):
+                             multiplier: int, note: str = '', margin_ratio: float = 1.0):
         """[覆写] 期货成交记录 → TradeRecord（FastAccount 走 mixin 默认空实现）
-        position_side 由 FUTURE_ORDER_MATRIX 推导（对齐掘金 Position.side）"""
+        position_side 由 FUTURE_ORDER_MATRIX 推导（对齐掘金 Position.side）；
+        margin_ratio = 开仓时生效保证金率（含分级），供 analyzer 保证金口径收益率。"""
         order_id = f"order_{len(self.trade_records)+1}"
         self.trade_records.append(TradeRecord(
             created_at=context.now,
@@ -1154,6 +1220,7 @@ class AccountManager(_OrderMixin):
             filled_volume=volume,
             filled_amount=round(price * multiplier * volume, 2),
             multiplier=multiplier,
+            margin_ratio=margin_ratio,
             note=note,
         ))
 
@@ -1354,13 +1421,13 @@ class FastAccount(_OrderMixin):
       持仓 Position 对象（统一 (symbol, side) 表），账务与 AccountManager 完全一致（NAV=balance+浮盈）。
     """
 
-    __slots__ = ('balance', 'positions', 'fee_config', 'daily_assets', '_latest_prices',
-                 '_contracts')
+    __slots__ = ('balance', 'positions', 'fee_config', 'future_config', 'daily_assets',
+                 '_latest_prices', '_contracts')
 
     FREQ_ORDER = ['1m', '60s', '5m', '300s', '15m', '900s',
                   '30m', '1800s', '60m', '3600s', '1d']
 
-    def __init__(self, cash: float = 1e6, fee_config: Dict = None):
+    def __init__(self, cash: float = 1e6, fee_config: Dict = None, future_config: Dict = None):
         self.balance = float(cash)
         # [重构] 2026-08-04 深度B：统一持仓表 (symbol, side) → Position（与 AccountManager 一致）
         self.positions: Dict[Tuple[str, int], Position] = {}
@@ -1369,6 +1436,7 @@ class FastAccount(_OrderMixin):
             'stamp_tax_rate': 0.0,
             'min_commission': 0.0,
         }
+        self.future_config: Dict = future_config or {}  # [新增] 2026-08-04 方案A：期货统一默认规格
         self.daily_assets: Dict = {}  # {datetime.date: nav}
         self._latest_prices: Dict[str, float] = {}  # [优化] 2026-06-21 缓存 bar 价格，避免 _get_price
         self._contracts: Dict[str, ContractSpec] = {}  # [新增] 2026-08-04 合约注册表
@@ -1461,8 +1529,9 @@ class FastAccount(_OrderMixin):
                     pass
             if price:
                 if self._is_future(sym):
-                    spec = self._contracts.get(sym)
-                    if spec is None:
+                    try:
+                        spec = self._get_contract(sym)
+                    except ValueError:
                         continue
                     fpnl += pos.fpnl(price, spec.multiplier)
                 else:
@@ -1479,9 +1548,9 @@ class FastAccount(_OrderMixin):
     def _process_stock_order(self, symbol: str, volume: int, side: int,
                              position_effect: int, order_type: int,
                              price: float, note: str = '') -> str:
-        """[覆写] 股票订单执行：轻量路径（现金+持仓，无 TradeRecord/快照）"""
-        self._process_order(symbol, volume, side, price)
-        return ''
+        """[覆写] 股票订单执行：轻量路径（现金+持仓，无 TradeRecord/快照）。
+        返回成交量，0=失败（由 order_volume 出口转空列表）。"""
+        return self._process_order(symbol, volume, side, price)
 
     def _get_stock_position_volume(self, symbol: str) -> float:
         """[覆写] 股票持仓数量（统一持仓表 (symbol, Long) → Position）"""
@@ -1560,8 +1629,9 @@ class FastAccount(_OrderMixin):
                     pass
             if price:
                 if self._is_future(sym):
-                    spec = self._contracts.get(sym)
-                    if spec is None:
+                    try:
+                        spec = self._get_contract(sym)
+                    except ValueError:
                         continue
                     fpnl += pos.fpnl(price, spec.multiplier)
                 else:
