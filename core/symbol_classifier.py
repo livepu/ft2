@@ -26,6 +26,7 @@ from typing import Dict, List, Optional
 SEC_TYPE_INDEX = 'index'
 SEC_TYPE_STOCK = 'stock'
 SEC_TYPE_ETF = 'etf'
+SEC_TYPE_FUTURE = 'future'   # [新增] 2026-08-04 期货（含金融期货/商品期货）
 SEC_TYPE_UNKNOWN = None
 
 
@@ -40,6 +41,15 @@ SYMBOL_TYPE_RULES: List[Dict] = [
     {'suffix': '.TI', 'type': 'index'},
     {'suffix': '.CSI', 'type': 'index'},
     {'suffix': '.BJ', 'type': 'stock'},
+    # [新增] 2026-08-04 期货交易所后缀：
+    #   .SHF 上期所(螺纹RB/沪铜CU)  .DCE 大商所(铁矿I/豆粕M)
+    #   .ZCE 郑商所(郑棉CF/PTA)     .CFE 中金所(IF/IH/IC/IM)
+    #   .INE 上海能源中心(原油SC/20号胶NR)
+    {'suffix': '.SHF', 'type': 'future'},
+    {'suffix': '.DCE', 'type': 'future'},
+    {'suffix': '.ZCE', 'type': 'future'},
+    {'suffix': '.CFE', 'type': 'future'},
+    {'suffix': '.INE', 'type': 'future'},
 ]
 
 
@@ -176,6 +186,7 @@ __all__ = [
     'SEC_TYPE_INDEX',
     'SEC_TYPE_STOCK',
     'SEC_TYPE_ETF',
+    'SEC_TYPE_FUTURE',
     'SEC_TYPE_UNKNOWN',
     'SYMBOL_TYPE_RULES',
     'SYMBOL_TYPE_MAP',

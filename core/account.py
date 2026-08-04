@@ -68,6 +68,30 @@ class OrderType:
 # ============================================================================
 
 @dataclass
+class ContractSpec:
+    """期货合约规格数据类
+
+    [新增] 2026-08-04 期货支持 — 由策略 on_init 通过 register_contract() 注册。
+    字段命名对齐掘金官网：multiplier/margin_ratio 见 get_symbols(日度交易信息)，
+    price_tick/delisted_date 见 get_symbol_infos(标的基本信息)。
+
+    Args:
+        symbol: 合约代码，如 'RB2510.SHF'
+        multiplier: 合约乘数（每手对应标的单位数量），如螺纹钢=10、沪深300=300
+        margin_ratio: 保证金比例，如 0.08（开仓保证金 = 价格×乘数×margin_ratio×手数）
+        price_tick: 最小变动价位，如螺纹钢=1.0
+        exchange: 交易所：SHFE/DCE/CZCE/CFFEX/INE
+        delisted_date: 最后交易日（对齐掘金 get_symbol_infos.delisted_date）
+    """
+    symbol: str
+    multiplier: int
+    margin_ratio: float
+    price_tick: float = 1.0
+    exchange: str = ''
+    delisted_date: str = ''
+
+
+@dataclass
 class PositionSnapshot:
     """持仓快照数据类"""
     symbol: str
@@ -84,6 +108,9 @@ class AccountSnapshot:
     nav: float
     created_at: datetime
     positions: Dict[str, PositionSnapshot] = field(default_factory=dict)
+    # [新增] 2026-08-04 期货专用字段（仅期货持仓时非零）
+    margin_used: float = 0.0   # 已用保证金（当前所有期货持仓占用）
+    float_pnl: float = 0.0     # 浮动盈亏（未平仓期货按现价重估）
 
 
 @dataclass
@@ -165,6 +192,10 @@ class AccountManager:
         # [新增] 2026-06-23 代码→品种名称映射，由 Engine._drive_timeline 注入
         #   _process_order 创建 TradeRecord 时自动查表填充 symbol_name，策略层无感知
         self._symbol_names: Dict[str, str] = {}
+        # [新增] 2026-08-04 期货支持
+        self._contracts: Dict[str, ContractSpec] = {}   # 合约规格注册表 (symbol → ContractSpec)
+        self.frozen: float = 0.0                        # 冻结资金（为条件单预留，当前恒为 0）
+        self.float_pnl: float = 0.0                     # 总浮动盈亏（快照时动态重算）
 
     # ------------------------------------------------------------------------
     # 快照操作
@@ -202,7 +233,8 @@ class AccountManager:
             created_at = context.now
 
         pos_snapshots = {}
-        total_assets = self.cash
+        total_assets = self.cash          # 股票部分累加市值
+        total_float_pnl = 0.0             # [新增] 2026-08-04 期货浮动盈亏
 
         for symbol, pos in self.positions.items():
             try:
@@ -211,6 +243,30 @@ class AccountManager:
                 continue
             if price <= 0:
                 continue
+
+            # [新增] 2026-08-04 期货：多空分别估值，NAV 只记浮动盈亏（保证金仍占用 cash 内）
+            if pos.get('sec_type') == 'future':
+                spec = self._contracts.get(symbol)
+                if spec is None:
+                    continue
+                long_vol = pos.get('long_volume', 0)
+                short_vol = pos.get('short_volume', 0)
+                long_cost = pos.get('long_cost', 0)
+                short_cost = pos.get('short_cost', 0)
+                if long_vol > 0:
+                    total_float_pnl += (price - long_cost) * spec.multiplier * long_vol
+                if short_vol > 0:
+                    total_float_pnl += (short_cost - price) * spec.multiplier * short_vol
+                pos_snap = PositionSnapshot(
+                    symbol=symbol,
+                    volume=long_vol + short_vol,   # 多空总量（持仓天数判定用）
+                    cost_price=0.0,
+                    price=price,
+                    created_at=created_at,
+                )
+                pos_snapshots[symbol] = pos_snap
+                continue
+
             pos_snap = PositionSnapshot(
                 symbol=symbol,
                 volume=pos['volume'],
@@ -221,12 +277,14 @@ class AccountManager:
             pos_snapshots[symbol] = pos_snap
             total_assets += pos['volume'] * price
 
-        total_assets = round(total_assets, 2)
+        total_assets = round(total_assets + total_float_pnl, 2)
         snapshot = AccountSnapshot(
             cash=self.cash,
             nav=total_assets,
             created_at=created_at,
-            positions=pos_snapshots
+            positions=pos_snapshots,
+            margin_used=self._get_used_margin(),
+            float_pnl=round(total_float_pnl, 2),
         )
         self.snapshots.append(snapshot)
 
@@ -250,25 +308,58 @@ class AccountManager:
     # 交易操作
     # ------------------------------------------------------------------------
 
+    # [新增] 2026-08-04 期货合约规格注册（策略 on_init 调用）
+    def register_contract(self, symbol: str, multiplier: int, margin_ratio: float,
+                          price_tick: float = 1.0, exchange: str = '',
+                          delisted_date: str = ''):
+        """
+        注册期货合约规格。期货下单前必须注册，否则拒绝成交。
+
+        参数命名对齐掘金官网：multiplier/margin_ratio(get_symbols)、
+        price_tick/delisted_date(get_symbol_infos)。策略 on_init 中调用：
+
+            context.account.register_contract('RB2510.SHF',
+                multiplier=10, margin_ratio=0.08, price_tick=1.0)
+
+        Args:
+            symbol: 合约代码，如 'RB2510.SHF'
+            multiplier: 合约乘数，如螺纹钢=10、沪深300=300
+            margin_ratio: 保证金比例，如 0.08
+            price_tick: 最小变动价位，默认 1.0
+            exchange: 交易所：SHFE/DCE/CZCE/CFFEX/INE
+            delisted_date: 最后交易日
+        """
+        self._contracts[symbol] = ContractSpec(
+            symbol=symbol,
+            multiplier=multiplier,
+            margin_ratio=margin_ratio,
+            price_tick=price_tick,
+            exchange=exchange,
+            delisted_date=delisted_date,
+        )
+
     def order_percent(
         self,
         symbol: str,
         percent: float,
         side: int,
-        position_effect: int = PositionEffect.Open,
         order_type: int = OrderType.Limit,
+        position_effect: int = PositionEffect.Open,
         price: float = None,
         note: str = '',
     ) -> str:
         """
         按账户净值比例委托
 
+        参数顺序对齐掘金 GM：order_volume/order_value/order_percent 的通用签名
+        为 (symbol, 数量, side, order_type, position_effect, price)。
+
         Args:
             symbol: 交易品种代码
             percent: 委托比例，0-1之间（正数）
             side: 买卖方向，OrderSide.Buy=1买入, OrderSide.Sell=2卖出
-            position_effect: 开平标志，PositionEffect.Open=开仓, PositionEffect.Close=平仓
             order_type: 委托类型，OrderType.Limit=限价, OrderType.Market=市价
+            position_effect: 开平标志，PositionEffect.Open=开仓, PositionEffect.Close=平仓
             price: 委托价格，默认为当前价格
 
         Returns:
@@ -279,6 +370,11 @@ class AccountManager:
         """
         if not 0 < abs(percent) <= 1:
             raise ValueError("Percent must be between -1 and 1 (non-zero)")
+
+        # [新增] 2026-08-04 期货分叉：基于可用资金(而非总权益)×percent 计算手数
+        if self._is_future(symbol):
+            return self._order_percent_future(symbol, percent, side, position_effect,
+                                              order_type, price, note)
 
         account_info = self.get_account()
         nav = account_info['nav']
@@ -312,27 +408,30 @@ class AccountManager:
         if volume == 0:
             raise ValueError("Calculated order volume is zero")
 
-        return self.order_volume(symbol, volume, side, position_effect, order_type, price, note)
+        return self.order_volume(symbol, volume, side, order_type, position_effect, price, note)
 
     def order_volume(
         self,
         symbol: str,
         volume: int,
         side: int,
-        position_effect: int = PositionEffect.Open,
         order_type: int = OrderType.Limit,
+        position_effect: int = PositionEffect.Open,
         price: float = None,
         note: str = '',
     ) -> str:
         """
         按指定数量委托
 
+        参数顺序对齐掘金 GM：order_volume/order_value/order_percent 的通用签名
+        为 (symbol, 数量, side, order_type, position_effect, price)。
+
         Args:
             symbol: 交易品种代码
             volume: 委托数量（正数）
             side: 买卖方向，OrderSide.Buy=1买入, OrderSide.Sell=2卖出
-            position_effect: 开平标志，PositionEffect.Open=开仓, PositionEffect.Close=平仓
             order_type: 委托类型，OrderType.Limit=限价, OrderType.Market=市价（回测中实际无区别）
+            position_effect: 开平标志，PositionEffect.Open=开仓, PositionEffect.Close=平仓
             price: 委托价格，默认为当前价格
 
         Returns:
@@ -357,6 +456,17 @@ class AccountManager:
         if price <= 0:
             raise ValueError(f"Invalid price {price} for {symbol}")
 
+        # [新增] 2026-08-04 期货分叉：校验 side+position_effect 组合合法性 → 保证金路径
+        #   对齐掘金 GM：期货用 (side, position_effect) 表达开平方向，支持做空。
+        #   Buy+Open=开多 / Sell+Close=平多 / Sell+Open=开空 / Buy+Close=平空
+        if self._is_future(symbol):
+            error = self._validate_future_order(symbol, volume, side, position_effect)
+            if error:
+                print(f"订单失败: {error}")
+                return ''
+            return self._process_future_order(symbol, volume, side, position_effect,
+                                              order_type, price, note)
+
         order_id = f"order_{len(self.trade_records)+1}"
 
         executed_volume = self._process_order(
@@ -369,6 +479,41 @@ class AccountManager:
         # if executed_volume != 0:
         #     self.take_snapshot()
         return order_id
+
+    # [新增] 2026-08-04 对齐掘金 GM order_value / order_batch
+    def order_value(
+        self,
+        symbol: str,
+        value: float,
+        side: int,
+        order_type: int = OrderType.Limit,
+        position_effect: int = PositionEffect.Open,
+        price: float = None,
+        note: str = '',
+    ) -> str:
+        """按指定价值委托（对齐掘金 GM order_value）。
+
+        计算方式（与掘金一致）：volume = value / price，向下取整到最小交易单位。
+
+        Args:
+            symbol: 交易品种代码
+            value: 委托价值（金额）
+            side: 买卖方向
+            order_type: 委托类型
+            position_effect: 开平标志
+            price: 委托价格，默认为当前价格
+        """
+        price = price or self._get_price(symbol)
+        if price <= 0:
+            raise ValueError(f"Invalid price {price} for {symbol}")
+
+        volume = int(value / price)
+        lot_size = self._get_lot_size(symbol)
+        volume = int(volume / lot_size) * lot_size
+        if volume == 0:
+            raise ValueError("Calculated order volume is zero")
+
+        return self.order_volume(symbol, volume, side, order_type, position_effect, price, note)
 
     def _process_order(
         self,
@@ -461,6 +606,423 @@ class AccountManager:
         self.positions[symbol] = pos
 
     # ------------------------------------------------------------------------
+    # 期货支持 [新增] 2026-08-04
+    # ------------------------------------------------------------------------
+    # 账务模型（对齐真实期货账户，做法B）：
+    #   cash          = 账面资金（初始 + 已实现盈亏 - 手续费），保证金不从此扣减
+    #   margin_used   = 已用保证金（遍历持仓动态计算）
+    #   float_pnl     = 未平仓浮动盈亏（快照时按现价重估）
+    #   available     = cash - margin_used - frozen
+    #   nav           = cash + float_pnl          ← 真实权益（保证金只是占用，仍在 cash 内）
+    #
+    # 开仓：校验 available ≥ 保证金+手续费 → cash -= 手续费 → 持仓增加（margin_used 自动上升）
+    # 平仓：cash += 平仓盈亏 - 手续费 → 持仓减少（margin_used 自动下降）
+    # 与方案文档差异：文档"开仓扣保证金/平仓释放"会把持仓期 NAV 低估保证金，
+    #   此处保证金不进出 cash，NAV 始终 = cash + 浮盈，持仓期权益正确。
+
+    def _is_future(self, symbol: str) -> bool:
+        """判断是否期货合约（通过品种分类器后缀识别）"""
+        return classify_symbol(symbol) == 'future'
+
+    @staticmethod
+    def _get_product_code(symbol: str) -> str:
+        """从合约代码提取品种代码，如 'RB2510.SHF' → 'RB'"""
+        import re
+        m = re.match(r'^([A-Za-z]+)', symbol)
+        return m.group(1).upper() if m else symbol
+
+    def _calc_margin(self, symbol: str, price: float, volume: int) -> float:
+        """计算开仓所需保证金 = 价格 × 乘数 × 保证金率 × 手数"""
+        spec = self._contracts.get(symbol)
+        if spec is None:
+            raise ValueError(f"合约 {symbol} 未注册规格，请先调用 register_contract()")
+        return round(price * spec.multiplier * spec.margin_ratio * volume, 2)
+
+    def _get_used_margin(self) -> float:
+        """计算当前所有期货持仓的已用保证金（动态遍历，无需手动增减）"""
+        total = 0.0
+        for symbol, pos in self.positions.items():
+            if pos.get('sec_type') != 'future':
+                continue
+            spec = self._contracts.get(symbol)
+            if spec is None:
+                continue
+            try:
+                price = self._get_price(symbol)
+            except (ValueError, KeyError):
+                continue
+            if price <= 0:
+                continue
+            long_val = pos.get('long_volume', 0) * price * spec.multiplier
+            short_val = pos.get('short_volume', 0) * price * spec.multiplier
+            total += (long_val + short_val) * spec.margin_ratio
+        return round(total, 2)
+
+    def _get_available_cash(self) -> float:
+        """可用资金 = 现金 - 已用保证金 - 冻结资金"""
+        return round(self.cash - self._get_used_margin() - self.frozen, 2)
+
+    def _calc_future_commission(self, symbol: str, price: float, volume: int,
+                                position_effect: int) -> float:
+        """计算期货手续费。
+
+        支持两种计费模式（fee_config['per_symbol'][symbol]）：
+            per_lot    按手收费：每手固定金额（期货最常见）
+            per_value  按成交额收费：合约价值 × 费率
+        未配置合约费率时回退到股票默认佣金逻辑。
+        """
+        ps = self.fee_config.get('per_symbol', {}).get(symbol)
+        if ps is None:
+            # 无合约级配置 → 走默认（按成交金额，兼容旧配置）
+            return max(
+                round(price * volume * self.fee_config['commission_rate'], 2),
+                self.fee_config['min_commission']
+            )
+
+        mode = ps.get('commission_mode', 'per_value')
+        is_open = position_effect == PositionEffect.Open
+
+        if mode == 'per_lot':
+            if is_open:
+                rate = ps.get('open_commission_per_lot') or ps.get('commission_per_lot', 3.0)
+            elif position_effect == PositionEffect.CloseToday:
+                rate = ps.get('close_today_per_lot') or ps.get('close_commission_per_lot') \
+                       or ps.get('commission_per_lot', 3.0)
+            else:
+                rate = ps.get('close_commission_per_lot') or ps.get('commission_per_lot', 3.0)
+            return round(rate * volume, 2)
+
+        # per_value 按成交额
+        spec = self._contracts.get(symbol)
+        contract_value = price * (spec.multiplier if spec else 1) * volume
+        if is_open:
+            rate = ps.get('open_commission_rate', ps.get('commission_rate', 0.0001))
+        elif position_effect == PositionEffect.CloseToday:
+            rate = ps.get('close_today_rate') or ps.get('close_commission_rate', 0.0001)
+        else:
+            rate = ps.get('close_commission_rate', ps.get('commission_rate', 0.0001))
+        return max(round(contract_value * rate, 2), ps.get('min_commission', 0))
+
+    # 期货下单合法性矩阵： (side, position_effect) → (操作语义, 需持仓条件, 扣减方向)
+    FUTURE_ORDER_MATRIX = {
+        (OrderSide.Buy,  PositionEffect.Open):           ("开多", None, 'long'),
+        (OrderSide.Sell, PositionEffect.Close):          ("平多", 'long', 'long'),
+        (OrderSide.Sell, PositionEffect.CloseToday):     ("平今多", 'long_today', 'long'),
+        (OrderSide.Sell, PositionEffect.CloseYesterday): ("平昨多", 'long_yesterday', 'long'),
+        (OrderSide.Sell, PositionEffect.Open):           ("开空", None, 'short'),
+        (OrderSide.Buy,  PositionEffect.Close):          ("平空", 'short', 'short'),
+        (OrderSide.Buy,  PositionEffect.CloseToday):     ("平今空", 'short_today', 'short'),
+        (OrderSide.Buy,  PositionEffect.CloseYesterday): ("平昨空", 'short_yesterday', 'short'),
+    }
+
+    def _validate_future_order(self, symbol: str, volume: int, side: int,
+                               position_effect: int) -> Optional[str]:
+        """校验期货下单合法性，返回 None 表示通过，否则返回错误描述。
+
+        校验项：
+          1. (side, position_effect) 是否为合法组合（含做空）
+          2. 合约是否已注册规格
+          3. 平仓时对应方向持仓是否充足
+        """
+        key = (side, position_effect)
+        rule = self.FUTURE_ORDER_MATRIX.get(key)
+        if rule is None:
+            return f"无效的期货下单组合: side={side}, position_effect={position_effect}"
+
+        semantic, required, _ = rule
+
+        if symbol not in self._contracts:
+            return f"合约 {symbol} 未注册规格，请先 register_contract()"
+
+        if required is None:  # 开仓无需检查持仓
+            return None
+
+        pos = self.positions.get(symbol, {})
+
+        if required == 'long':
+            total = pos.get('long_volume', 0)
+        elif required == 'long_today':
+            total = pos.get('long_volume_today', 0)
+        elif required == 'long_yesterday':
+            total = pos.get('long_volume', 0) - pos.get('long_volume_today', 0)
+        elif required == 'short':
+            total = pos.get('short_volume', 0)
+        elif required == 'short_today':
+            total = pos.get('short_volume_today', 0)
+        elif required == 'short_yesterday':
+            total = pos.get('short_volume', 0) - pos.get('short_volume_today', 0)
+        else:
+            total = 0
+
+        if total < volume:
+            return f"平仓不足: 需要 {volume} 手, 可平 {total} 手 ({semantic})"
+
+        return None
+
+    def _order_percent_future(self, symbol: str, percent: float, side: int,
+                              position_effect: int, order_type: int,
+                              price: float, note: str) -> str:
+        """order_percent 的期货路径：基于可用资金 × percent 计算手数。
+
+        对齐掘金 GM：期货 percent 基于可用资金（而非总权益），
+        手数 = 可用资金×percent / (价格×乘数×保证金率)。
+        """
+        available = self._get_available_cash()
+        order_amount = available * abs(percent)
+        price = price or self._get_price(symbol)
+        if price <= 0:
+            raise ValueError(f"Invalid price {price} for {symbol}")
+        spec = self._contracts.get(symbol)
+        if spec is None:
+            raise ValueError(f"合约 {symbol} 未注册规格，请先 register_contract()")
+        margin_per_lot = price * spec.multiplier * spec.margin_ratio
+        volume = int(order_amount / margin_per_lot)
+        if volume == 0:
+            raise ValueError("Calculated order volume is zero")
+        return self.order_volume(symbol, volume, side, order_type, position_effect, price, note)
+
+    def _process_future_order(self, symbol: str, volume: int, side: int,
+                              position_effect: int, order_type: int,
+                              price: float, note: str = '') -> int:
+        """执行期货订单（核心新方法）。
+
+        流程：
+          开仓：计算保证金 → 验资 → 扣手续费 → 更新双向持仓
+          平仓：结算盈亏(以持仓均价) → 扣手续费 → 更新双向持仓
+        保证金不进出 cash（见类注释账务模型），margin_used 由持仓动态计算。
+        """
+        spec = self._contracts.get(symbol)
+        if spec is None:
+            print(f"期货下单失败: 合约 {symbol} 未注册规格")
+            return 0
+
+        commission = self._calc_future_commission(symbol, price, volume, position_effect)
+
+        if position_effect == PositionEffect.Open:
+            # ── 开仓 ──
+            margin_required = self._calc_margin(symbol, price, volume)
+            available = self._get_available_cash()
+            if available < margin_required + commission:
+                print(f"期货开仓失败: 需要保证金 {margin_required:.0f} + 手续费 {commission:.2f}, "
+                      f"可用资金 {available:.2f}")
+                return 0
+            self.cash = round(self.cash - commission, 2)
+            self._update_future_position(symbol, volume, price, side, position_effect)
+        else:
+            # ── 平仓 ──
+            pos = self.positions.get(symbol, {})
+            if side == OrderSide.Sell:
+                # 平多：盈亏 = (现价 - 成本) × 乘数 × 手数
+                cost = pos.get('long_cost', price)
+                pnl = (price - cost) * spec.multiplier * volume
+            else:
+                # 平空：盈亏 = (成本 - 现价) × 乘数 × 手数
+                cost = pos.get('short_cost', price)
+                pnl = (cost - price) * spec.multiplier * volume
+            self.cash = round(self.cash + pnl - commission, 2)
+            self._update_future_position(symbol, volume, price, side, position_effect)
+
+        # ── 记录 TradeRecord ──
+        order_id = f"order_{len(self.trade_records)+1}"
+        self.trade_records.append(TradeRecord(
+            created_at=context.now,
+            symbol=symbol,
+            price=price,
+            volume=volume,
+            side=side,
+            position_effect=position_effect,
+            position_side=PositionSide.Long if side == OrderSide.Buy else PositionSide.Short,
+            order_type=order_type,
+            fee=commission,
+            order_id=order_id,
+            filled_volume=volume,
+            amount=round(price * spec.multiplier * volume, 2),
+            note=note,
+        ))
+        return volume
+
+    def _update_future_position(self, symbol: str, volume: int, price: float,
+                                side: int, position_effect: int):
+        """更新期货双向持仓。
+
+        同一品种多空可共存（锁仓）。持仓结构：
+            long_volume / long_volume_today / long_cost   (多头)
+            short_volume / short_volume_today / short_cost (空头)
+        Close(默认平仓) 按 FIFO 先平今仓，与掘金"期货默认平今"一致。
+        """
+        pos = self.positions.get(symbol, {
+            'long_volume': 0, 'long_volume_today': 0, 'long_cost': 0.0,
+            'short_volume': 0, 'short_volume_today': 0, 'short_cost': 0.0,
+            'sec_type': 'future',
+        })
+
+        key = (side, position_effect)
+
+        if key == (OrderSide.Buy, PositionEffect.Open):
+            # 开多：加权均价
+            old_vol = pos['long_volume']
+            new_vol = old_vol + volume
+            pos['long_cost'] = ((pos['long_cost'] * old_vol + price * volume) / new_vol
+                                if new_vol > 0 else 0.0)
+            pos['long_volume'] = new_vol
+            pos['long_volume_today'] += volume
+
+        elif key == (OrderSide.Sell, PositionEffect.Close):
+            # 平多：FIFO 先平今仓
+            today = min(pos['long_volume_today'], volume)
+            pos['long_volume_today'] -= today
+            pos['long_volume'] -= volume
+
+        elif key == (OrderSide.Sell, PositionEffect.CloseToday):
+            pos['long_volume_today'] -= volume
+            pos['long_volume'] -= volume
+
+        elif key == (OrderSide.Sell, PositionEffect.CloseYesterday):
+            pos['long_volume'] -= volume  # 今仓不动
+
+        elif key == (OrderSide.Sell, PositionEffect.Open):
+            # 开空：加权均价
+            old_vol = pos['short_volume']
+            new_vol = old_vol + volume
+            pos['short_cost'] = ((pos['short_cost'] * old_vol + price * volume) / new_vol
+                                 if new_vol > 0 else 0.0)
+            pos['short_volume'] = new_vol
+            pos['short_volume_today'] += volume
+
+        elif key == (OrderSide.Buy, PositionEffect.Close):
+            # 平空：FIFO 先平今仓
+            today = min(pos['short_volume_today'], volume)
+            pos['short_volume_today'] -= today
+            pos['short_volume'] -= volume
+
+        elif key == (OrderSide.Buy, PositionEffect.CloseToday):
+            pos['short_volume_today'] -= volume
+            pos['short_volume'] -= volume
+
+        elif key == (OrderSide.Buy, PositionEffect.CloseYesterday):
+            pos['short_volume'] -= volume  # 今仓不动
+
+        # 清理零持仓
+        if pos['long_volume'] == 0 and pos['short_volume'] == 0:
+            self.positions.pop(symbol, None)
+        else:
+            self.positions[symbol] = pos
+
+    # ── 目标持仓系列（对齐掘金 GM order_target_*，用 position_side 而非 side）──
+
+    def order_target_volume(self, symbol: str, volume: int, position_side: int,
+                            order_type: int = OrderType.Market,
+                            price: float = None, note: str = '') -> str:
+        """调仓到目标持仓量（对齐掘金 GM order_target_volume）。
+
+        对齐掘金：目标持仓函数用 position_side(Long/Short) 而非 side(Buy/Sell)，
+        不需要传 position_effect，系统根据目标与当前持仓量自动判断开仓/平仓。
+
+        Args:
+            symbol: 合约代码
+            volume: 期望的最终持仓手数（≥0）
+            position_side: 持仓方向，PositionSide.Long=多仓 / PositionSide.Short=空仓
+            order_type: 委托类型，默认市价
+        """
+        if not self._is_future(symbol):
+            raise ValueError("order_target_volume 仅支持期货合约")
+        if volume < 0:
+            raise ValueError("目标持仓量不能为负")
+        if position_side not in (PositionSide.Long, PositionSide.Short):
+            raise ValueError(f"position_side 必须为 PositionSide.Long/Short, got {position_side}")
+
+        pos = self.positions.get(symbol, {})
+        long_vol = pos.get('long_volume', 0)
+        short_vol = pos.get('short_volume', 0)
+
+        if position_side == PositionSide.Long:
+            # 目标多头：先平空（避免锁仓）再调整多头
+            if short_vol > 0:
+                self.order_volume(symbol, short_vol, OrderSide.Buy, order_type,
+                                  PositionEffect.Close, price, note + ' (平空)')
+            delta = volume - long_vol
+            if delta > 0:
+                return self.order_volume(symbol, delta, OrderSide.Buy, order_type,
+                                         PositionEffect.Open, price, note)
+            if delta < 0:
+                return self.order_volume(symbol, -delta, OrderSide.Sell, order_type,
+                                         PositionEffect.Close, price, note)
+        else:
+            # 目标空头：先平多（避免锁仓）再调整空头
+            if long_vol > 0:
+                self.order_volume(symbol, long_vol, OrderSide.Sell, order_type,
+                                  PositionEffect.Close, price, note + ' (平多)')
+            delta = volume - short_vol
+            if delta > 0:
+                return self.order_volume(symbol, delta, OrderSide.Sell, order_type,
+                                         PositionEffect.Open, price, note)
+            if delta < 0:
+                return self.order_volume(symbol, -delta, OrderSide.Buy, order_type,
+                                         PositionEffect.Close, price, note)
+        return ''
+
+    def order_target_value(self, symbol: str, value: float, position_side: int,
+                           order_type: int = OrderType.Market,
+                           price: float = None, note: str = '') -> str:
+        """调仓到目标持仓价值（对齐掘金 GM order_target_value）。
+
+        目标手数 = value / (价格×乘数)，再调 order_target_volume。
+        """
+        price = price or self._get_price(symbol)
+        spec = self._contracts.get(symbol)
+        if spec is None:
+            raise ValueError(f"合约 {symbol} 未注册规格，请先 register_contract()")
+        per_lot = price * spec.multiplier
+        target_volume = int(value / per_lot) if per_lot > 0 else 0
+        return self.order_target_volume(symbol, target_volume, position_side,
+                                        order_type, price, note)
+
+    def order_target_percent(self, symbol: str, percent: float, position_side: int,
+                             order_type: int = OrderType.Market,
+                             price: float = None, note: str = '') -> str:
+        """调仓到目标持仓比例（对齐掘金 GM order_target_percent）。
+
+        目标价值 = nav × percent → 目标手数 = 目标价值 / (价格×乘数)。
+        """
+        if not 0 < abs(percent) <= 1:
+            raise ValueError("Percent must be between -1 and 1 (non-zero)")
+        price = price or self._get_price(symbol)
+        spec = self._contracts.get(symbol)
+        if spec is None:
+            raise ValueError(f"合约 {symbol} 未注册规格，请先 register_contract()")
+        nav = self.get_account()['nav']
+        target_value = nav * abs(percent)
+        per_lot = price * spec.multiplier
+        target_volume = int(target_value / per_lot) if per_lot > 0 else 0
+        return self.order_target_volume(symbol, target_volume, position_side,
+                                        order_type, price, note)
+
+    # ── 便捷包装（方案文档接口，语义与 order_target_volume 一致）──
+
+    def order_target_long(self, symbol: str, target_lots: int,
+                          order_type: int = OrderType.Market,
+                          price: float = None, note: str = '') -> str:
+        """目标多头持仓 N 手（便捷方法，等价 order_target_volume(..., PositionSide.Long)）"""
+        return self.order_target_volume(symbol, target_lots, PositionSide.Long,
+                                        order_type, price, note)
+
+    def order_target_short(self, symbol: str, target_lots: int,
+                           order_type: int = OrderType.Market,
+                           price: float = None, note: str = '') -> str:
+        """目标空头持仓 N 手（便捷方法，等价 order_target_volume(..., PositionSide.Short)）"""
+        return self.order_target_volume(symbol, target_lots, PositionSide.Short,
+                                        order_type, price, note)
+
+    def order_target(self, symbol: str, long_lots: int = 0, short_lots: int = 0,
+                     order_type: int = OrderType.Market,
+                     price: float = None, note: str = '') -> str:
+        """同时设定多空目标：先调空再调多（避免锁仓）"""
+        self.order_target_volume(symbol, short_lots, PositionSide.Short,
+                                 order_type, price, note + ' (空)')
+        return self.order_target_volume(symbol, long_lots, PositionSide.Long,
+                                        order_type, price, note + ' (多)')
+
+    # ------------------------------------------------------------------------
     # 查询操作
     # ------------------------------------------------------------------------
 
@@ -480,7 +1042,12 @@ class AccountManager:
             return {
                 'cash': self.cash,
                 'nav': self.cash,
-                'created_at': query_time
+                'created_at': query_time,
+                # [新增] 2026-08-04 期货字段（无快照时按当前持仓实时计算）
+                'available': self._get_available_cash(),
+                'margin_used': self._get_used_margin(),
+                'float_pnl': 0.0,
+                'risk_ratio': 0.0,
             }
 
         snapshot = next(
@@ -492,13 +1059,25 @@ class AccountManager:
             return {
                 'cash': self.cash,
                 'nav': self.cash,
-                'created_at': query_time
+                'created_at': query_time,
+                'available': self._get_available_cash(),
+                'margin_used': self._get_used_margin(),
+                'float_pnl': 0.0,
+                'risk_ratio': 0.0,
             }
 
+        margin_used = getattr(snapshot, 'margin_used', 0.0)
+        float_pnl = getattr(snapshot, 'float_pnl', 0.0)
+        nav = snapshot.nav
         return {
             'cash': snapshot.cash,
-            'nav': snapshot.nav,
-            'created_at': snapshot.created_at
+            'nav': nav,
+            'created_at': snapshot.created_at,
+            # [新增] 2026-08-04 期货字段：可用资金/已用保证金/浮动盈亏/风险度
+            'available': round(snapshot.cash - margin_used - self.frozen, 2),
+            'margin_used': margin_used,
+            'float_pnl': float_pnl,
+            'risk_ratio': round(margin_used / nav, 4) if nav > 0 else 0.0,
         }
 
     def get_position(self, symbol: str = None) -> Dict:
@@ -521,11 +1100,36 @@ class AccountManager:
             }
 
         if symbol:
+            # [新增] 2026-08-04 期货：返回多空分列（多空可共存）
+            if self._is_future(symbol):
+                live = self.positions.get(symbol, {})
+                return {
+                    'long_volume': live.get('long_volume', 0),
+                    'long_volume_today': live.get('long_volume_today', 0),
+                    'long_cost': round(live.get('long_cost', 0), 3),
+                    'short_volume': live.get('short_volume', 0),
+                    'short_volume_today': live.get('short_volume_today', 0),
+                    'short_cost': round(live.get('short_cost', 0), 3),
+                    'sec_type': 'future',
+                }
             pos = positions.get(symbol, {'volume': 0, 'cost_price': 0})
             pos['cost_price'] = round(pos['cost_price'], 3)
             return pos
+
+        # [新增] 2026-08-04 期货持仓合入全量结果（多空分列）
+        for sym in list(positions.keys()):
+            if self._is_future(sym):
+                live = self.positions.get(sym, {})
+                positions[sym] = {
+                    'long_volume': live.get('long_volume', 0),
+                    'short_volume': live.get('short_volume', 0),
+                    'long_cost': round(live.get('long_cost', 0), 3),
+                    'short_cost': round(live.get('short_cost', 0), 3),
+                    'sec_type': 'future',
+                }
         for pos in positions.values():
-            pos['cost_price'] = round(pos['cost_price'], 3)
+            if pos.get('sec_type') != 'future':
+                pos['cost_price'] = round(pos.get('cost_price', 0), 3)
         return positions
 
     def get_orders(
@@ -571,6 +1175,8 @@ class AccountManager:
         if sec_type in ('stock', 'etf'):
             return 100
         if sec_type == 'index':
+            return 1
+        if sec_type == 'future':    # [新增] 2026-08-04 期货 1 手 = 1 张
             return 1
         return 0.1
 
