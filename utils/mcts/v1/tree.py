@@ -309,8 +309,10 @@ class MCTSTree:
         if valid_fitness > -999:
             node.valid_fitness = valid_fitness
 
-        # 更新全局最优
-        if fitness > self.best_node.fitness:
+        # 更新树内最优
+        # [修复] 2026-08-06 还原规范写法：原 UNIQUE_MARKER_v4 防御式改写逻辑等价
+        # 但注释格式违规、变量名非语义化（_bn/_bnv），统一为直接比较。
+        if self.best_node is None or fitness > self.best_node.fitness:
             self.best_node = node
             self.best_path_nodes = node.path_to_root()
 

@@ -287,9 +287,9 @@ class MCTSEngine:
         # 缓存命中
         if self.cache is not None and node.signature:
             cached = self.cache.get(node.signature)
-            if cached is not None:
-                node.fitness = cached[0]
-                return cached[0]
+            if cached is not None and cached[0] is not None:
+                node.fitness = float(cached[0])
+                return float(cached[0])
 
         try:
             # 执行表达式求值
@@ -313,9 +313,9 @@ class MCTSEngine:
                     n = sum(1 for _ in __import__('ast').walk(node.tree))
                 except Exception:
                     n = 0
-                self.cache.put(node.signature, (fitness, depth, n))
+                self.cache.put(node.signature, (float(fitness), depth, n))
 
-            return fitness
+            return float(fitness)
 
         except Exception as e:
             # 评估失败 → 返回极低 fitness
@@ -372,6 +372,9 @@ class MCTSEngine:
                     if node.fitness > existing.fitness:
                         self.best_pool.remove(existing)
                         self.best_pool.append(node)
+                    # [修复] 2026-08-06 global_best 更新需覆盖此提前 return 分支，
+                    # 否则同签名替换时全局最优不会同步。
+                    self._update_global_best(node)
                     return  # 已有同签名且 fitness 更高 → 不加入
 
         self.best_pool.append(node)
@@ -379,6 +382,22 @@ class MCTSEngine:
         self.best_pool.sort(key=lambda n: n.fitness, reverse=True)
         if len(self.best_pool) > self.config.best_pool_size:
             self.best_pool = self.best_pool[:self.config.best_pool_size]
+
+        # [修复] 2026-08-06 global_best 更新：原逻辑被误移到 _structural_signature 的
+        # return 之后成为死代码，导致 engine.global_best 恒为 None（engine.best() 永远返回
+        # None，run_phase1_buy 等依赖 global_best 的下游逻辑静默失效）。
+        # 现在收敛到本方法统一更新，所有路径（含 enable_diverse_pool 分支）都覆盖。
+        self._update_global_best(node)
+
+    def _update_global_best(self, node: MCTSNode):
+        """更新全局最优：engine.global_best + 各树 best_node 同步
+
+        [新增] 2026-08-06 从 _structural_signature 死代码移回，统一 global_best 维护点。
+        """
+        if self.global_best is None or node.fitness > self.global_best.fitness:
+            self.global_best = node
+            for tree in self.trees:
+                tree.best_node = node
 
     def _structural_signature(self, node: MCTSNode) -> str:
         """提取结构签名：内层调用链（跳过外层等价包装）
@@ -405,12 +424,6 @@ class MCTSEngine:
             tree = tree.args[0]
 
         return hasher.compute_full_tree(tree)
-
-        # 更新全局最优
-        if self.global_best is None or node.fitness > self.global_best.fitness:
-            self.global_best = node
-            for tree in self.trees:
-                tree.best_node = node
 
     def _record_stats(self):
         """记录当前轮统计"""
