@@ -1,23 +1,15 @@
 """
-core/engine.py — MCTS 搜索引擎 v2（主循环编排）
-
+engine.py — MCTS 搜索引擎 v2（主循环编排）
 =============================================================================
+
+命名规范（统一数据流）:
+  evaluator(tree) → evaluated → fitness.compute(evaluated) → score
+  
 设计原则（v2 根治 v1 事故）:
   - 引擎只编排 select→expand→evaluate→backprop，0 业务判断
   - 所有策略显式注入（无默认值），适配因子/择时/任意场景
   - 最优状态收敛到 BestTracker 单一维护点
   - 树操作委派给 MCTSTree，选择委派给 SelectionStrategy
-
-使用方法:
-  engine = MCTSEngine(
-      evaluator=...,
-      fitness=fitness_calc,
-      selection=BayesianUCB(),
-      action_config=...,
-      config=EngineConfig(n_iterations=500),
-  )
-  engine.run()
-  print(engine.best_tracker.report())
 
 [重构] 2026-08-06 基于 v1 事故教训完全重构。
 """
@@ -43,16 +35,14 @@ class MCTSEngine:
     """MCTS 搜索引擎 v2 — 显式注入、编排纯化
 
     v1 → v2 变化:
-      - 所有策略外部注入（selection / fitness / validation）
+      - 所有策略外部注入（selection / fitness），构造时传入
       - BestTracker 替代 v1 的三处分散 best 状态
-      - MCTSConfig 拆分为 EngineConfig + ActionConfig（参数与动作解耦）
-      - fitness_mode 取消（外部注入 fitness_calculator 决定语义）
     """
 
     def __init__(self,
                  # ── 核心注入（必须）──
-                 evaluator: Callable,                    # signal → values（领域表达）
-                 fitness_calculator,                     # FitnessCalculator 协议
+                 evaluator,              # evaluator(tree) → evaluated
+                 fitness,                # fitness.compute(evaluated) → score
                  action_config: ActionConfig,            # 动作空间边界
 
                  # ── 可选策略注入──
@@ -69,7 +59,7 @@ class MCTSEngine:
                  ):
         # 必需
         self.evaluator = evaluator
-        self.fitness = fitness_calculator
+        self.fitness = fitness
         self.action_config = action_config
 
         # 策略（v2 显式注入，无隐藏默认值）
@@ -147,14 +137,13 @@ class MCTSEngine:
                 for child in new_children:
                     self._evaluate_node(child)
 
-            # 相似度折扣（AlphaCFG，默认关）
-            if self.config.enable_similarity_discount and leaf.fitness > -999:
-                fitness = self._apply_similarity_discount(leaf)
-            else:
-                fitness = leaf.fitness
+            # 从节点取 score，可选相似度折扣
+            score = leaf.fitness
+            if self.config.enable_similarity_discount and score > -999:
+                score = self._apply_similarity_discount(leaf)
 
             # 反向传播
-            tree.backpropagate(leaf, fitness, leaf.train_fitness, leaf.valid_fitness)
+            tree.backpropagate(leaf, score, leaf.train_fitness, leaf.valid_fitness)
 
             # 更新全局最优（v2 唯一入口：BestTracker）
             self.best_tracker.update(leaf, trees=self.trees)
@@ -183,11 +172,7 @@ class MCTSEngine:
     def _evaluate_node(self, node: MCTSNode):
         """评估单节点（含缓存查询）
 
-        评估流程:
-          1. 查缓存（signature 命中 → 直接赋值）
-          2. 调用 evaluator 求值 → fitness_calculator.compute()
-          3. 写缓存
-          4. 写 node.fitness / train_fitness / valid_fitness
+        数据流: node.tree → evaluator → evaluated → fitness.compute → score
         """
         sig = node.signature or _canonicalize_key(node.tree)
 
@@ -197,15 +182,15 @@ class MCTSEngine:
             node.fitness, node.train_fitness, node.valid_fitness = cached
             return
 
-        # 2. 求值
+        # 2. 求值: evaluator(tree) → evaluated → fitness.compute(evaluated) → score
         try:
-            output = self.evaluator(node.tree)
-            fitness_val = self.fitness.compute(output)
+            evaluated = self.evaluator(node.tree)
+            score = self.fitness.compute(evaluated)
         except Exception:
-            fitness_val = -999.0
+            score = -999.0
 
-        node.fitness = float(fitness_val)
-        node.train_fitness = float(fitness_val)
+        node.fitness = float(score)
+        node.train_fitness = float(score)
         node.valid_fitness = -999.0  # 搜索阶段不做切分，由 verify 做
 
         # 3. 写缓存

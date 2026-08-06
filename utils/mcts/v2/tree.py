@@ -137,21 +137,23 @@ class MCTSTree:
 
     # ── Step 4: Backpropagation（v1 修复版，无 UNIQUE_MARKER_v4）──
 
-    def backpropagate(self, node: MCTSNode, fitness: float,
+    def backpropagate(self, node: MCTSNode, score: float,
                       train_fitness: float = -999.0,
                       valid_fitness: float = -999.0):
         """从叶节点向根反向传播更新统计
 
+        数据流: score → node.fitness / total_value / best_node 比较
+
         [修复] 2026-08-06 直接比较 best_node（规范围写法，v1 原为 UNIQUE_MARKER_v4）。
         """
-        node.fitness = fitness
+        node.fitness = score
         if train_fitness > -999:
             node.train_fitness = train_fitness
         if valid_fitness > -999:
             node.valid_fitness = valid_fitness
 
         # 更新树内最优
-        if self.best_node is None or fitness > self.best_node.fitness:
+        if self.best_node is None or score > self.best_node.fitness:
             self.best_node = node
             self.best_path_nodes = node.path_to_root()
 
@@ -160,8 +162,8 @@ class MCTSTree:
         current = node
         while current is not None:
             current.visit_count += 1
-            current.total_value += fitness
-            current.reward_history.append(fitness)
+            current.total_value += score
+            current.reward_history.append(score)
             if current.visit_count > 0:
                 raw_q = current.q_value
                 z = raw_q * 2.0
