@@ -1,17 +1,62 @@
 """
-utils/gp/v5/ast_utils.py — AST 纯函数工具
+utils/ast/surgery.py — AST 手术层（版本无关的树编辑工具）
 =============================================================================
-[抽取] 2026-07-06 从 engine.py 拆分，纯函数无状态，可被 factor/signals 共享。
-[新增] 2026-07-08 新增 _extract_subtrees 用于 Motif 库构建。
+
+定位:
+  对 Python ast.Expression 树做"局部手术"（子树替换/化简/签名/提取）。
+  与 utils/ast/v1,v2,v21 的"语言定义"（解析/求值/注册表）正交:
+    - 语言定义 = 表达式是什么意思、值是多少（跟版本走）
+    - 手术层   = 怎么改一棵树（跟版本无关，只依赖 stdlib ast + copy）
+
+服务对象:
+  - GP v5/v6 : 变异算子 _mutate_subtree 依赖 _collect_replaceable/_replace_subtree/_simplify_ast
+  - MCTS v2  : 7 种搜索动作依赖 _collect_replaceable/_replace_subtree/_simplify_ast/_canonicalize_key
+
+收敛来源:
+  [收敛] 2026-08-07 从 utils/gp/v5/ast_utils.py + utils/mcts/v2/ast_utils.py 合并为唯一真源。
+  原两份拷贝核心手术函数逻辑一致（GP 版为基），本文件统一提供后删除原拷贝。
+  - _walk_nodes/_ast_depth 内联实现，语义对齐 utils.ast.v2.dsl.walk_nodes/ast_depth
+    （不依赖 v2.dsl，保证对 v1/v2/v21 版本无关；不含 Expression 容器、不重复根节点）
+  - _canonicalize_key 保留 GP 版 memo+lock 缓存参数（MCTS 单线程调用传 None 即无缓存）
+  - _extract_subtrees 为 GP Motif 库专属（MCTS 暂不需要，但收敛后可用）
 """
+
 import ast
 import copy
-import logging
 from typing import List
 
-logger = logging.getLogger(__name__)
 
-from utils.ast.v2.dsl import ast_depth, ast_node_count, walk_nodes
+# ============================================================
+# AST 遍历 / 深度（内联，语义对齐 utils.ast.v2.dsl）
+# ============================================================
+
+def _walk_nodes(tree: ast.AST):
+    """安全遍历 AST 所有节点
+
+    语义对齐 utils.ast.v2.dsl.walk_nodes:
+      - ast.Expression 容器本身不遍历，直接遍历 body
+      - ast.Module 逐 statement 遍历
+      - 不重复任何节点
+    """
+    if isinstance(tree, ast.Expression):
+        return list(ast.walk(tree.body))
+    if isinstance(tree, ast.Module):
+        nodes = []
+        for stmt in tree.body:
+            nodes.extend(ast.walk(stmt))
+        return nodes
+    return list(ast.walk(tree))
+
+
+def _ast_depth(tree) -> int:
+    """计算 AST 最大深度（语义对齐 utils.ast.v2.dsl.ast_depth）"""
+    def _depth(node):
+        children = list(ast.iter_child_nodes(node))
+        if not children:
+            return 1
+        return 1 + max(_depth(c) for c in children)
+    body = tree.body if hasattr(tree, 'body') else tree
+    return _depth(body)
 
 
 # ============================================================
@@ -38,7 +83,7 @@ def _collect_replaceable(tree: ast.Expression, mode: str = 'any') -> list:
       'bool'     — 产生布尔值的子树
     """
     func_names = set()
-    for node in walk_nodes(tree):
+    for node in _walk_nodes(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             func_names.add(id(node.func))
 
@@ -53,13 +98,13 @@ def _collect_replaceable(tree: ast.Expression, mode: str = 'any') -> list:
         meaningful = (ast.BinOp, ast.UnaryOp, ast.BoolOp, ast.Compare,
                       ast.IfExp, ast.Call, ast.Name, ast.Constant)
 
-    return [n for n in walk_nodes(tree)
+    return [n for n in _walk_nodes(tree)
             if isinstance(n, meaningful) and id(n) not in func_names]
 
 
 def _parent_map(tree: ast.Expression) -> dict:
     parents = {}
-    for node in walk_nodes(tree):
+    for node in _walk_nodes(tree):
         for child in ast.iter_child_nodes(node):
             parents[child] = node
     return parents
@@ -146,6 +191,7 @@ def _nodes_equal(a: ast.AST, b: ast.AST) -> bool:
                 all(_nodes_equal(x, y) for x, y in zip(a.comparators, b.comparators)))
     # fallback: 用 ast.dump 兜底（比 unparse 快但比结构比较慢）
     return ast.dump(a) == ast.dump(b)
+
 
 def _simplify_ast(tree: ast.Expression) -> ast.Expression:
     """后处理简化 AST，消除双重否定和恒等运算。
@@ -301,7 +347,7 @@ def _extract_subtrees(tree: ast.Expression,
     排除：纯函数名节点、Load/Store 元节点、单变量/常数节点。
     """
     func_names = set()
-    for node in walk_nodes(tree):
+    for node in _walk_nodes(tree):
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             func_names.add(id(node.func))
 
@@ -309,9 +355,9 @@ def _extract_subtrees(tree: ast.Expression,
                   ast.IfExp, ast.Call)
 
     subtrees = []
-    for node in walk_nodes(tree):
+    for node in _walk_nodes(tree):
         if isinstance(node, meaningful) and id(node) not in func_names:
-            d = ast_depth(node)
+            d = _ast_depth(node)
             if min_depth <= d <= max_depth:
                 subtrees.append(node)
     return subtrees

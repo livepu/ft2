@@ -4,7 +4,7 @@ engine.py — MCTS 搜索引擎 v2（主循环编排）
 
 命名规范（统一数据流）:
   evaluator(tree) → evaluated → fitness.compute(evaluated) → score
-  
+
 设计原则（v2 根治 v1 事故）:
   - 引擎只编排 select→expand→evaluate→backprop，0 业务判断
   - 所有策略显式注入（无默认值），适配因子/择时/任意场景
@@ -12,13 +12,13 @@ engine.py — MCTS 搜索引擎 v2（主循环编排）
   - 树操作委派给 MCTSTree，选择委派给 SelectionStrategy
 
 [重构] 2026-08-06 基于 v1 事故教训完全重构。
+[修复] 2026-08-07 主循环对齐 v1 行为：出度感知选树、select 后直接 expand、
+  逐 child 评估/回传/更新池/注册子树、similarity discount 在评估内、early stop 用 stats 序列。
 """
 
-import ast
-import math
 import random
 import time
-from typing import Dict, List, Optional, Callable, Set
+from typing import List, Optional
 
 from .node import MCTSNode
 from .tree import MCTSTree
@@ -27,7 +27,7 @@ from .config import EngineConfig, ActionConfig
 from .constraints import CFGGrammar, SemanticValidator
 from .dedup import SubtreeHasher, FrequentSubtreeMonitor
 from .cache import SimpleFitnessCache
-from .ast_utils import _expr_str, _canonicalize_key
+from utils.ast.surgery import _canonicalize_key
 from .selection import SelectionStrategy, BayesianUCB
 
 
@@ -37,6 +37,7 @@ class MCTSEngine:
     v1 → v2 变化:
       - 所有策略外部注入（selection / fitness），构造时传入
       - BestTracker 替代 v1 的三处分散 best 状态
+      - 主循环行为与 v1 完全一致（保证结果可复现）
     """
 
     def __init__(self,
@@ -76,6 +77,7 @@ class MCTSEngine:
         self.best_tracker = BestTracker(
             best_pool_size=self.config.best_pool_size,
             enable_diverse_pool=self.config.enable_diverse_pool,
+            signature_fn=self._structural_signature,   # [修复] 2026-08-07 对齐 v1 去重签名
         )
         self.trees: List[MCTSTree] = []
 
@@ -87,14 +89,21 @@ class MCTSEngine:
 
         # 种子
         self.seed_expressions = seed_expressions or ['CLOSE']
-        self._seeds_evaluated = False
 
-        # 统计
+        # 统计（对齐 v1 stats 结构）
+        self.stats = {
+            'best_fitness': [],
+            'avg_fitness': [],
+            'evaluations': [],
+        }
+        self.iteration: int = 0
+
+        # 计时
         self.start_time: float = 0
         self.end_time: float = 0
 
     # ================================================================
-    # 主循环
+    # 主循环（对齐 v1）
     # ================================================================
 
     def run(self):
@@ -105,54 +114,50 @@ class MCTSEngine:
         self.trees = [MCTSTree(expr) for expr in self.seed_expressions]
         self._evaluate_seeds()
 
-        # 2. 主迭代
-        for iteration in range(self.config.n_iterations):
-            # 选树（多树时轮询，单树时 trivially index 0）
-            tree_idx = iteration % len(self.trees)
-            tree = self.trees[tree_idx]
-            parent_visits = sum(t.total_evaluations for t in self.trees)
+        # 2. 主迭代（v1 对齐）
+        for i in range(self.config.n_iterations):
+            self.iteration = i
 
-            # select → expand → evaluate → backprop
-            leaf = tree.select(self.selection, parent_visits=parent_visits)
+            # 出度感知树选择（AlphaPROBE: 被探索多的树退避）
+            outdegrees = [t.root.outdegree for t in self.trees]
+            max_od = max(outdegrees) if outdegrees else 1
+            weights = [max_od - od + 1 for od in outdegrees]  # 低出度→高权重
+            tree = self._rng.choices(self.trees, weights=weights, k=1)[0]
 
-            # 评估（如果未被评估过）
-            if not leaf.is_evaluated:
-                self._evaluate_node(leaf)
+            # Step 1: Selection（parent_visits 由 tree.select 内部用 node.visit_count）
+            leaf = tree.select(self.selection)
 
-            # 扩展（如果评估值不是失败）
-            if leaf.fitness > -999 and leaf.depth < self.config.max_depth:
-                new_children = tree.expand(
-                    leaf,
-                    action_config=self.action_config,
-                    n_branches=self.config.n_branches,
-                    max_depth=self.config.max_depth,
-                    cfg=self.cfg,
-                    semantic=self.semantic,
-                    subtree_monitor=self.monitor,
-                    best_pool=self.best_tracker.top(),
-                    enable_graft=self.config.enable_graft,
-                    rng=self._rng,
-                )
-                # 评估新子节点
-                for child in new_children:
-                    self._evaluate_node(child)
+            # Step 2: Expansion（v1: select 后直接 expand，不评估 leaf）
+            children = tree.expand(
+                leaf,
+                action_config=self.action_config,
+                n_branches=self.config.n_branches,
+                max_depth=self.config.max_depth,
+                cfg=self.cfg,
+                semantic=self.semantic,
+                subtree_monitor=self.monitor,
+                best_pool=self.best_tracker.top(),
+                enable_graft=self.config.enable_graft,
+                rng=self._rng,
+            )
 
-            # 从节点取 score，可选相似度折扣
-            score = leaf.fitness
-            if self.config.enable_similarity_discount and score > -999:
-                score = self._apply_similarity_discount(leaf)
+            # Step 3: Evaluation + Backprop（逐 child，v1 对齐）
+            for child in children:
+                score = self._evaluate_node(child)          # 评估（含缓存+折扣）
+                tree.backpropagate(child, score,
+                                   child.train_fitness, child.valid_fitness)
+                self.best_tracker.update(child, trees=self.trees)
+                if self.monitor is not None:
+                    self.monitor.register(child.tree)
 
-            # 反向传播
-            tree.backpropagate(leaf, score, leaf.train_fitness, leaf.valid_fitness)
-
-            # 更新全局最优（v2 唯一入口：BestTracker）
-            self.best_tracker.update(leaf, trees=self.trees)
-
-            # 早期停止
-            if self.config.early_stop_rounds > 0 and self._check_early_stop():
+            # 统计 + 日志 + 早停（v1 对齐）
+            self._record_stats()
+            if self.config.verbose and (i + 1) % self.config.log_every == 0:
+                self._log_progress(i + 1)
+            if self._should_early_stop():
+                if self.config.verbose:
+                    print(f"[MCTS v2] 早停触发 (iter={i + 1})")
                 break
-
-        # end for
 
         # 最终池验证（如果 validator 注入）
         self._verify_pool()
@@ -164,15 +169,22 @@ class MCTSEngine:
     # ================================================================
 
     def _evaluate_seeds(self):
-        """评估所有种子节点"""
+        """评估所有种子节点，建立初始最优池（v1 对齐：含 backprop + pool + monitor）"""
         for tree in self.trees:
-            if not tree.root.is_evaluated:
-                self._evaluate_node(tree.root)
+            root = tree.root
+            if not root.is_evaluated:
+                score = self._evaluate_node(root)
+                tree.backpropagate(root, score,
+                                   root.train_fitness, root.valid_fitness)
+                self.best_tracker.update(root, trees=self.trees)
+                if self.monitor is not None:
+                    self.monitor.register(root.tree)
 
-    def _evaluate_node(self, node: MCTSNode):
-        """评估单节点（含缓存查询）
+    def _evaluate_node(self, node: MCTSNode) -> float:
+        """评估单节点（含缓存 + 相似度折扣），返回 score
 
         数据流: node.tree → evaluator → evaluated → fitness.compute → score
+        [修复] 2026-08-07 相似度折扣对齐 v1：在评估内、条件 len(pool)>=10 且 depth>=3。
         """
         sig = node.signature or _canonicalize_key(node.tree)
 
@@ -180,73 +192,125 @@ class MCTSEngine:
         cached = self._cache.get(sig)
         if cached is not None:
             node.fitness, node.train_fitness, node.valid_fitness = cached
-            return
+            return node.fitness
 
-        # 2. 求值: evaluator(tree) → evaluated → fitness.compute(evaluated) → score
+        # 2. 求值
         try:
             evaluated = self.evaluator(node.tree)
             score = self.fitness.compute(evaluated)
         except Exception:
             score = -999.0
 
+        # 3. AlphaCFG 相似度折扣（v1 对齐：池≥10 且 深度≥3）
+        if (self.config.enable_similarity_discount
+                and score > -999
+                and len(self.best_tracker.top()) >= 10
+                and node.depth >= 3):
+            discount = self._compute_similarity_discount(node)
+            score = score * discount
+
         node.fitness = float(score)
         node.train_fitness = float(score)
         node.valid_fitness = -999.0  # 搜索阶段不做切分，由 verify 做
 
-        # 3. 写缓存
+        # 4. 写缓存
         self._cache.put(sig, (node.fitness, node.train_fitness, node.valid_fitness))
-
-    def _apply_similarity_discount(self, node: MCTSNode) -> float:
-        """AlphaCFG 相似度折扣（默认关）"""
-        hasher = SubtreeHasher()
-        h = hasher.compute_full_tree(node.tree)
-        total = 0.0
-        count = 0
-        for pool_node in self.best_tracker.top(self.config.top_k_similar):
-            other_h = hasher.compute_full_tree(pool_node.tree)
-            sim = 1.0 - self._hash_similarity(h, other_h)
-            if sim > self.config.similarity_threshold:
-                total += sim
-                count += 1
-        if count > 0:
-            avg_sim = total / count
-            return node.fitness * (1.0 - avg_sim * 0.3)
         return node.fitness
 
-    @staticmethod
-    def _hash_similarity(h1: str, h2: str) -> float:
-        """简单字符级相似度"""
-        if h1 == h2:
-            return 1.0
-        shared = sum(1 for c1, c2 in zip(h1, h2) if c1 == c2)
-        return shared / max(len(h1), len(h2))
+    # ── 相似度折扣（v1 对齐）──
 
-    def _check_early_stop(self) -> bool:
-        """检查是否早停：best_fitness 连续 N 轮不改善"""
-        if len(self.best_tracker._best_pool) < 2:
+    def _compute_similarity_discount(self, node: MCTSNode,
+                                     alpha: float = 0.5) -> float:
+        """AlphaCFG 结构相似度折扣（v1 对齐）
+
+        仅池≥3 才计算；基于子树哈希 Jaccard 相似度；<80% 不扣，≥80% 轻度扣。
+        """
+        pool = self.best_tracker.top()
+        if len(pool) < 3:
+            return 1.0
+        hasher = SubtreeHasher()
+        node_hashes = set(hasher.extract_all_subtrees(node.tree))
+        if not node_hashes:
+            return 1.0
+        max_sim = 0.0
+        for best_node in pool[:5]:  # Top-5 冠军
+            try:
+                best_hashes = set(hasher.extract_all_subtrees(best_node.tree))
+                if not best_hashes:
+                    continue
+                intersection = node_hashes & best_hashes
+                union = node_hashes | best_hashes
+                sim = len(intersection) / len(union)
+                max_sim = max(max_sim, sim)
+            except Exception:
+                continue
+        if max_sim < 0.8:
+            return 1.0
+        discount = 1.0 - alpha * max_sim
+        return max(discount, 0.5)
+
+    # ── 去重签名（v1 对齐：跳过等价外层包装）──
+
+    def _structural_signature(self, node: MCTSNode) -> str:
+        """提取结构签名：内层调用链（跳过 cs_rank/cs_zscore 等价包装）"""
+        import ast as _ast
+        hasher = SubtreeHasher()
+        _cosmetic_wraps = {'cs_rank', 'cs_zscore', 'cs_scale', 'abs', 'log', 'sign'}
+        tree = node.tree.body
+        while isinstance(tree, _ast.Call):
+            func_name = tree.func.id if isinstance(tree.func, _ast.Name) else ''
+            if func_name not in _cosmetic_wraps:
+                break
+            tree = tree.args[0]
+        return hasher.compute_full_tree(tree)
+
+    # ── 统计 / 日志 / 早停（v1 对齐）──
+
+    def _record_stats(self):
+        all_fitness = [n.fitness for tree in self.trees
+                       for n in tree.all_nodes.values()
+                       if n.is_evaluated]
+        self.stats['best_fitness'].append(
+            max(all_fitness) if all_fitness else -999.0)
+        self.stats['avg_fitness'].append(
+            sum(all_fitness) / len(all_fitness) if all_fitness else -999.0)
+        self.stats['evaluations'].append(
+            sum(tree.total_evaluations for tree in self.trees))
+
+    def _should_early_stop(self) -> bool:
+        if self.config.early_stop_rounds <= 0:
             return False
-        # 简单实现：最近 N 轮 best 无变化
-        # 这里简化：取 best_pool[0] 的 fitness history 检查
-        best = self.best_tracker.best_fitness()
-        if not hasattr(self, '_best_history'):
-            self._best_history = []
-        self._best_history.append(best)
-        if len(self._best_history) > self.config.early_stop_rounds:
-            recent = self._best_history[-self.config.early_stop_rounds:]
-            if max(recent) == min(recent):  # 无变化
-                return True
+        best_series = self.stats['best_fitness']
+        if len(best_series) <= self.config.early_stop_rounds:
+            return False
+        recent_best = best_series[-self.config.early_stop_rounds:]
+        historical_best = max(best_series[:-self.config.early_stop_rounds])
+        if max(recent_best) <= historical_best:
+            return True
         return False
+
+    def _log_progress(self, iteration: int):
+        elapsed = time.time() - self.start_time
+        best_f = self.stats['best_fitness'][-1] if self.stats['best_fitness'] else -999
+        total_nodes = sum(t.node_count() for t in self.trees)
+        total_evals = sum(t.total_evaluations for t in self.trees)
+        best_expr = self.best_tracker.best_expr()[:50] if self.best_tracker.best_expr() else ''
+        print(f"[MCTS v2] iter={iteration:4d}/{self.config.n_iterations} "
+              f"| best={best_f:.4f} | evals={total_evals} "
+              f"| nodes={total_nodes} | elapsed={elapsed:.1f}s")
+        if best_expr:
+            print(f"           best_expr: {best_expr}")
+
+    # ── 池验证 ──
 
     def _verify_pool(self):
         """候选池 IC 检验（如果 validator 注入）"""
         if self.validator is None:
             return
-        # 尝试用 fitness.verify 做全量验证（如果协议支持）
         if hasattr(self.fitness, 'verify'):
             try:
                 for node in self.best_tracker.top():
-                    info = self.fitness.verify(node.tree)
-                    # 储存验证信息（后续可扩展）
+                    self.fitness.verify(node.tree)
             except Exception:
                 pass
 

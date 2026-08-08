@@ -23,7 +23,7 @@ from .config import (
     _fill_weights, _filter_funcs_by_var_scope,
     get_full_default_weights, _get_funcs_by_group, _get_fill_keys,
 )
-from .ast_utils import (
+from utils.ast.surgery import (
     _expr_str, _collect_replaceable, _replace_subtree, _simplify_ast, _canonicalize_key,
     _extract_subtrees,
 )

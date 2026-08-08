@@ -19,7 +19,7 @@ from .node import MCTSNode
 from .constraints import CFGGrammar, SemanticValidator
 from .dedup import SubtreeHasher, FrequentSubtreeMonitor
 from .actions import apply_action, get_available_actions
-from .ast_utils import _simplify_ast, _canonicalize_key, _expr_str
+from utils.ast.surgery import _simplify_ast, _canonicalize_key, _expr_str
 from .config import ActionConfig
 
 

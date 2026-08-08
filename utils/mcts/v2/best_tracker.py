@@ -28,15 +28,32 @@ class BestTracker:
     """
 
     def __init__(self, best_pool_size: int = 10,
-                 enable_diverse_pool: bool = True):
+                 enable_diverse_pool: bool = True,
+                 signature_fn: Optional[callable] = None):
+        """BestTracker 最优状态单一维护点
+
+        Args:
+          best_pool_size: 最优池容量（v1 默认 20）
+          enable_diverse_pool: 结构去重（v1 默认 True）
+          signature_fn: 去重签名计算函数 node → str。
+                        [修复] 2026-08-07 对齐 v1 用 _structural_signature（跳过
+                        cs_rank/cs_zscore 等等价外层包装），v1 默认用此签名去重。
+                        None 时用 node.signature（完整 canonicalize）。
+        """
         self._global_best: Optional[MCTSNode] = None
         self._best_pool: List[MCTSNode] = []
         self._pool_size = best_pool_size
         self._enable_diverse = enable_diverse_pool
+        self._signature_fn = signature_fn
         self._signature_tracker: Set[str] = set()
         self.total_evaluated: int = 0
 
     # ── 核心更新（唯一入口！）──
+
+    def _sig(self, node: MCTSNode) -> str:
+        if self._signature_fn is not None:
+            return self._signature_fn(node)
+        return node.signature or ""
 
     def update(self, node: MCTSNode, trees: Optional[List] = None):
         """评估完一个节点后调用此方法
@@ -55,18 +72,20 @@ class BestTracker:
         if not node.is_evaluated or node.fitness <= -999:
             return
 
+        sig = self._sig(node)
+
         # 1. 更新最优池
-        if self._enable_diverse and node.signature:
-            if node.signature in self._signature_tracker:
+        if self._enable_diverse and sig:
+            if sig in self._signature_tracker:
                 # 同签名已存在，替换更高 fitness
                 for i, existing in enumerate(self._best_pool):
-                    if existing.signature == node.signature:
+                    if self._sig(existing) == sig:
                         if node.fitness > existing.fitness:
                             self._best_pool[i] = node
                         break
             else:
                 self._best_pool.append(node)
-                self._signature_tracker.add(node.signature)
+                self._signature_tracker.add(sig)
         else:
             self._best_pool.append(node)
 
@@ -77,8 +96,8 @@ class BestTracker:
             self._best_pool = self._best_pool[:self._pool_size]
             if self._enable_diverse:
                 for r in removed:
-                    if r.signature:
-                        self._signature_tracker.discard(r.signature)
+                    if self._sig(r):
+                        self._signature_tracker.discard(self._sig(r))
 
         # 2. 更新全局最优
         if self._global_best is None or node.fitness > self._global_best.fitness:

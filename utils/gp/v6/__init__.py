@@ -28,7 +28,7 @@ utils/gp/v6 — 遗传编程引擎核心 (AST 原生) + AURORA 增强
      _grow_tree / _random_tree   — 全/受限树生成
      _mutate_subtree / _mutate_param / _mutate_logic — 变异算子
 
-  6. 工具层  (ast_utils.py)      → AST 纯函数
+  6. 工具层  (utils/ast/surgery.py) → AST 手术层（版本无关）
      _expr_str / _simplify_ast / _canonicalize_key  — 表达式规范化
 
   依赖方向: AURORA ← 引擎 ← 配置 + 缓存 + 生成 + 工具

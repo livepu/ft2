@@ -14,7 +14,7 @@ from .config import (
     GP_VARIABLES, GP_CONSTANTS,
     TreeGenConfig, get_full_default_weights, _filter_funcs_by_var_scope,
 )
-from .ast_utils import (
+from utils.ast.surgery import (
     _collect_replaceable, _replace_subtree, _simplify_ast, _parent_map,
 )
 

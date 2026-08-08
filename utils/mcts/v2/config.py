@@ -41,13 +41,17 @@ class EngineConfig:
     enable_graft: bool = False      # 允许嫁接动作
 
     # ── 最优池参数 ──
-    best_pool_size: int = 10        # 全局最优池容量
+    best_pool_size: int = 20        # 全局最优池容量（v1 默认 20）
     enable_diverse_pool: bool = True # 结构签名去重
 
     # ── 相似度折扣 ──
     enable_similarity_discount: bool = False  # AlphaCFG 相似度折扣（默认关）
     similarity_threshold: float = 0.3
     top_k_similar: int = 1
+
+    # ── 日志 ──
+    verbose: bool = True            # 打印进度
+    log_every: int = 50             # 每 N 轮打印
 
     # ── 随机种子 ──
     seed: Optional[int] = None

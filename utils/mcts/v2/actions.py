@@ -3,7 +3,7 @@ core/actions.py — MCTS 搜索动作空间（7 种局部变换，v1 搬运）
 =============================================================================
 
 [搬运] 2026-08-06 从 utils/mcts/v1/actions.py 搬运，逻辑不变。
-  import 路径: from .ast_utils / from .config，均为 core/ 内同级模块。
+[收敛] 2026-08-07 手术函数改从 utils/ast.surgery 导入（原 ast_utils.py 已删除）。
 """
 
 import ast
@@ -11,7 +11,7 @@ import copy
 import random
 from typing import Optional, List, Tuple
 
-from .ast_utils import (
+from utils.ast.surgery import (
     _simplify_ast, _collect_replaceable, _replace_subtree,
     _walk_nodes,
 )

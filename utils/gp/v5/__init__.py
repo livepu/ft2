@@ -22,7 +22,7 @@ utils/gp/v5 — 遗传编程引擎核心 (AST 原生)
      _mutate_param             — 参数变异
      _mutate_logic             — 逻辑/条件变异
 
-  5. 工具层  (ast_utils.py)    → AST 纯函数
+  5. 工具层  (utils/ast/surgery.py) → AST 手术层（版本无关）
      _expr_str / _simplify_ast / _canonicalize_key  — 表达式规范化
      _collect_replaceable / _replace_subtree         — 子树替换
      _extract_subtrees                             — 子结构提取
