@@ -12,6 +12,17 @@ utils/ast/surgery.py — AST 手术层（版本无关的树编辑工具）
   - GP v5/v6 : 变异算子 _mutate_subtree 依赖 _collect_replaceable/_replace_subtree/_simplify_ast
   - MCTS v2  : 7 种搜索动作依赖 _collect_replaceable/_replace_subtree/_simplify_ast/_canonicalize_key
 
+与 constraints.py 的关系（改/判分离，零依赖）:
+  - surgery.py      : 对树"改"——子树替换/化简/签名/提取（主动优化）
+  - constraints.py  : 对树"判"——合法性检查（被动过滤）
+  同一模式（如 x-x→0）surgery 化简、constraints 拒绝，二者不冲突：
+  约定"先简化后验证"——演化中先 _simplify_ast 去掉冗余，再交给约束系统判断。
+
+  **独立性约定（2026-08-09 用户确认）**:
+  - 本文件与 constraints.py **零依赖、互不 import**，功能完全独立
+  - 配合仅发生在应用编排层（GP/MCTS 引擎按"先改后判"顺序串联），模块内部不感知对方
+  - 未来若需复用（如约束层借深度计算），方向只能是 constraints → surgery（单向，干净）
+
 收敛来源:
   [收敛] 2026-08-07 从 utils/gp/v5/ast_utils.py + utils/mcts/v2/ast_utils.py 合并为唯一真源。
   原两份拷贝核心手术函数逻辑一致（GP 版为基），本文件统一提供后删除原拷贝。
@@ -30,13 +41,15 @@ from typing import List
 # AST 遍历 / 深度（内联，语义对齐 utils.ast.v2.dsl）
 # ============================================================
 
-def _walk_nodes(tree: ast.AST):
-    """安全遍历 AST 所有节点
+def _walk_nodes(tree: ast.AST) -> list:
+    """安全遍历 AST 所有节点，返回节点列表（不含 Expression/Module 容器本身）
 
     语义对齐 utils.ast.v2.dsl.walk_nodes:
       - ast.Expression 容器本身不遍历，直接遍历 body
       - ast.Module 逐 statement 遍历
       - 不重复任何节点
+
+    [标注] 2026-08-09 补充返回类型标注 -> list（实现返回 list，标注对齐）。
     """
     if isinstance(tree, ast.Expression):
         return list(ast.walk(tree.body))
@@ -48,7 +61,7 @@ def _walk_nodes(tree: ast.AST):
     return list(ast.walk(tree))
 
 
-def _ast_depth(tree) -> int:
+def _ast_depth(tree: ast.AST) -> int:
     """计算 AST 最大深度（语义对齐 utils.ast.v2.dsl.ast_depth）"""
     def _depth(node):
         children = list(ast.iter_child_nodes(node))
