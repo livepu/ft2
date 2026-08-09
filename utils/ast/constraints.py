@@ -42,7 +42,7 @@ utils/ast/constraints.py — 分级约束系统（版本无关的树合法性检
 
 import ast as ast_module
 from enum import IntEnum
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 
 # ============================================================
@@ -56,6 +56,28 @@ class ConstraintLevel(IntEnum):
     SEMANTIC = 20 # 语义层：恒等冗余 / 深度 / 嵌套
     TYPED = 30    # 类型层：vector/scalar 签名匹配
     STRICT = 40   # 金融语义层（默认不启用）
+
+
+# [优化] 2026-08-09 缓存级别迭代顺序，避免 check/active_constraints 每次调用
+# 重复 sorted(ConstraintLevel)。枚举定义即升序，sorted 保证与定义一致。
+_ACTIVE_LEVELS: Tuple[ConstraintLevel, ...] = tuple(sorted(ConstraintLevel))
+
+
+# ============================================================
+# 公共工具
+# ============================================================
+
+def _get_func_name(call_node: ast_module.Call) -> Optional[str]:
+    """从 Call 节点提取函数名（兼容 Name / Attribute 两种调用形式）
+
+    [重构] 2026-08-09 从 SyntaxConstraint / SemanticConstraint 各自私有的
+    _get_func_name 提取为模块级函数，消除两处重复实现。
+    """
+    if isinstance(call_node.func, ast_module.Name):
+        return call_node.func.id
+    if isinstance(call_node.func, ast_module.Attribute):
+        return call_node.func.attr
+    return None
 
 
 # ============================================================
@@ -101,7 +123,7 @@ class SyntaxConstraint(BaseConstraint):
         try:
             for node in ast_module.walk(tree):
                 if isinstance(node, ast_module.Call):
-                    func_name = self._get_func_name(node)
+                    func_name = _get_func_name(node)
                     if func_name and self.allowed_functions:
                         if func_name not in self.allowed_functions:
                             return False, f"函数 '{func_name}' 不在允许列表中"
@@ -112,14 +134,6 @@ class SyntaxConstraint(BaseConstraint):
     def with_allowed_functions(self, func_set: Set[str]) -> 'SyntaxConstraint':
         """返回使用指定函数白名单的新实例"""
         return SyntaxConstraint(allowed_functions=func_set)
-
-    @staticmethod
-    def _get_func_name(call_node: ast_module.Call) -> Optional[str]:
-        if isinstance(call_node.func, ast_module.Name):
-            return call_node.func.id
-        if isinstance(call_node.func, ast_module.Attribute):
-            return call_node.func.attr
-        return None
 
 
 # ============================================================
@@ -223,24 +237,16 @@ class SemanticConstraint(BaseConstraint):
     def _check_redundant_nesting(self, tree: ast_module.AST) -> Tuple[bool, str]:
         for node in ast_module.walk(tree):
             if isinstance(node, ast_module.Call):
-                func_name = self._get_func_name(node)
+                func_name = _get_func_name(node)
                 if func_name is None:
                     continue
                 if func_name in _REDUNDANT_NESTING:
                     for arg in node.args:
                         if isinstance(arg, ast_module.Call):
-                            inner_name = self._get_func_name(arg)
+                            inner_name = _get_func_name(arg)
                             if inner_name == func_name:
                                 return False, f"冗余嵌套: {func_name}({func_name}(...))"
         return True, ""
-
-    @staticmethod
-    def _get_func_name(call_node: ast_module.Call) -> Optional[str]:
-        if isinstance(call_node.func, ast_module.Name):
-            return call_node.func.id
-        if isinstance(call_node.func, ast_module.Attribute):
-            return call_node.func.attr
-        return None
 
     @staticmethod
     def _is_constant(node: ast_module.AST, value) -> bool:
@@ -363,6 +369,9 @@ class FinancialSemanticConstraint(BaseConstraint):
         self.rules: List[Callable] = list(rules) if rules else []
 
     def check(self, tree: ast_module.AST) -> Tuple[bool, str]:
+        # [优化] 2026-08-09 空规则快速返回（无规则=放行），避免无谓循环
+        if not self.rules:
+            return True, ""
         for rule in self.rules:
             ok, reason = rule(tree)
             if not ok:
@@ -414,6 +423,11 @@ class ConstraintManager:
                 return True
         return False
 
+    def clear(self) -> 'ConstraintManager':
+        """清空全部约束器（恢复为无约束状态）"""
+        self._registry.clear()
+        return self
+
     def set_level(self, level: ConstraintLevel) -> 'ConstraintManager':
         """运行时切换过滤强度（像 logger.setLevel）"""
         self.level = ConstraintLevel(level)
@@ -423,15 +437,20 @@ class ConstraintManager:
     def level_name(self) -> str:
         return self.level.name
 
-    def check(self, tree: ast_module.AST) -> Tuple[bool, str]:
-        """按当前级别运行约束器：level 及以下全部通过才算通过"""
-        if self.level == ConstraintLevel.NONE:
-            return True, ""
-        for lv in sorted(ConstraintLevel):
+    def _iter_active_levels(self) -> Iterator[ConstraintLevel]:
+        """迭代 level 及以下的所有约束级别（跳过 NONE）"""
+        for lv in _ACTIVE_LEVELS:
             if lv == ConstraintLevel.NONE:
                 continue
             if lv > self.level:
                 break
+            yield lv
+
+    def check(self, tree: ast_module.AST) -> Tuple[bool, str]:
+        """按当前级别运行约束器：level 及以下全部通过才算通过"""
+        if self.level == ConstraintLevel.NONE:
+            return True, ""
+        for lv in self._iter_active_levels():
             for c in self._registry.get(lv, []):
                 ok, reason = c.check(tree)
                 if not ok:
@@ -446,11 +465,7 @@ class ConstraintManager:
     def active_constraints(self) -> List[str]:
         """当前级别生效的约束器名字列表（调试用）"""
         names = []
-        for lv in sorted(ConstraintLevel):
-            if lv == ConstraintLevel.NONE:
-                continue
-            if lv > self.level:
-                break
+        for lv in self._iter_active_levels():
             names.extend(c.name for c in self._registry.get(lv, []))
         return names
 

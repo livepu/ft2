@@ -62,7 +62,12 @@ def _walk_nodes(tree: ast.AST) -> list:
 
 
 def _ast_depth(tree: ast.AST) -> int:
-    """计算 AST 最大深度（语义对齐 utils.ast.v2.dsl.ast_depth）"""
+    """计算 AST 最大深度（语义对齐 utils.ast.v2.dsl.ast_depth）
+
+    [标注] 2026-08-09 优化后本函数在当前文件内无内部调用（_extract_subtrees 已改
+    一次后序遍历），但保留为手术层的公共深度工具——对齐 v2.dsl.ast_depth 语义，
+    供外部/未来复用（如约束层深度计算收敛），不删除。
+    """
     def _depth(node):
         children = list(ast.iter_child_nodes(node))
         if not children:
@@ -83,6 +88,19 @@ def _expr_str(tree: ast.Expression) -> str:
         return '<invalid>'
 
 
+def _collect_func_name_ids(tree: ast.Expression) -> set:
+    """收集所有 Call.func 位置的 Name 节点 id（函数名不是可替换子树）
+
+    [重构] 2026-08-09 从 _collect_replaceable / _extract_subtrees 抽出的公共逻辑，
+    消除重复实现。
+    """
+    ids = set()
+    for node in _walk_nodes(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            ids.add(id(node.func))
+    return ids
+
+
 def _collect_replaceable(tree: ast.Expression, mode: str = 'any') -> list:
     """收集可替换的语义子树节点
 
@@ -95,10 +113,7 @@ def _collect_replaceable(tree: ast.Expression, mode: str = 'any') -> list:
       'value'    — 产生数值的子树
       'bool'     — 产生布尔值的子树
     """
-    func_names = set()
-    for node in _walk_nodes(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            func_names.add(id(node.func))
+    func_names = _collect_func_name_ids(tree)
 
     if mode == 'any':
         meaningful = (ast.BinOp, ast.UnaryOp, ast.BoolOp, ast.Compare,
@@ -199,7 +214,9 @@ def _nodes_equal(a: ast.AST, b: ast.AST) -> bool:
     if isinstance(a, ast.Compare):
         if len(a.ops) != len(b.ops) or len(a.comparators) != len(b.comparators):
             return False
-        return (type(a.ops[0]) is type(b.ops[0]) and
+        # [修复] 2026-08-09 原实现只比较 ops[0]，多操作符比较链（如 a>b<c 的
+        # ops=[Gt,Lt]）在 ops[1:] 不同时会误判相等，改为逐操作符类型比较。
+        return (all(type(o1) is type(o2) for o1, o2 in zip(a.ops, b.ops)) and
                 _nodes_equal(a.left, b.left) and
                 all(_nodes_equal(x, y) for x, y in zip(a.comparators, b.comparators)))
     # fallback: 用 ast.dump 兜底（比 unparse 快但比结构比较慢）
@@ -299,6 +316,16 @@ def _canonicalize_key(tree: ast.Expression,
             if expr_str in memo:
                 return memo[expr_str]
 
+    # [优化] 2026-08-09 子树签名缓存：每节点 canonical 后 unparse 一次并复用，
+    # 避免交换律排序时对 Add/Mult 左右子树重复 unparse 导致的 O(n²) 开销。
+    # 排序比较的字符串不变，canonical key 输出与原实现完全一致。
+    sig_memo: dict = {}  # id(node) -> 子树 canonical 后的 unparse 字符串
+
+    def _record(node: ast.AST) -> ast.AST:
+        """记录节点签名并原样返回（常数折叠产生的新节点也记录）"""
+        sig_memo[id(node)] = ast.unparse(node)
+        return node
+
     def _canonicalize(node):
         for field_name, field_value in ast.iter_fields(node):
             if isinstance(field_value, list):
@@ -318,24 +345,28 @@ def _canonicalize_key(tree: ast.Expression,
                 try:
                     l, r = node.left.value, node.right.value
                     if isinstance(node.op, ast.Add):
-                        return ast.Constant(value=l + r)
+                        return _record(ast.Constant(value=l + r))
                     elif isinstance(node.op, ast.Sub):
-                        return ast.Constant(value=l - r)
+                        return _record(ast.Constant(value=l - r))
                     elif isinstance(node.op, ast.Mult):
-                        return ast.Constant(value=l * r)
+                        return _record(ast.Constant(value=l * r))
                     elif isinstance(node.op, ast.Div) and r != 0:
-                        return ast.Constant(value=l / r)
+                        return _record(ast.Constant(value=l / r))
                 except Exception:
                     pass
 
-            # 交换律排序：Add/Mult 按子树字符串排序
+            # 交换律排序：Add/Mult 按子树签名排序（子节点已先 canonicalize 并记录）
             if isinstance(node.op, (ast.Add, ast.Mult)):
-                left_str = ast.unparse(node.left)
-                right_str = ast.unparse(node.right)
-                if right_str < left_str:
+                left_sig = sig_memo.get(id(node.left))
+                right_sig = sig_memo.get(id(node.right))
+                if left_sig is None:
+                    left_sig = ast.unparse(node.left)
+                if right_sig is None:
+                    right_sig = ast.unparse(node.right)
+                if right_sig < left_sig:
                     node.left, node.right = node.right, node.left
 
-        return node
+        return _record(node)
 
     new_tree = copy.deepcopy(tree)
     new_tree.body = _canonicalize(new_tree.body)
@@ -358,19 +389,25 @@ def _extract_subtrees(tree: ast.Expression,
 
     [新增] 2026-07-08 用于 Motif 库构建：从高 fitness 个体中提取有潜力的子结构。
     排除：纯函数名节点、Load/Store 元节点、单变量/常数节点。
+    [优化] 2026-08-09 深度计算改为一次后序遍历（O(n)），替代原先对每个节点
+    重复调用 _ast_depth 的 O(n²) 实现；深度语义不变（子树高度）。
     """
-    func_names = set()
-    for node in _walk_nodes(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            func_names.add(id(node.func))
+    func_names = _collect_func_name_ids(tree)
 
     meaningful = (ast.BinOp, ast.UnaryOp, ast.BoolOp, ast.Compare,
                   ast.IfExp, ast.Call)
 
     subtrees = []
-    for node in _walk_nodes(tree):
+
+    def _walk(node: ast.AST) -> int:
+        """后序遍历：返回以 node 为根的子树深度，同时收集深度范围内的子树"""
+        children = list(ast.iter_child_nodes(node))
+        depth = 1 + max((_walk(c) for c in children), default=0)
         if isinstance(node, meaningful) and id(node) not in func_names:
-            d = _ast_depth(node)
-            if min_depth <= d <= max_depth:
+            if min_depth <= depth <= max_depth:
                 subtrees.append(node)
+        return depth
+
+    body = tree.body if hasattr(tree, 'body') else tree
+    _walk(body)
     return subtrees
