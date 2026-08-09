@@ -35,6 +35,14 @@ utils/ast/constraints.py — 分级约束系统（版本无关的树合法性检
   - 本文件的深度计算（_compute_depth）与 surgery._ast_depth 各自独立实现、不跨模块复用，
     保持"判"与"改"两套工具各自完备
 
+参数命名约定（本文件与 surgery.py 统一遵循，2026-08-09）:
+  tree          = 完整表达式树（ast.Expression）
+  node          = 任意 AST 节点（子树）
+  old_node / new_node = 替换操作的旧/新子树
+  parent        = 定位用的父节点
+  a / b         = 比较操作的两个操作数（Python 惯例）
+  各函数参数名自描述语义，独立纯函数不依赖跨函数命名贯通。
+
 [新增] 2026-08-08 从 utils/mcts/v1,v2/constraints.py 提升 + 分级调度封装。
   设计决策见 2026-08-08 讨论：放弃"生成时强类型硬约束"，改为可配置分级约束；
   高级别约束默认软惩罚，避免剪掉意外 alpha（如 ts_cov(SHARE, ts_max(HIGH,38),3)）。

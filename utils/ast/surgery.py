@@ -23,6 +23,14 @@ utils/ast/surgery.py — AST 手术层（版本无关的树编辑工具）
   - 配合仅发生在应用编排层（GP/MCTS 引擎按"先改后判"顺序串联），模块内部不感知对方
   - 未来若需复用（如约束层借深度计算），方向只能是 constraints → surgery（单向，干净）
 
+参数命名约定（本文件与 constraints.py 统一遵循，2026-08-09）:
+  tree          = 完整表达式树（ast.Expression）
+  node          = 任意 AST 节点（子树）
+  old_node / new_node = 替换操作的旧/新子树
+  parent        = 定位用的父节点
+  a / b         = 比较操作的两个操作数（Python 惯例）
+  各函数参数名自描述语义，独立纯函数不依赖跨函数命名贯通。
+
 收敛来源:
   [收敛] 2026-08-07 从 utils/gp/v5/ast_utils.py + utils/mcts/v2/ast_utils.py 合并为唯一真源。
   原两份拷贝核心手术函数逻辑一致（GP 版为基），本文件统一提供后删除原拷贝。

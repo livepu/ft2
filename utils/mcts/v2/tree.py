@@ -16,7 +16,6 @@ import random
 from typing import Dict, List, Optional, Set
 
 from .node import MCTSNode
-from .constraints import CFGGrammar, SemanticValidator
 from .dedup import SubtreeHasher, FrequentSubtreeMonitor
 from .actions import apply_action, get_available_actions
 from utils.ast.surgery import _simplify_ast, _canonicalize_key, _expr_str
@@ -76,8 +75,7 @@ class MCTSTree:
                action_config: ActionConfig,
                n_branches: int = 3,
                max_depth: int = 6,
-               cfg: Optional[CFGGrammar] = None,
-               semantic: Optional[SemanticValidator] = None,
+               cm=None,  # 分级约束管理器（ConstraintManager，None=不约束）
                subtree_monitor: Optional[FrequentSubtreeMonitor] = None,
                best_pool: Optional[List[MCTSNode]] = None,
                enable_graft: bool = False,
@@ -104,12 +102,11 @@ class MCTSTree:
             if sig in self.signature_index or sig in tried_signatures:
                 continue
             tried_signatures.add(sig)
-            if cfg is not None:
-                ok, _ = cfg.is_syntactically_valid(new_tree)
-                if not ok:
-                    continue
-            if semantic is not None:
-                ok, _ = semantic.check(new_tree)
+            # 分级约束统一检查（Syntax/Semantic/Type 按 ConstraintManager 级别调度）
+            # [收敛] 2026-08-09 原 cfg.is_syntactically_valid + semantic.check 双分支
+            # 收敛为 cm.check 单入口（utils/ast/constraints.py）。
+            if cm is not None:
+                ok, _ = cm.check(new_tree)
                 if not ok:
                     continue
             if subtree_monitor is not None:

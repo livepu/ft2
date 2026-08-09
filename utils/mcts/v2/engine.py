@@ -24,10 +24,10 @@ from .node import MCTSNode
 from .tree import MCTSTree
 from .best_tracker import BestTracker
 from .config import EngineConfig, ActionConfig
-from .constraints import CFGGrammar, SemanticValidator
 from .dedup import SubtreeHasher, FrequentSubtreeMonitor
 from .cache import SimpleFitnessCache
 from utils.ast.surgery import _canonicalize_key
+from utils.ast.constraints import ConstraintManager
 from .selection import SelectionStrategy, BayesianUCB
 
 
@@ -49,8 +49,9 @@ class MCTSEngine:
                  # ── 可选策略注入──
                  selection: Optional[SelectionStrategy] = None,  # 默认 BayesianUCB
                  validator=None,                         # ValidationStrategy（可选）
-                 cfg_grammar: Optional[CFGGrammar] = None,
-                 semantic_validator: Optional[SemanticValidator] = None,
+                 constraint_mgr: Optional[ConstraintManager] = None,  # [新] 分级约束
+                 cfg_grammar=None,  # [兼容] 旧参数，自动包装进 ConstraintManager
+                 semantic_validator=None,  # [兼容] 旧参数，自动包装进 ConstraintManager
                  subtree_monitor: Optional[FrequentSubtreeMonitor] = None,
 
                  # ── 引擎参数──
@@ -66,9 +67,13 @@ class MCTSEngine:
         # 策略（v2 显式注入，无隐藏默认值）
         self.selection = selection or BayesianUCB()
         self.validator = validator
-        self.cfg = cfg_grammar
-        self.semantic = semantic_validator
         self.monitor = subtree_monitor
+
+        # 约束系统统一走 ConstraintManager（分级约束，版本无关）
+        # [收敛] 2026-08-09 旧的 cfg_grammar/semantic_validator 参数自动包装，
+        # 新代码用 constraint_mgr=default_manager(...) 直接注入。
+        self.cm = self._build_constraint_manager(
+            constraint_mgr, cfg_grammar, semantic_validator)
 
         # 参数
         self.config = config or EngineConfig()
@@ -133,8 +138,7 @@ class MCTSEngine:
                 action_config=self.action_config,
                 n_branches=self.config.n_branches,
                 max_depth=self.config.max_depth,
-                cfg=self.cfg,
-                semantic=self.semantic,
+                cm=self.cm,                 # 分级约束（统一 ConstraintManager 入口）
                 subtree_monitor=self.monitor,
                 best_pool=self.best_tracker.top(),
                 enable_graft=self.config.enable_graft,
@@ -167,6 +171,34 @@ class MCTSEngine:
     # ================================================================
     # 内部方法
     # ================================================================
+
+    def _build_constraint_manager(self, constraint_mgr, cfg_grammar,
+                                  semantic_validator) -> Optional[ConstraintManager]:
+        """构建统一约束管理器（单入口）
+
+        优先级: constraint_mgr（新 API）> 旧 cfg_grammar/semantic_validator 自动包装 > None
+
+        [收敛] 2026-08-09 旧的"语法白名单 + 语义校验"双参数收敛为
+        utils/ast/constraints.py 的 ConstraintManager 分级约束；旧参数保留
+        向后兼容（自动包装），新代码用 constraint_mgr=default_manager(...) 注入。
+        """
+        if constraint_mgr is not None:
+            return constraint_mgr
+        if cfg_grammar is None and semantic_validator is None:
+            return None
+
+        # 旧参数包装：语法层 + 语义层（级别按 SEMANTIC = 两段都启用）
+        from utils.ast.constraints import (ConstraintLevel, SyntaxConstraint,
+                                           SemanticConstraint)
+        cm = ConstraintManager(level=ConstraintLevel.SEMANTIC)
+        if cfg_grammar is not None:
+            allowed = getattr(cfg_grammar, 'allowed_functions', None)
+            cm.add(SyntaxConstraint(allowed_functions=allowed))
+        if semantic_validator is not None:
+            md = getattr(semantic_validator, 'max_depth', 6)
+            mv = getattr(semantic_validator, 'min_variables', 1)
+            cm.add(SemanticConstraint(max_depth=md, min_variables=mv))
+        return cm
 
     def _evaluate_seeds(self):
         """评估所有种子节点，建立初始最优池（v1 对齐：含 backprop + pool + monitor）"""
