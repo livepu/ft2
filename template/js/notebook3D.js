@@ -295,6 +295,141 @@ function useFullscreen() {
     return { isFullscreen, toggleFullscreen };
 }
 
+// =============================================================================
+// [新增] 2026-08-12 HTML 清洗工具（P1 安全加固）
+// 背景：marked v4+ 无内置 sanitize，cell.content 若含不可信 HTML 会经 v-html 注入。
+// 方案：白名单标签/属性 + 协议过滤，兼容 DOMParser；不引入外部依赖(DOMPurify)以保持 local_static 离线可用。
+// =============================================================================
+
+const SANITIZE_TAGS = new Set([
+    'p','br','hr','strong','b','em','i','u','s','del','sup','sub','kbd','mark','small',
+    'a','ul','ol','li',
+    'table','thead','tbody','tfoot','tr','th','td','caption',
+    'h1','h2','h3','h4','h5','h6',
+    'blockquote','code','pre','span','div','img'
+]);
+const SANITIZE_ATTRS = {
+    a: new Set(['href','title','target','rel']),
+    img: new Set(['src','alt','title','width','height']),
+    _global: new Set(['class'])
+};
+// 危险 URL 协议黑名单（href 全拒；src 额外放行 http/https/相对路径/data:image）
+const BAD_URL_PROTO = /^\s*(javascript|vbscript|data|file):/i;
+
+function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+}
+
+function sanitizeHTML(html) {
+    if (!html) return '';
+    if (typeof DOMParser === 'undefined') return html;
+    try {
+        const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+        const FORBIDDEN = new Set(['script','style','iframe','object','embed','link','meta','base','form','input','button','textarea','select','svg','math','template','noscript']);
+        const cleanNode = (node) => {
+            const children = [...node.children];
+            for (const el of children) {
+                const tag = el.tagName.toLowerCase();
+                // 禁止标签直接移除
+                if (FORBIDDEN.has(tag)) { el.remove(); continue; }
+                // 先递归清理子节点（白名单外标签替换时子节点必须已安全）
+                cleanNode(el);
+                // 白名单外标签：剥离标签本身，保留已清理的子节点
+                if (!SANITIZE_TAGS.has(tag)) { el.replaceWith(...el.childNodes); continue; }
+                // 属性白名单 + 事件属性全剥离 + 危险协议剥离
+                [...el.attributes].forEach(attr => {
+                    const name = attr.name.toLowerCase();
+                    const allowed = SANITIZE_ATTRS[tag] || SANITIZE_ATTRS._global;
+                    if (name.startsWith('on')) { el.removeAttribute(attr.name); return; }
+                    if (!allowed.has(name)) { el.removeAttribute(attr.name); return; }
+                    if ((name === 'href' || name === 'src') && BAD_URL_PROTO.test(attr.value.trim())) {
+                        el.removeAttribute(attr.name); return;
+                    }
+                    // src 额外校验：仅 http(s)/相对路径/data:image 合法
+                    if (name === 'src' && !/^(https?:)?\/\//i.test(attr.value.trim()) &&
+                        !/^data:image\//i.test(attr.value.trim()) && /^[a-z][a-z0-9+.-]*:/i.test(attr.value.trim())) {
+                        el.removeAttribute(attr.name);
+                    }
+                });
+            }
+        };
+        cleanNode(doc.body);
+        return doc.body.innerHTML;
+    } catch (e) {
+        console.warn('sanitizeHTML error:', e);
+        return html;
+    }
+}
+
+// =============================================================================
+// [重构] 2026-08-12 抽离区间收益 composable（P2 可维护性）
+// 消除 GenericChart/GridChart 两份重复的 intervalCompare 逻辑(~200行)。
+// 用法: const { intervalCompare, intervalStart, intervalEnd } = useIntervalCompare(getInstance, onZoom)
+//   getInstance: () => ECharts 实例 | null（延迟获取，避免 setup 期未挂载）
+//   onZoom: dataZoom 回调后附加操作（GenericChart 传 updateChart；GridChart 不传）
+// =============================================================================
+function useIntervalCompare(getInstance, onZoom = null) {
+    const intervalCompare = ref(false);
+    const intervalStart = ref(0);
+    const intervalEnd = ref(100);
+    let intervalListener = null;
+
+    // 读取当前 dataZoom 滑块位置（开启区间收益前 / ECharts 未传 params 时兜底）
+    const readZoom = () => {
+        const instance = getInstance();
+        if (!instance) return;
+        const opt = instance.getOption();
+        const zoom = (opt.dataZoom || []).find(z => z.type === 'slider') || (opt.dataZoom || [])[0];
+        intervalStart.value = zoom?.start ?? 0;
+        intervalEnd.value = zoom?.end ?? 100;
+    };
+
+    // dataZoom 事件：兼容 Grid 批量参数与单图参数；无参(程序调用)走 readZoom 兜底
+    const handleDataZoom = (params) => {
+        if (params && params.batch) {
+            const dz = params.batch.find(d => d.dataZoomIndex === 0);
+            if (dz) { intervalStart.value = dz.start; intervalEnd.value = dz.end; }
+        } else if (params && params.dataZoomIndex !== undefined) {
+            intervalStart.value = params.start;
+            intervalEnd.value = params.end;
+        } else {
+            readZoom();
+        }
+        if (onZoom) onZoom();
+    };
+
+    watch(intervalCompare, (val) => {
+        if (val) {
+            readZoom();
+            if (!intervalListener) {
+                intervalListener = handleDataZoom;
+                const instance = getInstance();
+                if (instance) instance.on('dataZoom', intervalListener);
+            }
+        } else {
+            if (intervalListener) {
+                const instance = getInstance();
+                if (instance) instance.off('dataZoom', intervalListener);
+                intervalListener = null;
+            }
+        }
+        // 开启→立即重绘(转换数据)；关闭→重绘恢复原始数据
+        if (onZoom) onZoom();
+    });
+
+    onUnmounted(() => {
+        if (intervalListener) {
+            const instance = getInstance();
+            if (instance) instance.off('dataZoom', intervalListener);
+            intervalListener = null;
+        }
+    });
+
+    return { intervalCompare, intervalStart, intervalEnd };
+}
+
 // [重构] 2026-06-16 统一工具栏渲染组件，消除 6 处模板重复
 // Dumb 渲染模式：父组件声明 buttons 配置（含 onClick 回调），子组件纯渲染
 // 通过 <slot> 支持 chart-specific 元素（如 Heatmap 的缩放下拉框）
@@ -327,10 +462,6 @@ const GenericChart = {
         const showDataZoom = ref(false);
         const showBarLabel = ref(true);         // Bar/柱状图：显示数值标签
         const showScatterLabel = ref(false);    // Scatter/散点图：显示名称标签
-        const intervalCompare = ref(false);  // 区间收益模式
-        const intervalStart = ref(0);         // dataZoom start%（缓存当前滑块位置）
-        const intervalEnd = ref(100);         // dataZoom end%
-        let intervalListener = null;          // dataZoom 事件监听器
         const { isFullscreen, toggleFullscreen } = useFullscreen();
 
         const { chartRef, updateChart } = useChart(props, {
@@ -507,45 +638,12 @@ const GenericChart = {
 
         watch([showDataZoom, showBarLabel, showScatterLabel], updateChart);
 
-        // === 区间收益逻辑 ===
-        const handleDataZoom = () => {
-            const instance = chartRef.value ? echarts.getInstanceByDom(chartRef.value) : null;
-            if (instance) {
-                const opt = instance.getOption();
-                const zoom = (opt.dataZoom || []).find(z => z.type === 'slider') || (opt.dataZoom || [])[0];
-                intervalStart.value = zoom?.start ?? 0;
-                intervalEnd.value = zoom?.end ?? 100;
-            }
-            updateChart();
-        };
-
-        watch(intervalCompare, (val) => {
-            if (val) {
-                // 开启：先读取当前 dataZoom 位置，再注册监听
-                handleDataZoom();
-                if (!intervalListener) {
-                    intervalListener = handleDataZoom;
-                    const instance = chartRef.value ? echarts.getInstanceByDom(chartRef.value) : null;
-                    if (instance) instance.on('dataZoom', intervalListener);
-                }
-            } else {
-                // 关闭：移除监听，恢复原始数据
-                if (intervalListener) {
-                    const instance = chartRef.value ? echarts.getInstanceByDom(chartRef.value) : null;
-                    if (instance) instance.off('dataZoom', intervalListener);
-                    intervalListener = null;
-                }
-                updateChart();
-            }
-        });
-
-        onUnmounted(() => {
-            if (intervalListener) {
-                const instance = chartRef.value ? echarts.getInstanceByDom(chartRef.value) : null;
-                if (instance) instance.off('dataZoom', intervalListener);
-                intervalListener = null;
-            }
-        });
+        // [重构] 2026-08-12 区间收益逻辑移入 useIntervalCompare composable
+        // 原 handleDataZoom/watch(intervalCompare)/onUnmounted 清理三块被统一收纳
+        const { intervalCompare, intervalStart, intervalEnd } = useIntervalCompare(
+            () => chartRef.value ? echarts.getInstanceByDom(chartRef.value) : null,
+            updateChart
+        );
 
         // [重构] 2026-06-16 声明式 toolbar 按钮配置
         const toolbarButtons = computed(() => {
@@ -957,6 +1055,8 @@ const PerfChart = {
             const stratData = to1D(series[0]?.data || []);
             const benchData = series.length > 1 ? to1D(series[1]?.data) : null;
             const benchName = series.length > 1 ? (series[1]?.name || '基准') : '基准';
+            // [修复] 2026-08-12 系列名注入 statsHTML 前转义，防 XSS
+            const benchNameSafe = escapeHtml(benchName);
             const stratName = series[0]?.name || '策略';
 
             // 初始化
@@ -1038,11 +1138,11 @@ const PerfChart = {
                     statsHTML += `
                     <div class="metric-card ${colorCls(benchPeriodRet)}">
                         <div class="metric-value">${fmtPct(benchPeriodRet)}</div>
-                        <div class="metric-label">${benchName}</div>
+                        <div class="metric-label">${benchNameSafe}</div>
                     </div>
                     <div class="metric-card down">
                         <div class="metric-value">${fmtDD(benchMaxDD)}</div>
-                        <div class="metric-label">${benchName}回撤</div>
+                        <div class="metric-label">${benchNameSafe}回撤</div>
                     </div>`;
                 }
 
@@ -1127,12 +1227,20 @@ const PerfChart = {
             });
 
             // dataZoom 事件
+            // [修复] 2026-08-12 重入保护：updateChartData→setOption 若再触发 datazoom 可能递归，显式拦截
+            let _updatingDataZoom = false;
             chartInstance.on('datazoom', (params) => {
+                if (_updatingDataZoom) return;
                 selectedRange.value = null;  // 手动拖拽 → 取消按钮高亮
-                const opt = chartInstance.getOption();
-                const zoom = opt.dataZoom.find(z => z.type === 'slider') || opt.dataZoom[0];
-                if (zoom) {
-                    updateChartData(zoom.start, zoom.end);
+                _updatingDataZoom = true;
+                try {
+                    const opt = chartInstance.getOption();
+                    const zoom = opt.dataZoom.find(z => z.type === 'slider') || opt.dataZoom[0];
+                    if (zoom) {
+                        updateChartData(zoom.start, zoom.end);
+                    }
+                } finally {
+                    _updatingDataZoom = false;
                 }
             });
         };
@@ -1190,10 +1298,7 @@ const GridChart = {
         const chartRef = ref(null);
         let chartInstance = null;
         const showDataZoom = ref(false);
-        const intervalCompare = ref(false);     // 区间收益：仅转换第一个子图（xAxisIndex=0）
-        const intervalStart = ref(0);
-        const intervalEnd = ref(100);
-        let intervalListener = null;
+        // [重构] 2026-08-12 intervalCompare/intervalStart/intervalEnd 移入 useIntervalCompare
         // 判断第一个子图类型，仅 line/area 支持区间收益
         const firstGridType = computed(() => {
             const series = props.cell.content?.charts?.series || [];
@@ -1204,6 +1309,12 @@ const GridChart = {
             ['line', 'area'].includes(firstGridType.value)
         );
         const { isFullscreen, toggleFullscreen } = useFullscreen();
+
+        // [重构] 2026-08-12 区间收益逻辑移入 useIntervalCompare composable
+        // Grid 的重绘由下方 watch([showDataZoom, intervalCompare]) 触发，故不传 onZoom
+        const { intervalCompare, intervalStart, intervalEnd } = useIntervalCompare(
+            () => chartRef.value ? echarts.getInstanceByDom(chartRef.value) : null
+        );
 
         // [重构] 2026-07-21 改用模块级 getColors，消除重复
 
@@ -1331,35 +1442,11 @@ const GridChart = {
         onUnmounted(() => {
             if (unregisterResize) unregisterResize();
             window.removeEventListener('colorSchemeChanged', initChart);
-            const inst = chartRef.value ? echarts.getInstanceByDom(chartRef.value) : null;
-            if (inst && intervalListener) inst.off('dataZoom', intervalListener);
             if (chartInstance) {
                 chartInstance.dispose();
             }
         });
-
-        // [新增] Grid 区间收益：监听 dataZoom 滑块位置作为收益率基准点
-        watch(intervalCompare, (val) => {
-            if (val) {
-                nextTick(() => {
-                    const inst = chartRef.value ? echarts.getInstanceByDom(chartRef.value) : null;
-                    if (!inst) return;
-                    intervalListener = (params) => {
-                        if (params.batch) {
-                            const dz = params.batch.find(d => d.dataZoomIndex === 0);
-                            if (dz) { intervalStart.value = dz.start; intervalEnd.value = dz.end; }
-                        } else if (params.dataZoomIndex === 0) {
-                            intervalStart.value = params.start;
-                            intervalEnd.value = params.end;
-                        }
-                    };
-                    inst.on('dataZoom', intervalListener);
-                });
-            } else {
-                const inst = chartRef.value ? echarts.getInstanceByDom(chartRef.value) : null;
-                if (inst && intervalListener) { inst.off('dataZoom', intervalListener); intervalListener = null; }
-            }
-        });
+        // [重构] 2026-08-12 dataZoom 监听注册/注销已由 useIntervalCompare 统一管理，此块已删除
 
         const toolbarButtons = computed(() => {
             const btns = [
@@ -1444,12 +1531,16 @@ const CellRenderer = {
         const renderMarkdown = (content) => {
             if (!content) return '';
             try {
-                return marked.parse(content.trim());
+                // [修复] 2026-08-12 marked 无内置 sanitize，输出经白名单清洗防 XSS
+                return sanitizeHTML(marked.parse(content.trim()));
             } catch (e) {
                 console.warn('Markdown parse error:', e);
-                return content.replace(/\n/g, '<br>');
+                return sanitizeHTML(content.replace(/\n/g, '<br>'));
             }
         };
+
+        // [新增] 2026-08-12 html cell 输出经 sanitizeHTML 清洗，防 XSS
+        const renderHTML = (content) => sanitizeHTML(content || '');
 
         const getMetricClass = (value) => {
             if (typeof value !== 'string') return '';
@@ -1480,7 +1571,7 @@ const CellRenderer = {
             }
         };
 
-        return { renderMarkdown, getMetricClass, getTableCols, getTableOptions, handleSectionClick };
+        return { renderMarkdown, renderHTML, getMetricClass, getTableCols, getTableOptions, handleSectionClick };
     },
 
     template: `
@@ -1541,7 +1632,7 @@ const CellRenderer = {
 
             <!-- HTML -->
             <div v-else-if="cell.type === 'html'" class="html-block">
-                <div class="html-block-inner" v-html="cell.content"></div>
+                <div class="html-block-inner" v-html="renderHTML(cell.content)"></div>
             </div>
 
             <!-- 分隔线 -->
