@@ -1650,14 +1650,19 @@ const TocMenu = {
         const scrollToSection = (index) => { if (index === -1) window.scrollTo({ top: 0, behavior: 'smooth' }); else { const el = document.getElementById('section-' + index); if (el) el.scrollIntoView({ behavior: 'smooth' }); } };
         const toggleMenu = () => { menuExpanded.value = !menuExpanded.value; setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 350); };
         // [调整] 2026-05-29 窄屏自动收起，宽屏自动展开（覆盖用户手动收起状态）
+        // [修复] 2026-08-12 自动收展后补发全局 resize：
+        //   TOC 宽度有 300ms transition，图表 init 时读到过渡前的窄宽度导致占不满；
+        //   与 toggleMenu 一致，等过渡结束后(350ms)触发一次 resize 让所有图表重算宽度。
         const checkScreenWidth = () => { 
             const nowNarrow = window.innerWidth <= 1200; 
             if (nowNarrow && !isNarrow.value) { 
                 // 从宽变窄 → 自动收起
                 menuExpanded.value = false; 
+                setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 350);
             } else if (!nowNarrow && isNarrow.value) { 
                 // 从窄变宽 → 自动展开
                 menuExpanded.value = true; 
+                setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 350);
             }
             isNarrow.value = nowNarrow; 
         };
